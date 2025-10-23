@@ -84,7 +84,7 @@ jobs:
   # Check and renew certificates if needed
   check_certs:
     name: Check Certificates
-    runs-on: macos-14
+    runs-on: macos-15
     if: needs.check_update.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
     needs: check_update
     steps:
@@ -125,7 +125,7 @@ jobs:
   # Build Loop
   build:
     name: Build
-    runs-on: macos-14
+    runs-on: macos-15
     if: needs.check_update.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
     needs: [check_update, check_certs]
     steps:
@@ -142,17 +142,29 @@ jobs:
 
       - name: Select Xcode Version
         run: |
-          # Try Xcode 16 first, fallback to 15.4 if not available
-          if [ -d "/Applications/Xcode_16.0.app" ]; then
+          # List available Xcode versions
+          echo "Available Xcode versions:"
+          ls -1 /Applications/ | grep Xcode || true
+          
+          # Try Xcode 16 first (required for iOS 18 SDK)
+          if [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -switch /Applications/Xcode_16.1.app/Contents/Developer
+            echo "✅ Using Xcode 16.1"
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
             sudo xcode-select -switch /Applications/Xcode_16.0.app/Contents/Developer
-            echo "Using Xcode 16.0"
+            echo "✅ Using Xcode 16.0"
           elif [ -d "/Applications/Xcode_16.app" ]; then
             sudo xcode-select -switch /Applications/Xcode_16.app/Contents/Developer
-            echo "Using Xcode 16"
-          elif [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
-            echo "Using Xcode 15.4"
+            echo "✅ Using Xcode 16"
+          elif [ -d "/Applications/Xcode.app" ]; then
+            sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+            echo "✅ Using Xcode (default)"
+          else
+            echo "⚠️ No Xcode 16 found, using system default"
           fi
+          
+          echo ""
+          echo "Selected Xcode version:"
           xcodebuild -version
 
       - name: Fix Swift 6 Compatibility for Xcode 15.4
