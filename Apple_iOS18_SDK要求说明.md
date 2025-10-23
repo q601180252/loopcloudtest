@@ -28,6 +28,7 @@ or submitted for distribution.
 
 3. **IPA 构建成功但上传失败**
    - 本地编译正常
+   - 证书签名正常
    - 但被 App Store Connect 拒绝
 
 ## ✅ 解决方案：升级到 macos-15 Runner
