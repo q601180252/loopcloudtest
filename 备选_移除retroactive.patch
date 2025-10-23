@@ -1,0 +1,39 @@
+# 如果 Xcode 16 不可用，使用此补丁
+# 
+# 使用方法：
+# 在 .github/workflows/4_build_loop.yml 的 "Select Xcode Version" 步骤后添加：
+
+      - name: Fix Swift 6 Compatibility for Xcode 15.4
+        run: |
+          echo "Removing @retroactive attributes for Xcode 15.4 compatibility..."
+          
+          # Remove @retroactive from ManualEntryDoseView.swift
+          if [ -f "Loop/Loop/Views/ManualEntryDoseView.swift" ]; then
+            sed -i '' 's/@retroactive //g' Loop/Loop/Views/ManualEntryDoseView.swift
+            echo "✅ Fixed ManualEntryDoseView.swift"
+          fi
+          
+          # Search for other files with @retroactive and fix them
+          echo "Searching for other files with @retroactive..."
+          find Loop -name "*.swift" -type f -exec grep -l "@retroactive" {} \; | while read file; do
+            echo "Fixing $file..."
+            sed -i '' 's/@retroactive //g' "$file"
+          done
+          
+          echo "✅ Swift 6 compatibility fixes applied"
+
+# 完整的步骤位置示例：
+#
+#   - name: Select Xcode Version
+#     run: |
+#       sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
+#       xcodebuild -version
+#
+#   - name: Fix Swift 6 Compatibility for Xcode 15.4  # <-- 添加这里
+#     run: |
+#       sed -i '' 's/@retroactive //g' Loop/Loop/Views/ManualEntryDoseView.swift
+#
+#   - name: Create NotificationHelperOverride.swift
+#     run: |
+#       ...
+
