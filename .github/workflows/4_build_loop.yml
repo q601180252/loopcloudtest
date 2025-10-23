@@ -169,18 +169,27 @@ jobs:
 
       - name: Fix WatchApp Bundle ID Configuration
         run: |
-          echo "Fixing WatchApp Extension Bundle ID configuration..."
+          echo "Fixing WatchApp and WatchApp Extension Bundle ID configuration..."
+          
+          MAIN_BUNDLE_ID="com.${{ secrets.TEAMID }}.loopkit3.Loop"
           
           # Fix WKAppBundleIdentifier in WatchApp Extension Info.plist
           WATCH_EXTENSION_PLIST="Loop/WatchApp Extension/Info.plist"
           if [ -f "$WATCH_EXTENSION_PLIST" ]; then
-            # Replace $(MAIN_APP_BUNDLE_IDENTIFIER) with actual Bundle ID
-            sed -i '' 's/\$(MAIN_APP_BUNDLE_IDENTIFIER)/com.${{ secrets.TEAMID }}.loopkit3.Loop/g' "$WATCH_EXTENSION_PLIST"
-            echo "✅ Fixed WatchApp Extension Bundle ID"
+            sed -i '' "s/\$(MAIN_APP_BUNDLE_IDENTIFIER)/${MAIN_BUNDLE_ID}/g" "$WATCH_EXTENSION_PLIST"
+            echo "✅ Fixed WatchApp Extension Info.plist"
             grep "WKAppBundleIdentifier" -A 1 "$WATCH_EXTENSION_PLIST"
-          else
-            echo "⚠️  WatchApp Extension Info.plist not found"
           fi
+          
+          # Fix WKCompanionAppBundleIdentifier in WatchApp Info.plist
+          WATCH_APP_PLIST="Loop/WatchApp/Info.plist"
+          if [ -f "$WATCH_APP_PLIST" ]; then
+            sed -i '' "s/\$(MAIN_APP_BUNDLE_IDENTIFIER)/${MAIN_BUNDLE_ID}/g" "$WATCH_APP_PLIST"
+            echo "✅ Fixed WatchApp Info.plist"
+            grep "WKCompanionAppBundleIdentifier" -A 1 "$WATCH_APP_PLIST"
+          fi
+          
+          echo "✅ WatchApp Bundle ID configuration fixed"
 
       - name: Create NotificationHelperOverride.swift
         run: |
