@@ -167,6 +167,21 @@ jobs:
           
           echo "✅ Swift 6 compatibility fixes applied"
 
+      - name: Fix WatchApp Bundle ID Configuration
+        run: |
+          echo "Fixing WatchApp Extension Bundle ID configuration..."
+          
+          # Fix WKAppBundleIdentifier in WatchApp Extension Info.plist
+          WATCH_EXTENSION_PLIST="Loop/WatchApp Extension/Info.plist"
+          if [ -f "$WATCH_EXTENSION_PLIST" ]; then
+            # Replace $(MAIN_APP_BUNDLE_IDENTIFIER) with actual Bundle ID
+            sed -i '' 's/\$(MAIN_APP_BUNDLE_IDENTIFIER)/com.${{ secrets.TEAMID }}.loopkit3.Loop/g' "$WATCH_EXTENSION_PLIST"
+            echo "✅ Fixed WatchApp Extension Bundle ID"
+            grep "WKAppBundleIdentifier" -A 1 "$WATCH_EXTENSION_PLIST"
+          else
+            echo "⚠️  WatchApp Extension Info.plist not found"
+          fi
+
       - name: Create NotificationHelperOverride.swift
         run: |
           cat > LibreTransmitter/LibreTransmitter/NotificationHelperOverride.swift << 'EOF'
