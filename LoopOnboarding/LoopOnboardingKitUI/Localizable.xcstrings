@@ -1,0 +1,1176 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "Apple Health" : {
+      "comment" : "Title on AppleHealthAuthView",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Salute"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Helse"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Gezondheid"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Zdrowie"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Sağlık"
+          }
+        }
+      }
+    },
+    "Apple Health can be used to store blood glucose, insulin and carbohydrate data from Loop.\n\nIf you give Loop permission, Loop can also read glucose and insulin data from glucometers and insulin pens that support Apple Health" : {
+      "comment" : "Onboarding, Apple Health Permissions intro paragraph",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health kan bruges til at gemme blodsukker-, insulin- og kulhydratdata fra Loop.\n\nHvis du giver Loop tilladelse til det, kan Loop også læse glukose- og insulindata fra glukosemålere og insulinpenne, der understøtter Apple Health"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health kann verwendet werden, um Blutzucker-, Insulin- und Kohlenhydratdaten von Loop zu speichern.\n\nWenn Du Loop die Berechtigung zum Schreiben erteilst, kann Loop auch Blutzucker- und Insulindaten von Blutzuckermessgeräten und Insulinpens lesen, die Apple Health unterstützen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health puede utilizarse para almacenar los datos de glucosa en sangre, insulina y carbohidratos de Loop.\n\nSi das permiso a Loop, Loop también puede leer datos de glucosa e insulina de glucómetros y lapices de insulina compatibles con Apple Health"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health peut être utilisé pour stocker les données relatives à la glycémie, à l'insuline et aux glucides de Loop.\n\nSi vous l'autorisez, Loop peut également lire les données relatives à la glycémie et à l'insuline des glucomètres et des stylos à insuline compatibles avec Apple Health."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Salute può essere utilizzata per memorizzare i dati di glicemia, insulina e carboidrati caricati da Loop. \n\nSe dai l'autorizzazione a Loop, allora Loop potrà anche leggere i dati relativi alle glicemie, insulina da glucometri e penne per insulina che supportano Apple Salute."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health kan brukes til å lagre blodsukker-, insulin- og karbohydratdata fra Loop.\n\nHvis du gir Loop tillatelse, kan Loop også lese blodsukker- og insulindata fra BS-målere og insulinpenner som støtter Apple Health"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Gezondheid kan worden gebruikt om bloedglucose-, insuline- en koolhydraatgegevens van Loop op te slaan. \n\nWanneer je Loop toestemming geeft, kan Loop ook glucose- en insulinegegevens lezen van glucosemeters en insulinepennen die Apple Gezondheid ondersteunen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aplikacja Apple Zdrowie może być wykorzystywana do przechowywania danych z pętli dotyczących poziomu glukozy we krwi, dawek insuliny i ilości spożytych węglowodanów.\n\nJeżeli wyrazisz zgodę, pętla może również pobierać dane dotyczące poziomu glukozy z glukometrów i wstrzyknięć insuliny z penów pochodzących z aplikacji Apple Zdrowie."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health poate fi folosit pentru a stoca datele de glicemie din sânge, insulină și carbohidrați din Loop. \n\nDacă acordați permisiunea aplicației Loop, atunci Loop va putea citi și datele despre glicemie și insulină din glucometre și stilouri cu insulină care sunt compatibile cu Apple Health"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Health можно использовать для хранения данных о глюкозе крови, инсулине и углеводах из Loop.\n\nЕсли вы дадите разрешение Loop, Loop также может считывать данные о глюкозе и инсулине с глюкометров и инсулиновых ручек, поддерживающих Apple Health."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Sağlık, Loop'tan alınan kan şekeri, insülin ve karbonhidrat verilerini saklamak için kullanılabilir.\n\nLoop'a izin verirseniz,  Apple Sağlık'ı destekleyen glukometrelerden ve insülin kalemlerinden gelen KŞ ve insülin verilerini de okuyabilir"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple 健康（Apple Health）可用于存储来自 Loop 的血糖、胰岛素和碳水化合物数据。\n\n如果您授予权限，Loop 还可从支持 Apple 健康的血糖仪和胰岛素注射笔中读取血糖和胰岛素数据。"
+          }
+        }
+      }
+    },
+    "Before using Loop you need to configure a few settings. These settings should be entered with precision and care; they are a critical part of how Loop determines the right amount of insulin to deliver.\n\nIf you are new to Loop, work with your diabetes support team to determine the settings that work best for you." : {
+      "comment" : "Descriptive text on WelcomeView",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Før du bruger Loop, skal du konfigurere nogle få indstillinger. Disse indstillinger skal indtastes med præcision og omhu; de er en afgørende del af den måde, hvorpå Loop bestemmer den rette mængde insulin, der skal gives.\n\nHvis du er ny med Loop, skal du samarbejde med dit diabetessupportteam for at finde de indstillinger, der fungerer bedst for dig."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bevor Du Loop verwendest, musst Du einige Einstellungen konfigurieren. Diese Einstellungen sollten mit Präzision und Sorgfalt eingegeben werden, denn sie sind ein entscheidender Teil davon, wie Loop die richtige Insulinmenge zur Abgabe bestimmt.\n\nWenn Du neu bei Loop bist, arbeite mit Deinem Diabetologen zusammen, um die Einstellungen zu ermitteln, die für Dich am besten geeignet sind."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Antes de utilizar Loop debes configurar algunos ajustes. Estos ajustes deben ser introducidos con precisión y cuidado; son una parte crítica de cómo Loop determina la cantidad correcta de insulina a administrar.\n\nSi es la primera vez que utiliza Loop, colabore con su equipo medico para determinar los ajustes que mejor se adapten al manejo de su diabetes."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avant d'utiliser Loop, vous devez configurer quelques paramètres. Ces paramètres doivent être saisis avec précision et attention ; ils sont un élément essentiel pour que Loop calcule les bonnes quantités d'insuline à administrer.\n\nSi vous n'avez jamais utilisé Loop, travaillez avec votre équipe de soutien pour le diabète pour déterminer les paramètres qui vous conviennent le mieux."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prima di utilizzare Loop è necessario configurare alcune impostazioni. Queste impostazioni devono essere inserite con precisione e attenzione; sono una parte fondamentale del modo in cui Loop determina la giusta quantità d'insulina da erogare.\n\nSe si è alle prime armi con Loop, si consiglia di collaborare con il team di assistenza diabetologica per determinare le impostazioni più adatte alle proprie esigenze."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Før du bruker Loop må du konfigurere noen innstillinger. Disse innstillingene bør angis med presisjon og forsiktighet; de er en kritisk del av hvordan Loop bestemmer riktig mengde insulin som skal tilføres. \n\n Hvis du er ny til Loop, samarbeid med diabetesstøtteteamet ditt for å finne innstillingene som fungerer best for deg."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voordat je Loop gebruikt, moet je een paar instellingen configureren. Deze instellingen moeten met precisie en zorg worden ingevoerd; ze zijn een cruciaal onderdeel van hoe Loop de juiste hoeveelheid toe te dienen insuline bepaalt.\n\nAls je nieuw bent met Loop, werk dan samen met je diabetesondersteuningsteam om te bepalen welke instellingen het beste voor je werken."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Przed użyciem pętli musisz skonfigurować kilka ustawień. Ustawienia te należy wprowadzać z precyzją i ostrożnością, są one kluczowym elementem sposobu, w jaki pętla określa odpowiednią dawkę insuliny do podania. \n\nJeśli dopiero zaczynasz korzystać z pętli, współpracuj z lekarzem, aby określić parametry, które będą dla Ciebie optymalne."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Înainte de a utiliza Loop, trebuie să configurați câteva setări. Aceste setări trebuie introduse cu precizie și grijă; sunt o parte esențială a modului în care Loop determină cantitatea potrivită de insulină de administrat. \n\nDacă sunteți la început cu Loop, colaborați cu persoanele care vă pot oferi asistență pentru diabet pentru a determina setările care funcționează cel mai bine pentru dumneavoastră."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перед использованием Loop Вам необходимо настроить несколько параметров. Эти настройки должны быть введены точно и внимательно; они являются критической частью того, как Loop будет определять то, количество инсулина, которе необходимо для компенсации.\n\nЕсли вы новичок в использовании Loop, поработайте с группой поддержки Вашего диабета (а лучше всего - с Вашим эндокринологом), чтобы определить настройки, которые лучше всего подходят для Вас."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop'u kullanmadan önce birkaç ayarı yapılandırmanız gerekir. Bu ayarlar hassasiyet ve özenle girilmelidir. Bu ayarlar ve veriler Loop'un verilecek doğru insülin miktarını nasıl belirlediğinin kritik bir parçasıdır.\n\nLoop'ta yeniyseniz, size en uygun ayarları belirlemek için diyabet destek ekibinizle birlikte çalışın."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在使用 Loop 之前，您需要先配置一些设置。这些设置对 Loop 判断胰岛素输注剂量至关重要，必须准确、谨慎地填写。\n\n如果您是第一次使用 Loop，建议在糖尿病管理团队的指导下确定最适合您的设置参数。"
+          }
+        }
+      }
+    },
+    "Do Not Import Settings" : {
+      "comment" : "Button title for skipping setting import from nightscout",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importér ikke indstillinger"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Einstellungen importieren"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No importar configuraciones"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ne pas importer les paramètres"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non importare le impostazioni"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ikke importer innstillinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instellingen Niet Importeren"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie importuj ustawień"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nu importați setările"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Не импортировать настройки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayarları İçe Aktarma"
+          }
+        }
+      }
+    },
+    "Import Saved Settings" : {
+      "comment" : "Button title for choosing to import settings from nightscout",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importer gemte indstillinger"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importiere gespeicherte Einstellungen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar ajustes guardados"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importer les paramètres sauvegardés"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importa impostazioni salvate"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importer lagrede innstillinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importeer Opgeslagen Instellingen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importuj zapisane ustawienia"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importați setările salvate"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Импортировать сохраненные настройки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kaydedilmiş Ayarları İçe Aktar"
+          }
+        }
+      }
+    },
+    "Let's Go!" : {
+      "comment" : "Button title for starting setup",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lad os komme igang!"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los geht’s!"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¡Vamos!"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allons-y!"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Iniziamo!"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nu kør vi! :-)"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let's Go!"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zaczynamy!"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Să pornim!"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let's Go!"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hadi başlayalım!"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开始！"
+          }
+        }
+      }
+    },
+    "Loop can work with Nightscout to provide remote caregivers a way to see what Loop is doing. Nightscout use is completely optional with Loop, and you can always set it up later." : {
+      "comment" : "Descriptive text on OnboardingChooserView",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop kan arbejde sammen med Nightscout for at give pårørende og sundhedspersonale en måde at se, hvad Loop laver. Brugen af Nightscout er helt valgfri med Loop, og du kan altid konfigurere det senere."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop kann mit Nightscout zusammenarbeiten, um entfernten Pflegekräften eine Möglichkeit zu bieten, zu sehen, was Loop tut. Die Verwendung von Nightscout ist mit Loop optional und Du kannst es jederzeit später einrichten."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop puede trabajar con Nightscout para proporcionar a los cuidadores remotos una forma de ver lo que está haciendo Loop. El uso de Nightscout es completamente opcional con Loop y siempre puedes configurarlo más tarde."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop peut fonctionner avec Nightscout pour permettre aux soignants distants de voir ce que fait Loop. L'utilisation de Nightscout est totalement facultative avec Loop, et vous pouvez toujours la configurer ultérieurement."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop può collaborare con Nightscout per fornire agli operatori sanitari a distanza un modo per vedere come sta operando Loop. L'uso di Nightscout è completamente facoltativo con Loop e si può sempre configurare anche in un secondo momento."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop kan samarbeide med Nightscout for å gi eksterne omsorgspersoner en måte å se hva Loop gjør. Nightscout-bruk er helt valgfritt med Loop, og du kan alltid sette det opp senere."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop kan met Nightscout samenwerken om zorgverleners op afstand te laten zien wat Loop doet. Het gebruik van Nightscout in Loop is volledig optioneel, je kunt het altijd later instellen."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop może współpracować z Nightscout, aby umożliwić zdalny wgląd w pracę pętli. Korzystanie z Nightscout jest całkowicie opcjonalne i zawsze możesz dokonać konfiguracji w późniejszym czasie."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop poate funcționa cu Nightscout pentru a oferi îngrijitorilor de la distanță o modalitate de a vedea ce face Loop. Utilizarea Nightscout este complet opțională cu Loop și o puteți configura oricând ulterior."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop может работать с Nightscout, чтобы предоставить удаленным пользователям возможность видеть, что делает Loop. Использование Nightscout совершенно не обязательно для Loop, и вы всегда можете настроить его позже."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop, uzaktan takip edenlerin programın ne yaptığını görmeleri için Nightscout ile birlikte çalışabilir. Nightscout kullanımı tamamen isteğe bağlıdır ve daha sonra da kurabilirsiniz."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop 可以与 Nightscout 配合使用，让远程护理人员能够查看 Loop 的运行情况。Nightscout 的使用完全由 Loop 决定，您可以随时进行设置。"
+          }
+        }
+      }
+    },
+    "Nightscout" : {
+      "comment" : "Title on OnboardingChooserView",
+      "localizations" : {
+        "ar" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "نايتسكاوت"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "fi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "he" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "נייטסקאוט"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "sk" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "sv" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        },
+        "vi" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout"
+          }
+        }
+      }
+    },
+    "Save Settings" : {
+      "comment" : "Therapy settings save button title",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gem indstillinger"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichere Einstellungen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar configuración"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer les paramètres"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salva impostazioni"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lagre innstillinger"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instellingen Opslaan"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zapisz ustawienia"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvați setările"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сохранить настройки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayarları kaydet"
+          }
+        }
+      }
+    },
+    "Settings Found" : {
+      "comment" : "Title on ImportSettingsView",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indstillinger fundet"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen gefunden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuraciones encontradas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paramètres trouvés"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impostazioni trovate"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Innstillinger funnet"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gevonden Instellingen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Znaleziono ustawienia"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Setări găsite"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Найдены настройки"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ayarlar Bulundu"
+          }
+        }
+      }
+    },
+    "Setup Loop without Nightscout" : {
+      "comment" : "Button title for choosing onboarding without nightscout",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indstil Loop UDEN Nightscout"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Richte Loop ohne Nightscout ein"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configuración de Loop sin Nightscout"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configurer Loop sans Nightscout"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configura Loop senza Nightscout"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klargjør Loop uten Nightscout"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop instellen zonder Nightscout"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skonfiguruj pętlę bez Nightscout"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configurați Loop fără Nightscout"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Настроить Loop без использования Nightscout"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout Olmadan Kurulum"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用 Nightscout 设置 Loop"
+          }
+        }
+      }
+    },
+    "Share With Apple Health" : {
+      "comment" : "Button title for starting apple health permissions request",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Del med Apple Health"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teile mit Apple Health"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compartir con Apple Health"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partager avec Apple Santé"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Condividi con Apple Salute"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Del med Apple Health"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deel met Apple Gezondheid"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Udostępnianie w Apple Zdrowie"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Partajați cu Apple Health"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Поделиться с Apple Health"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Sağlık ile Paylaş"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与 Apple Health 分享"
+          }
+        }
+      }
+    },
+    "Use Nightscout with Loop" : {
+      "comment" : "Button title for choosing onboarding with nightscout",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brug Nightscout med Loop"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutze Nightscout mit Loop"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar Nightscout con Loop"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utiliser Nightscout avec Loop"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa Nightscout con Loop"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bruk Nightscout med Loop"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gebruik Nightscout met Loop"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dodaj Nightscout do pętli"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utilizați Nightscout cu Loop"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Использовать Nightscout с Loop"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout'u Loop ile kullanın"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Loop 上使用 Nightscout"
+          }
+        }
+      }
+    },
+    "We've detected Loop settings stored in your Nightscout! They were last updated %1$@. Would you like to import them?\n\nAfter importing, you will still need to review the imported settings in the following screens and verify that they are correct." : {
+      "comment" : "Format string for main guidance text on ImportSettingsView (1: age of settings)",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vi har fundet Loop-indstillinger gemt i din Nightscout! De blev senest opdateret %1$@. Vil du gerne importere dem?\n\nNår du har importeret, skal du stadig gennemgå de importerede indstillinger på de følgende skærmbilleder og kontrollere, at de er korrekte."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wir haben Loop-Einstellungen entdeckt, die in Deinem Nightscout gespeichert sind! Sie wurden zuletzt am %1$@ aktualisiert. Möchtest Du sie importieren?\n\nNach dem Import musst Du noch die importierten Einstellungen in den folgenden Bildschirmen überprüfen und sicherstellen, dass sie korrekt sind."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hemos detectado ajustes de Loop almacenados en tu Nightscout. Se actualizaron por última vez %1$@. ¿Quieres importarlos?\n\nDespués de importalos, tendrás que revisar los ajustes importados en las siguientes pantallas y verificar que son correctos."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nous avons détecté des paramètres de Loop stockés dans votre Nightscout ! Ils ont été mis à jour pour la dernière fois %1$@. Voulez-vous les importer?\n\nAprès l'importation, vous devrez revoir les paramètres importés dans les écrans suivants et vérifier qu'ils sont corrects."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbiamo rilevato impostazioni Loop memorizzate nel tuo Nightscout! L'ultimo aggiornamento è stato %1$@. Vuoi importarle? \n \nDopo l'importazione, dovrai comunque rivedere le impostazioni importate nelle schermate seguenti e verificare che siano corrette."
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vi har oppdaget Loop-innstillinger som er lagret i Nightscout! De ble sist oppdatert %1$@ . Vil du importere dem? \n\nEtter importen må du fortsatt se gjennom de importerte innstillingene i de påfølgende skjermbildene og bekrefte at de er riktige."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We hebben Loop instellingen ontdekt in je Nightscout! Ze zijn voor het laatst bijgewerkt op %1$@. Wil je ze importeren?\n\nNa het importeren moet je in de volgende schermen nog steeds bekijken en controleren of de geïmporteerde instellingen correct zijn."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wykryliśmy ustawienia pętli zapisane w Twoim Nightscout! Zostały one ostatnio zaktualizowane %1$@. Czy chcesz je zaimportować?\n\nZaimportowane ustawienia będą wymagały weryfikacji w kolejnych etapach."
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Am detectat setările Loop stocate în Nightscout! Acestea au fost actualizate ultima dată %1$@. Doriți să le importați?\n\nDupă import, va trebui totuși să revizuiți setările importate în următoarele ecrane și să verificați dacă sunt corecte."
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мы обнаружили настройки Loop, сохраненные в вашем Nightscout! В последний раз они были обновлены %1$@. Вы хотите их импортировать?\n\nПосле импорта вам необходимо просмотреть импортированные настройки на следующих экранах и убедиться в их правильности."
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nightscout'unuzda saklanan Loop ayarlarını tespit ettik! En son %1$@ olarak güncellenmişler. Onları içe aktarmak ister misiniz?\n\nİçe aktardıktan sonra, aşağıdaki ekranlarda içe aktarılan ayarları gözden geçirmeniz ve doğrulamanız gerekecektir."
+          }
+        }
+      }
+    },
+    "Welcome to Loop" : {
+      "comment" : "Title on WelcomeView",
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Velkommen til Loop"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Willkommen bei Loop"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bienvenido a Loop"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bienvenue dans Loop"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benvenuti in Loop"
+          }
+        },
+        "nb" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Velkommen til Loop"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welkom bij Loop"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Witamy w Loop"
+          }
+        },
+        "ro" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bun venit la Loop"
+          }
+        },
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Добро пожаловать в Loop!"
+          }
+        },
+        "tr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loop'a hoş geldiniz"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "欢迎来到 Loop"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
