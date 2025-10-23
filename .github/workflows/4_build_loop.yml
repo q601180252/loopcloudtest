@@ -1,0 +1,190 @@
+name: 4. Build Loop
+run-name: Build Loop
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly check for updates - Wednesdays at 08:00 UTC
+    - cron: '0 8 * * 3'
+    # Monthly build - 1st of month at 06:00 UTC
+    - cron: '0 6 1 * *'
+
+jobs:
+  # Keep repository alive by committing to alive branch
+  keep_alive:
+    name: Keep Alive
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && vars.SCHEDULED_BUILD != 'false' && vars.SCHEDULED_SYNC != 'false'
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          ref: alive
+
+      - name: Keep Alive Commit
+        run: |
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Create dummy commit
+          echo "Keep alive commit on $(date)" >> keep_alive.txt
+          git add keep_alive.txt
+          git commit -m "Keep alive: $(date)" || echo "No changes to commit"
+          
+          # Push changes
+          git push origin alive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+  # Check for updates and sync repository
+  check_update:
+    name: Check for Updates
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'schedule' && vars.SCHEDULED_SYNC != 'false') || github.event_name == 'workflow_dispatch'
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for Updates
+        id: check
+        run: |
+          # Fetch latest from upstream
+          git remote add upstream https://github.com/LoopKit/LoopWorkspace.git || true
+          git fetch upstream
+          
+          # Check if there are new commits
+          LOCAL=$(git rev-parse HEAD)
+          REMOTE=$(git rev-parse upstream/main)
+          
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "Updates found!"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            
+            # Sync with upstream if this is a scheduled run
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git merge upstream/main --no-edit
+              git push origin main
+            fi
+          else
+            echo "No updates found"
+            # Monthly build should always build
+            if [ "${{ github.event.schedule }}" = "0 6 1 * *" ]; then
+              echo "should_build=true" >> $GITHUB_OUTPUT
+            else
+              echo "should_build=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  # Check and renew certificates if needed
+  check_certs:
+    name: Check Certificates
+    runs-on: macos-14
+    if: needs.check_update.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    needs: check_update
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Check and Renew Certificates
+        if: vars.ENABLE_NUKE_CERTS == 'true'
+        run: |
+          bundle exec fastlane check_and_renew_certificates
+          
+          if [ -f "new_certificate_needed.txt" ]; then
+            NEED_NUKE=$(cat new_certificate_needed.txt)
+            if [ "$NEED_NUKE" = "true" ]; then
+              echo "⚠️  Certificates need renewal"
+              bundle exec fastlane nuke_certs
+              bundle exec fastlane certs
+            fi
+          fi
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+  # Build Loop
+  build:
+    name: Build
+    runs-on: macos-14
+    if: needs.check_update.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
+    needs: [check_update, check_certs]
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Select Xcode Version
+        run: sudo xcode-select -switch /Applications/Xcode_15.4.app/Contents/Developer
+
+      - name: Build Loop
+        run: bundle exec fastlane build_loop
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Upload to TestFlight
+        run: bundle exec fastlane release
+        env:
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+
+      - name: Upload Build Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            artifacts/
+            buildlog/
+          retention-days: 30
+
+      - name: Build Success
+        run: |
+          echo "=========================================="
+          echo "✅ Build completed successfully!"
+          echo "=========================================="
+          echo ""
+          echo "Your app has been uploaded to TestFlight."
+          echo ""
+          echo "Next steps:"
+          echo "1. Go to App Store Connect: https://appstoreconnect.apple.com/apps"
+          echo "2. Add testers to your TestFlight Internal Testing group"
+          echo "3. Install the TestFlight app on your iPhone"
+          echo "4. Accept the invitation and install Loop"
+          echo ""
+          echo "Build artifacts have been saved for 30 days."
+

@@ -1,0 +1,79 @@
+name: 3. Create Certificates
+run-name: Create Certificates
+on:
+  workflow_dispatch:
+
+jobs:
+  certificates:
+    name: Create Certificates
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Check if Nuke is Needed
+        if: vars.ENABLE_NUKE_CERTS == 'true' || vars.FORCE_NUKE_CERTS == 'true'
+        run: |
+          echo "Checking certificate status..."
+          bundle exec fastlane check_and_renew_certificates
+          
+          if [ -f "new_certificate_needed.txt" ]; then
+            NEED_NUKE=$(cat new_certificate_needed.txt)
+            echo "need_nuke=$NEED_NUKE" >> $GITHUB_ENV
+            if [ "$NEED_NUKE" = "true" ]; then
+              echo "⚠️  Expired or missing certificates detected. Will nuke and recreate."
+            fi
+          fi
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Nuke Certificates if Needed
+        if: env.need_nuke == 'true' || vars.FORCE_NUKE_CERTS == 'true'
+        run: bundle exec fastlane nuke_certs
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Create Certificates
+        run: bundle exec fastlane certs
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Success Message
+        run: |
+          echo "=========================================="
+          echo "✅ Certificates created successfully!"
+          echo "=========================================="
+          echo ""
+          echo "Certificates have been stored in your Match-Secrets repository."
+          echo ""
+          echo "Next step: Run '4. Build Loop' workflow to build and upload to TestFlight"
+

@@ -1,0 +1,58 @@
+name: 2. Add Identifiers
+run-name: Add Identifiers
+on:
+  workflow_dispatch:
+
+jobs:
+  add_identifiers:
+    name: Add Identifiers
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Add Identifiers
+        run: bundle exec fastlane identifiers
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Success Message
+        run: |
+          echo "=========================================="
+          echo "✅ Identifiers added successfully!"
+          echo "=========================================="
+          echo ""
+          echo "⚠️  IMPORTANT: Manual Steps Required"
+          echo ""
+          echo "You must now manually configure the following in Apple Developer Portal:"
+          echo "https://developer.apple.com/account/resources/identifiers/list"
+          echo ""
+          echo "1. Create App Group (if not exists):"
+          echo "   - Name: Loop App Group"
+          echo "   - Identifier: group.com.${{ secrets.TEAMID }}.loopkit.LoopGroup"
+          echo ""
+          echo "2. Add App Group to these Bundle Identifiers:"
+          echo "   - Loop"
+          echo "   - Loop Intent Extension"
+          echo "   - Loop Status Extension"
+          echo "   - Loop Widget Extension"
+          echo ""
+          echo "3. Add 'Time Sensitive Notifications' capability to Loop identifier"
+          echo ""
+          echo "After completing these steps, run '3. Create Certificates' workflow"
+
