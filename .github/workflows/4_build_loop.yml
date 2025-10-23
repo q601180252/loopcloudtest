@@ -140,7 +140,7 @@ jobs:
           ruby-version: '3.3'
           bundler-cache: true
 
-      - name: Select Xcode Version
+      - name: Select Xcode Version and Install iOS Platform
         run: |
           # List available Xcode versions
           echo "Available Xcode versions:"
@@ -166,6 +166,22 @@ jobs:
           echo ""
           echo "Selected Xcode version:"
           xcodebuild -version
+          
+          echo ""
+          echo "Installing iOS 18.1 platform..."
+          sudo xcodebuild -runFirstLaunch || true
+          
+          echo ""
+          echo "Downloading and installing iOS 18.1 simulator runtime..."
+          sudo xcrun simctl runtime add "iOS 18.1" || echo "iOS 18.1 runtime installation skipped or already installed"
+          
+          echo ""
+          echo "Available iOS platforms:"
+          xcodebuild -showsdks | grep iphoneos || true
+          
+          echo ""
+          echo "Available simulators:"
+          xcrun simctl list runtimes | grep iOS || true
 
       - name: Fix Swift 6 Compatibility for Xcode 15.4
         run: |
