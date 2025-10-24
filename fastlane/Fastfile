@@ -129,7 +129,8 @@ platform :ios do
     )
 
     # Build archive manually without destination parameter
-    sh("xcodebuild -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath ./Loop.xcarchive archive CODE_SIGN_IDENTITY='iPhone Distribution' | tee buildlog/manual-build.log")
+    # sh() runs from fastlane directory, so use correct paths
+    sh("cd #{GITHUB_WORKSPACE} && mkdir -p buildlog && xcodebuild -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath ./Loop.xcarchive archive CODE_SIGN_IDENTITY='iPhone Distribution' | tee buildlog/manual-build.log")
     
     # Export IPA using gym
     gym(
@@ -138,7 +139,7 @@ platform :ios do
       output_name: "Loop.ipa",
       configuration: "Release",
       skip_archive: true,
-      archive_path: "./Loop.xcarchive",
+      archive_path: "#{GITHUB_WORKSPACE}/Loop.xcarchive",
       buildlog_path: 'buildlog'
     )
 
