@@ -128,20 +128,12 @@ platform :ios do
       targets: ["Loop Widget Extension"]
     )
 
-    # Create buildlog directory
-    sh("mkdir -p ../buildlog")
-    
-    # Build archive without destination parameter
-    sh("cd .. && xcodebuild archive -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath ./Loop.xcarchive | tee buildlog/archive.log | xcbeautify")
-    
-    # Export IPA using gym
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
       output_name: "Loop.ipa",
       configuration: "Release",
-      skip_build_archive: true,
-      archive_path: "./Loop.xcarchive",
+      destination: 'generic/platform=iOS',
       buildlog_path: 'buildlog'
     )
 

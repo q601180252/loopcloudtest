@@ -156,7 +156,7 @@ jobs:
           
           echo ""
           echo "=========================================="
-          echo "Installing iOS Platforms"
+          echo "Installing iOS 18.0 Platform"
           echo "=========================================="
           
           # Run first launch to install components
@@ -164,26 +164,19 @@ jobs:
           sudo xcodebuild -runFirstLaunch
           
           echo ""
-          echo "Available iOS SDKs:"
+          echo "Downloading iOS 18.0 platform..."
+          sudo xcodebuild -downloadPlatform iOS || echo "⚠️ Platform download command not available, trying alternative..."
+          
+          # Alternative: Download platform package directly
+          sudo xcodebuild -downloadAllPlatforms || echo "⚠️ Could not download all platforms"
+          
+          echo ""
+          echo "Available iOS SDKs and Platforms:"
           xcodebuild -showsdks | grep -i ios
           
           echo ""
-          echo "=========================================="
-          echo "Installing iOS Simulator Runtimes"
-          echo "=========================================="
-          
-          # Download iOS 18.0 simulator if needed
-          xcrun simctl runtime list || true
-          
-          echo ""
-          echo "Attempting to install iOS 18.0 runtime..."
-          xcrun simctl runtime add "com.apple.CoreSimulator.SimRuntime.iOS-18-0" || \
-          xcrun simctl runtime add "iOS 18.0" || \
-          echo "⚠️ iOS 18.0 runtime download skipped (may not be needed for archive)"
-          
-          echo ""
-          echo "Final available runtimes:"
-          xcrun simctl list runtimes
+          echo "Available destinations:"
+          xcodebuild -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -showdestinations 2>&1 | head -20 || echo "⚠️ Could not list destinations"
           
           echo ""
           echo "=========================================="
