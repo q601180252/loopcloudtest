@@ -128,29 +128,12 @@ platform :ios do
       targets: ["Loop Widget Extension"]
     )
 
-    # Manually build archive to avoid iOS 18.0 platform requirement
-    # Using only SDK without destination works around the missing platform package
-    workspace_path = File.expand_path("../LoopWorkspace.xcworkspace", __dir__)
-    archive_path = File.expand_path("../Loop.xcarchive", __dir__)
-    
-    sh("mkdir -p ../buildlog")
-    sh("xcodebuild archive " \
-       "-workspace '#{workspace_path}' " \
-       "-scheme LoopWorkspace " \
-       "-configuration Release " \
-       "-sdk iphoneos " \
-       "-archivePath '#{archive_path}' " \
-       "ONLY_ACTIVE_ARCH=NO " \
-       "| tee ../buildlog/archive.log | xcbeautify")
-    
-    # Export IPA using gym
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
       output_name: "Loop.ipa",
       configuration: "Release",
-      skip_build_archive: true,
-      archive_path: archive_path,
+      destination: 'generic/platform=iOS',
       buildlog_path: 'buildlog'
     )
 
