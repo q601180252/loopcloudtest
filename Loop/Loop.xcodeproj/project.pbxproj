@@ -4045,7 +4045,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWidgetExtension";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.HHZN32E89C.loopkit3.Loop.LoopWidgetExtension;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.libre.loopkit3.Loop.LoopWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_WIDGET_EXTENSION_DEBUG)";
 				SKIP_INSTALL = YES;
@@ -4094,7 +4094,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWidgetExtension";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.HHZN32E89C.loopkit3.Loop.LoopWidgetExtension;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.libre.loopkit3.Loop.LoopWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_WIDGET_EXTENSION_RELEASE)";
 				SKIP_INSTALL = YES;
@@ -4358,7 +4358,7 @@
 				"OTHER_SWIFT_FLAGS[arch=*]" = "-DDEBUG";
 				"OTHER_SWIFT_FLAGS[sdk=iphonesimulator*]" = "-D IOS_SIMULATOR -D DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER)";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.HHZN32E89C.loopkit3.Loop;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.libre.loopkit3.Loop;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_DEBUG)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -4386,7 +4386,7 @@
 				);
 				OTHER_LDFLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER)";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.HHZN32E89C.loopkit3.Loop;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.libre.loopkit3.Loop;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_RELEASE)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -4413,7 +4413,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWatch.watchkitextension";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.HHZN32E89C.loopkit3.Loop.LoopWatch.watchkitextension;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.libre.loopkit3.Loop.LoopWatch.watchkitextension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_WATCHAPP_EXTENSION_DEBUG)";
 				SDKROOT = watchos;
@@ -4441,7 +4441,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWatch.watchkitextension";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.HHZN32E89C.loopkit3.Loop.LoopWatch.watchkitextension;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.libre.loopkit3.Loop.LoopWatch.watchkitextension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_WATCHAPP_EXTENSION_RELEASE)";
 				SDKROOT = watchos;
@@ -4469,7 +4469,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWatch";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.HHZN32E89C.loopkit3.Loop.LoopWatch;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.libre.loopkit3.Loop.LoopWatch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_WATCHAPP_DEBUG)";
 				SDKROOT = watchos;
@@ -4494,7 +4494,7 @@
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWatch";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.HHZN32E89C.loopkit3.Loop.LoopWatch;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.libre.loopkit3.Loop.LoopWatch;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_WATCHAPP_RELEASE)";
 				SDKROOT = watchos;
@@ -4671,7 +4671,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).statuswidget";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.HHZN32E89C.loopkit3.Loop.statuswidget;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.libre.loopkit3.Loop.statuswidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_STATUS_EXTENSION_DEBUG)";
 				SKIP_INSTALL = YES;
@@ -4698,7 +4698,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).statuswidget";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.HHZN32E89C.loopkit3.Loop.statuswidget;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.libre.loopkit3.Loop.statuswidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_STATUS_EXTENSION_RELEASE)";
 				SKIP_INSTALL = YES;
@@ -4780,7 +4780,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).Loop-Intent-Extension";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.HHZN32E89C.loopkit3.Loop.Loop-Intent-Extension";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.libre.loopkit3.Loop.Loop-Intent-Extension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_INTENT_EXTENSION_DEBUG)";
 				SKIP_INSTALL = YES;
@@ -4808,7 +4808,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).Loop-Intent-Extension";
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.HHZN32E89C.loopkit3.Loop.Loop-Intent-Extension";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = "com.libre.loopkit3.Loop.Loop-Intent-Extension";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(LOOP_PROVISIONING_PROFILE_SPECIFIER_INTENT_EXTENSION_RELEASE)";
 				SKIP_INSTALL = YES;
