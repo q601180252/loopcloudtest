@@ -125,7 +125,7 @@ jobs:
   # Build Loop
   build:
     name: Build
-    runs-on: macos-15
+    runs-on: macos-14
     if: needs.check_update.outputs.should_build == 'true' || github.event_name == 'workflow_dispatch'
     needs: [check_update, check_certs]
     steps:
@@ -143,7 +143,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.0'
+          xcode-version: '15.4'
 
       - name: Verify Xcode Setup
         run: |
@@ -153,43 +153,7 @@ jobs:
           echo "Selected Xcode version:"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
-          
-          echo ""
-          echo "Available iOS SDKs:"
-          xcodebuild -showsdks | grep -i ios
-          
-          echo ""
           echo "=========================================="
-      
-      - name: Workaround iOS 18.0 Platform Issue
-        run: |
-          echo "Attempting to create iOS 18.0 platform symlink from iOS 18.4..."
-          PLATFORMS_DIR="/Applications/Xcode_16.app/Contents/Developer/Platforms"
-          IOS_PLATFORM="$PLATFORMS_DIR/iPhoneOS.platform"
-          
-          # Check if iOS 18.4 runtime exists
-          if [ -d "$HOME/Library/Developer/CoreSimulator/Runtimes" ]; then
-            echo "Available runtimes:"
-            ls -la "$HOME/Library/Developer/CoreSimulator/Runtimes/" || true
-          fi
-          
-          # Try to copy iOS 18.4 runtime to 18.0
-          RUNTIME_DIR="$HOME/Library/Developer/CoreSimulator/Runtimes"
-          if [ -d "$RUNTIME_DIR" ]; then
-            # Find iOS 18.4 runtime
-            IOS_18_4=$(ls "$RUNTIME_DIR" | grep "iOS.*18.*4" | head -1)
-            if [ -n "$IOS_18_4" ]; then
-              echo "Found iOS 18.4 runtime: $IOS_18_4"
-              # Create a symlink for iOS 18.0
-              IOS_18_0_NAME=$(echo "$IOS_18_4" | sed 's/18\.4/18.0/')
-              if [ ! -e "$RUNTIME_DIR/$IOS_18_0_NAME" ]; then
-                sudo ln -s "$RUNTIME_DIR/$IOS_18_4" "$RUNTIME_DIR/$IOS_18_0_NAME" || true
-                echo "Created symlink: $IOS_18_0_NAME -> $IOS_18_4"
-              fi
-            fi
-          fi
-          
-          echo "Workaround complete"
 
       - name: Fix Swift 6 Compatibility for Xcode 15.4
         run: |
