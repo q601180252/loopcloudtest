@@ -145,7 +145,7 @@ jobs:
         with:
           xcode-version: '16.0'
 
-      - name: Verify Xcode Setup
+      - name: Verify Xcode and Install iOS Platforms
         run: |
           echo "=========================================="
           echo "Xcode Setup"
@@ -153,6 +153,34 @@ jobs:
           echo "Selected Xcode version:"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
+          
+          echo ""
+          echo "=========================================="
+          echo "Installing iOS 18.0 Platform"
+          echo "=========================================="
+          
+          # Run first launch to install components
+          echo "Running Xcode first launch..."
+          sudo xcodebuild -runFirstLaunch
+          
+          echo ""
+          echo "Downloading iOS 18.0 platform..."
+          sudo xcodebuild -downloadPlatform iOS || echo "⚠️ Platform download command not available, trying alternative..."
+          
+          # Alternative: Download platform package directly
+          sudo xcodebuild -downloadAllPlatforms || echo "⚠️ Could not download all platforms"
+          
+          echo ""
+          echo "Available iOS SDKs and Platforms:"
+          xcodebuild -showsdks | grep -i ios
+          
+          echo ""
+          echo "Available destinations:"
+          xcodebuild -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -showdestinations 2>&1 | head -20 || echo "⚠️ Could not list destinations"
+          
+          echo ""
+          echo "=========================================="
+          echo "Setup Complete"
           echo "=========================================="
 
       - name: Fix Swift 6 Compatibility for Xcode 15.4
