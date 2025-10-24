@@ -133,7 +133,7 @@ platform :ios do
       scheme: "LoopWorkspace",
       output_name: "Loop.ipa",
       configuration: "Release",
-      destination: 'generic/platform=iOS',
+      sdk: "iphoneos",
       buildlog_path: 'buildlog'
     )
 
