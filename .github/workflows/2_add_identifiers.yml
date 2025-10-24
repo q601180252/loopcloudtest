@@ -44,7 +44,7 @@ jobs:
           echo ""
           echo "1. Create App Group (if not exists):"
           echo "   - Name: Loop App Group"
-          echo "   - Identifier: group.com.${{ secrets.TEAMID }}.loopkit3.LoopGroup"
+          echo "   - Identifier: group.com.libre.loopkit3.LoopGroup"
           echo ""
           echo "2. Add App Group to these Bundle Identifiers:"
           echo "   - Loop"

@@ -199,7 +199,7 @@ jobs:
         run: |
           echo "Fixing WatchApp and WatchApp Extension Bundle ID configuration..."
           
-          MAIN_BUNDLE_ID="com.${{ secrets.TEAMID }}.loopkit3.Loop"
+          MAIN_BUNDLE_ID="com.libre.loopkit3.Loop"
           
           # Fix WKAppBundleIdentifier in WatchApp Extension Info.plist
           WATCH_EXTENSION_PLIST="Loop/WatchApp Extension/Info.plist"
