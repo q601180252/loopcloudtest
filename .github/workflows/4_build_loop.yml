@@ -146,16 +146,16 @@ jobs:
           echo "Available Xcode versions:"
           ls -1 /Applications/ | grep Xcode || true
           
-          # Try Xcode 16 first (required for iOS 18 SDK)
-          if [ -d "/Applications/Xcode_16.1.app" ]; then
-            sudo xcode-select -switch /Applications/Xcode_16.1.app/Contents/Developer
-            echo "✅ Using Xcode 16.1"
-          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+          # Try Xcode 16.0 first (16.1 has iOS 18.1 requirement issues)
+          if [ -d "/Applications/Xcode_16.0.app" ]; then
             sudo xcode-select -switch /Applications/Xcode_16.0.app/Contents/Developer
             echo "✅ Using Xcode 16.0"
           elif [ -d "/Applications/Xcode_16.app" ]; then
             sudo xcode-select -switch /Applications/Xcode_16.app/Contents/Developer
             echo "✅ Using Xcode 16"
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -switch /Applications/Xcode_16.1.app/Contents/Developer
+            echo "✅ Using Xcode 16.1 (may require iOS 18.1)"
           elif [ -d "/Applications/Xcode.app" ]; then
             sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
             echo "✅ Using Xcode (default)"
