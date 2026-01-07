@@ -909,18 +909,20 @@
 /* Begin PBXShellScriptBuildPhase section */
 		27BA139728019DE200681D31 /* Run script capture-build-details */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
+			alwaysOutOfDate = 0;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"${SRCROOT}/Scripts/capture-build-details.sh",
 			);
 			name = "Run script capture-build-details";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"${BUILT_PRODUCTS_DIR}/${INFOPLIST_PATH}",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
