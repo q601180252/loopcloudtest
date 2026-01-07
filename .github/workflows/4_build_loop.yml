@@ -157,6 +157,11 @@ jobs:
           export DEVELOPER_DIR=$(xcode-select -p)
           echo "Developer directory: $DEVELOPER_DIR"
           
+          # 接受 Xcode 许可协议（如果尚未接受）
+          echo ""
+          echo "Accepting Xcode license agreement..."
+          sudo xcodebuild -license accept || echo "License may already be accepted"
+          
           # 运行 Xcode 首次启动以安装必要组件
           echo ""
           echo "Running Xcode first launch..."

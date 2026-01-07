@@ -191,6 +191,13 @@ platform :ios do
       
       # 验证 iOS 平台是否已正确安装
       UI.message("验证 iOS 平台安装状态...")
+      
+      # 列出所有可用的 SDK
+      UI.message("查询所有可用的 SDK...")
+      available_sdks = `xcodebuild -showsdks 2>&1`.strip
+      UI.message("可用 SDK:\n#{available_sdks}")
+      
+      # 检查 iOS SDK
       ios_sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
       if ios_sdk_version.empty? || ios_sdk_version.include?("error")
         UI.user_error!("❌ iOS SDK 未正确安装。请确保在 GitHub Actions 工作流中已安装 iOS 平台。")
@@ -205,22 +212,80 @@ platform :ios do
       end
       UI.success("✅ iOS 平台目录存在: #{platform_path}")
       
-      # 对于归档操作，始终使用 generic/platform=iOS，不需要设备 ID
-      # 设备 ID 仅用于在真实设备上运行，归档操作使用通用平台即可
-      destination_to_use = "generic/platform=iOS"
-      UI.message("使用 destination: #{destination_to_use} (归档操作使用通用平台)")
-      xcodebuild_cmd = [
-        "xcodebuild",
-        "-workspace", workspace_path,
-        "-scheme", "LoopWorkspace",
-        "-configuration", "Release",
-        "-destination", destination_to_use,
-        "-archivePath", archive_path,
-        "-allowProvisioningUpdates",
-        "ARCHS=arm64",
-        "ONLY_ACTIVE_ARCH=NO",
-        "archive"
+      # 列出平台目录中的 SDK
+      sdk_path = "#{platform_path}/Developer/SDKs"
+      if Dir.exist?(sdk_path)
+        sdk_dirs = Dir.entries(sdk_path).select { |entry| entry.start_with?("iPhoneOS") }
+        UI.message("平台目录中的 SDK: #{sdk_dirs.join(', ')}")
+      end
+      
+      # 尝试查询可用的 destinations
+      UI.message("查询可用的 destinations...")
+      begin
+        destinations_output = sh("xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -showdestinations -configuration Release 2>&1", log: false)
+        UI.message("Destinations 输出:\n#{destinations_output}")
+      rescue => ex
+        UI.important("⚠️ 无法查询 destinations: #{ex.message}")
+      end
+      
+      # 构建 destination 字符串，使用检测到的 SDK 版本
+      # 尝试多种 destination 格式，从最具体到最通用
+      destination_options = [
+        "generic/platform=iOS",
+        "platform=iOS",
+        "generic/platform=iOS Simulator,name=Any iOS Simulator"  # 最后尝试模拟器（虽然不理想，但可能工作）
       ]
+      
+      # 如果 SDK 版本可用，尝试使用版本特定的 destination
+      if ios_sdk_version && !ios_sdk_version.empty?
+        destination_options.unshift("generic/platform=iOS,OS=#{ios_sdk_version}")
+        destination_options.unshift("platform=iOS,OS=#{ios_sdk_version}")
+      end
+      
+      # 尝试每个 destination 选项，直到成功
+      archive_success = false
+      last_error = nil
+      
+      destination_options.each_with_index do |destination, index|
+        UI.message("尝试 destination 选项 #{index + 1}/#{destination_options.length}: #{destination}")
+        
+        xcodebuild_cmd = [
+          "xcodebuild",
+          "-workspace", workspace_path,
+          "-scheme", "LoopWorkspace",
+          "-configuration", "Release",
+          "-destination", destination,
+          "-archivePath", archive_path,
+          "-allowProvisioningUpdates",
+          "ARCHS=arm64",
+          "ONLY_ACTIVE_ARCH=NO",
+          "archive"
+        ]
+        
+        cmd_string = xcodebuild_cmd.map do |arg|
+          if arg.include?(' ') || arg.include?('=')
+            "'#{arg}'"
+          else
+            arg
+          end
+        end.join(" ")
+        
+        begin
+          UI.message("执行构建命令: #{cmd_string}")
+          sh("set -o pipefail && #{cmd_string} | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          archive_success = true
+          UI.success("✅ 使用 destination '#{destination}' 成功完成归档")
+          break
+        rescue => ex
+          last_error = ex
+          UI.important("⚠️ 使用 destination '#{destination}' 失败: #{ex.message}")
+          # 继续尝试下一个选项
+        end
+      end
+      
+      unless archive_success
+        UI.user_error!("❌ 所有 destination 选项都失败了。最后一个错误: #{last_error.message}")
+      end
       
       # 将参数数组转换为命令字符串，对包含空格或特殊字符的参数进行转义
       cmd_string = xcodebuild_cmd.map do |arg|
@@ -231,8 +296,6 @@ platform :ios do
         end
       end.join(" ")
       
-      UI.message("执行构建命令: #{cmd_string}")
-      sh("set -o pipefail && #{cmd_string} | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
       
       # 使用 gym 仅导出 IPA（跳过构建和归档）
       gym(
