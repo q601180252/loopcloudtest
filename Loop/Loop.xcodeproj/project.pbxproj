@@ -4423,6 +4423,8 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "WatchApp Extension/Extensions/WatchApp Extension-Bridging-Header.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				TARGETED_DEVICE_FAMILY = 4;
+				WATCHAPP_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWatch";
+				"WATCHAPP_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.libre.loopkit3.Loop.LoopWatch;
 			};
 			name = Debug;
 		};
@@ -4452,6 +4454,8 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "WatchApp Extension/Extensions/WatchApp Extension-Bridging-Header.h";
 				SWIFT_PRECOMPILE_BRIDGING_HEADER = NO;
 				TARGETED_DEVICE_FAMILY = 4;
+				WATCHAPP_BUNDLE_IDENTIFIER = "$(MAIN_APP_BUNDLE_IDENTIFIER).LoopWatch";
+				"WATCHAPP_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.libre.loopkit3.Loop.LoopWatch;
 			};
 			name = Release;
 		};
