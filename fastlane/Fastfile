@@ -64,10 +64,16 @@ platform :ios do
     UI.message("正在使用仓库所有者: #{GITHUB_REPOSITORY_OWNER}")
     UI.message("GH_PAT 已设置: #{GH_PAT.length > 0 ? '是' : '否'}")
     
+    # 配置 git 凭据，确保认证信息正确传递
+    ENV['GIT_TERMINAL_PROMPT'] = '0'
+    
+    # 使用包含认证信息的 git_url，这样更可靠
+    # 在 CI 环境中这是安全的，因为 token 不会暴露给最终用户
+    git_url_with_auth = "https://#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}@github.com/#{GITHUB_REPOSITORY_OWNER}/Match-Secrets.git"
+    
     match(
       type: "appstore",
-      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
-      clone_branch_directly: true,
+      git_url: git_url_with_auth,
       shallow_clone: true,
       app_identifier: [
         "com.libre.loopkit3.Loop", 
