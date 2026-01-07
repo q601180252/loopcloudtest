@@ -174,138 +174,69 @@ platform :ios do
     end
 
     # 在 CI 环境中构建 iOS 应用
-    # 使用 skip_build_archive 跳过 gym 的自动构建，手动执行 xcodebuild
+    # 尝试使用 gym 的默认行为，让 fastlane 处理 destination
     if ENV['CI']
-      UI.message("在 CI 环境中使用自定义构建命令以避免 destination 问题...")
+      UI.message("在 CI 环境中使用 gym 构建...")
       
       # 确保 DEVELOPER_DIR 正确设置
       developer_dir = `xcode-select -p`.strip
       ENV['DEVELOPER_DIR'] = developer_dir
       UI.message("设置 DEVELOPER_DIR: #{developer_dir}")
       
-      # 确保必要的目录存在
-      archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
-      workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
-      sh("mkdir -p #{GITHUB_WORKSPACE}/build")
-      sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
+      # 验证 iOS SDK 是否可用
+      UI.message("验证 iOS SDK...")
+      ios_sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
+      if ios_sdk_version.empty? || ios_sdk_version.include?("error")
+        UI.important("⚠️ iOS SDK 可能未正确安装，但继续尝试构建...")
+      else
+        UI.success("✅ iOS SDK 版本: #{ios_sdk_version}")
+      end
       
-      # 验证 iOS 平台是否已正确安装
-      UI.message("验证 iOS 平台安装状态...")
-      
-      # 列出所有可用的 SDK
-      UI.message("查询所有可用的 SDK...")
+      # 列出所有可用的 SDK 用于调试
       available_sdks = `xcodebuild -showsdks 2>&1`.strip
       UI.message("可用 SDK:\n#{available_sdks}")
       
-      # 检查 iOS SDK
-      ios_sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
-      if ios_sdk_version.empty? || ios_sdk_version.include?("error")
-        UI.user_error!("❌ iOS SDK 未正确安装。请确保在 GitHub Actions 工作流中已安装 iOS 平台。")
-      end
-      UI.success("✅ iOS SDK 版本: #{ios_sdk_version}")
-      
-      # 检查平台目录
-      xcode_path = `xcode-select -p`.strip.gsub('/Contents/Developer', '')
-      platform_path = "#{xcode_path}/Contents/Developer/Platforms/iPhoneOS.platform"
-      unless Dir.exist?(platform_path)
-        UI.user_error!("❌ iOS 平台目录不存在: #{platform_path}。请确保在 GitHub Actions 工作流中已安装 iOS 平台。")
-      end
-      UI.success("✅ iOS 平台目录存在: #{platform_path}")
-      
-      # 列出平台目录中的 SDK
-      sdk_path = "#{platform_path}/Developer/SDKs"
-      if Dir.exist?(sdk_path)
-        sdk_dirs = Dir.entries(sdk_path).select { |entry| entry.start_with?("iPhoneOS") }
-        UI.message("平台目录中的 SDK: #{sdk_dirs.join(', ')}")
-      end
-      
-      # 尝试查询可用的 destinations
-      UI.message("查询可用的 destinations...")
+      # 尝试使用 gym，不指定 destination，让 fastlane 自动处理
+      # 如果失败，再尝试手动指定 destination
       begin
-        destinations_output = sh("xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -showdestinations -configuration Release 2>&1", log: false)
-        UI.message("Destinations 输出:\n#{destinations_output}")
+        UI.message("尝试使用 gym 自动处理 destination...")
+        gym(
+          export_method: "app-store",
+          scheme: "LoopWorkspace",
+          output_name: "Loop.ipa",
+          configuration: "Release",
+          buildlog_path: 'buildlog',
+          skip_codesigning: false,
+          skip_archive: false
+        )
       rescue => ex
-        UI.important("⚠️ 无法查询 destinations: #{ex.message}")
-      end
-      
-      # 构建 destination 字符串，使用检测到的 SDK 版本
-      # 尝试多种 destination 格式，从最具体到最通用
-      destination_options = [
-        "generic/platform=iOS",
-        "platform=iOS",
-        "generic/platform=iOS Simulator,name=Any iOS Simulator"  # 最后尝试模拟器（虽然不理想，但可能工作）
-      ]
-      
-      # 如果 SDK 版本可用，尝试使用版本特定的 destination
-      if ios_sdk_version && !ios_sdk_version.empty?
-        destination_options.unshift("generic/platform=iOS,OS=#{ios_sdk_version}")
-        destination_options.unshift("platform=iOS,OS=#{ios_sdk_version}")
-      end
-      
-      # 尝试每个 destination 选项，直到成功
-      archive_success = false
-      last_error = nil
-      
-      destination_options.each_with_index do |destination, index|
-        UI.message("尝试 destination 选项 #{index + 1}/#{destination_options.length}: #{destination}")
+        UI.important("⚠️ gym 自动构建失败: #{ex.message}")
+        UI.message("尝试手动指定 destination...")
         
-        xcodebuild_cmd = [
-          "xcodebuild",
-          "-workspace", workspace_path,
-          "-scheme", "LoopWorkspace",
-          "-configuration", "Release",
-          "-destination", destination,
-          "-archivePath", archive_path,
-          "-allowProvisioningUpdates",
-          "ARCHS=arm64",
-          "ONLY_ACTIVE_ARCH=NO",
-          "archive"
-        ]
+        # 备用方法：手动构建
+        archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
+        workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
+        sh("mkdir -p #{GITHUB_WORKSPACE}/build")
+        sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
         
-        cmd_string = xcodebuild_cmd.map do |arg|
-          if arg.include?(' ') || arg.include?('=')
-            "'#{arg}'"
-          else
-            arg
-          end
-        end.join(" ")
-        
+        # 尝试不使用 destination，只使用 -sdk
+        UI.message("尝试使用 -sdk iphoneos 而不指定 destination...")
         begin
-          UI.message("执行构建命令: #{cmd_string}")
-          sh("set -o pipefail && #{cmd_string} | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
-          archive_success = true
-          UI.success("✅ 使用 destination '#{destination}' 成功完成归档")
-          break
-        rescue => ex
-          last_error = ex
-          UI.important("⚠️ 使用 destination '#{destination}' 失败: #{ex.message}")
-          # 继续尝试下一个选项
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO archive | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          
+          # 如果成功，使用 gym 导出
+          gym(
+            export_method: "app-store",
+            scheme: "LoopWorkspace",
+            output_name: "Loop.ipa",
+            archive_path: archive_path,
+            skip_build_archive: true,
+            buildlog_path: 'buildlog'
+          )
+        rescue => ex2
+          UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}")
         end
       end
-      
-      unless archive_success
-        UI.user_error!("❌ 所有 destination 选项都失败了。最后一个错误: #{last_error.message}")
-      end
-      
-      # 将参数数组转换为命令字符串，对包含空格或特殊字符的参数进行转义
-      cmd_string = xcodebuild_cmd.map do |arg|
-        if arg.include?(' ') || arg.include?('=')
-          "'#{arg}'"
-        else
-          arg
-        end
-      end.join(" ")
-      
-      
-      # 使用 gym 仅导出 IPA（跳过构建和归档）
-      gym(
-        export_method: "app-store",
-        scheme: "LoopWorkspace",
-        output_name: "Loop.ipa",
-        archive_path: archive_path,
-        skip_build_archive: true,
-        buildlog_path: 'buildlog'
-      )
     else
       # 本地环境使用标准 gym
       gym(

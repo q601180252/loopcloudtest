@@ -174,38 +174,50 @@ jobs:
           echo ""
           echo "Installing iOS and watchOS platforms..."
           
-          # 首先尝试下载所有平台
+          # 方法1: 尝试使用 xcodebuild -downloadAllPlatforms
+          echo "Method 1: Trying -downloadAllPlatforms..."
           if sudo xcodebuild -downloadAllPlatforms 2>&1; then
             echo "✅ downloadAllPlatforms completed"
           else
             echo "⚠️ downloadAllPlatforms failed, trying individual platform install..."
-            # 尝试单独安装 iOS 平台
-            if sudo xcodebuild -downloadPlatform iOS 2>&1; then
-              echo "✅ iOS platform install completed"
-            else
-              echo "❌ iOS platform install failed"
-            fi
+            
+            # 方法2: 尝试单独安装 iOS 平台（多次尝试）
+            echo ""
+            echo "Method 2: Trying -downloadPlatform iOS (attempt 1)..."
+            sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform install attempt 1 failed"
+            sleep 10
+            
+            echo "Method 2: Trying -downloadPlatform iOS (attempt 2)..."
+            sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform install attempt 2 failed"
+            sleep 10
+            
+            # 方法3: 尝试多次安装 iOS 平台
+            echo ""
+            echo "Method 3: Multiple attempts to install iOS platform..."
+            for i in {1..3}; do
+              echo "iOS platform install attempt $i..."
+              sudo xcodebuild -downloadPlatform iOS 2>&1 && break || echo "⚠️ iOS platform install attempt $i failed"
+              sleep 10
+            done
             
             # 尝试单独安装 watchOS 平台
-            if sudo xcodebuild -downloadPlatform watchOS 2>&1; then
-              echo "✅ watchOS platform install completed"
-            else
-              echo "⚠️ watchOS platform install failed"
-            fi
+            echo ""
+            echo "Installing watchOS platform..."
+            sudo xcodebuild -downloadPlatform watchOS 2>&1 || echo "⚠️ watchOS platform install failed"
           fi
           
           # 等待安装完成
           echo ""
           echo "Waiting for platform installation to complete..."
-          sleep 20
+          sleep 30  # 增加等待时间
           
           # 再次尝试安装 iOS 平台以确保它被正确安装
           echo ""
-          echo "Verifying and reinstalling iOS platform if needed..."
-          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform reinstall attempt failed"
+          echo "Final attempt: Verifying and reinstalling iOS platform if needed..."
+          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform final reinstall attempt failed"
           
           # 再次等待
-          sleep 15
+          sleep 20  # 增加等待时间
           
           # 验证平台安装是否成功
           echo ""
