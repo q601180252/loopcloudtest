@@ -175,7 +175,47 @@ jobs:
           }
           
           # 再次等待安装完成
-          sleep 5
+          sleep 15
+          
+          # 强制重新安装 iOS 平台（如果之前失败）
+          echo ""
+          echo "Force reinstalling iOS platform..."
+          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform reinstall failed"
+          
+          # 再次等待
+          sleep 10
+          
+          # 验证平台安装是否成功
+          echo ""
+          echo "Verifying platform installation..."
+          xcodebuild -showsdks 2>&1 | head -20
+          
+          # 检查平台目录的完整性
+          echo ""
+          echo "Checking platform directory structure..."
+          XCODE_PATH=$(xcode-select -p | sed 's|/Contents/Developer||')
+          IOS_PLATFORM_PATH="$XCODE_PATH/Contents/Developer/Platforms/iPhoneOS.platform"
+          if [ -d "$IOS_PLATFORM_PATH" ]; then
+            echo "✅ iOS platform directory exists"
+            echo "Checking for key files..."
+            [ -f "$IOS_PLATFORM_PATH/Info.plist" ] && echo "✅ Info.plist exists" || echo "⚠️ Info.plist missing"
+            [ -d "$IOS_PLATFORM_PATH/Developer/SDKs" ] && echo "✅ SDKs directory exists" || echo "⚠️ SDKs directory missing"
+            ls -la "$IOS_PLATFORM_PATH/Developer/SDKs" 2>/dev/null | head -5 || echo "⚠️ Cannot list SDKs"
+          fi
+          
+          # 尝试列出 destinations 以验证平台是否被识别
+          echo ""
+          echo "Testing destination detection..."
+          if [ -f "LoopWorkspace.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild -workspace LoopWorkspace.xcworkspace -scheme LoopWorkspace -showdestinations -configuration Release 2>&1 | head -50 || echo "⚠️ Cannot show destinations"
+          else
+            echo "⚠️ Workspace not found, skipping destination test"
+          fi
+          
+          # 设置环境变量以确保 xcodebuild 使用正确的路径
+          export DEVELOPER_DIR=$(xcode-select -p)
+          echo ""
+          echo "Final DEVELOPER_DIR: $DEVELOPER_DIR"
           
           # 检查可用的 iOS SDK
           echo ""
