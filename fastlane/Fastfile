@@ -371,45 +371,15 @@ platform :ios do
           
           UI.message("尝试使用 destination: #{destination} 和 -sdk iphoneos...")
           # 使用构建设置来排除 watchOS 目标，避免冲突和产品类型错误
-          # 通过设置 SKIP_INSTALL=YES 和 ONLY_ACTIVE_ARCH=YES 来跳过 watchOS 目标的构建
-          # 设置 EXCLUDED_ARCHS 和 SUPPORTED_PLATFORMS 来防止 watchOS 目标被构建
-          # 这样可以防止 Xcode 尝试构建 watchOS 目标，从而避免产品类型解析错误和重复构建
-          # 在 iOS 构建时，临时修改 Embed Watch Content 构建阶段，使其为空
-          # 这样可以避免 Xcode 尝试构建 watchOS 依赖项
-          project_file = "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj/project.pbxproj"
-          backup_file = "#{project_file}.backup"
-          begin
-            # 备份项目文件
-            FileUtils.cp(project_file, backup_file)
-            
-            # 读取项目文件
-            project_content = File.read(project_file)
-            
-            # 临时清空 Embed Watch Content 构建阶段中的文件列表
-            # 这样可以避免 Xcode 尝试构建 watchOS 依赖项
-            modified_content = project_content.gsub(
-              /(43A9439C1B926B7B0051FA24 \/\* Embed Watch Content \*\/ = \{[\s\S]*?files = \([\s\S]*?)(43A943941B926B7B0051FA24 \/\* WatchApp\.app in Embed Watch Content \*\/,)([\s\S]*?\);)/,
-              '\1/* Temporarily disabled for iOS build: \2 */\3'
-            )
-            
-            # 写回项目文件
-            File.write(project_file, modified_content)
-            
-            UI.message("✅ 已临时禁用 Embed Watch Content 构建阶段")
-            
-            # 使用 -skipUnavailableActions 来跳过不可用的 watchOS 操作
-            # 同时使用构建设置来排除 watchOS 目标
-            sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDED_ARCHS[sdk=watchos*]=arm64' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
-          rescue => ex3
-            UI.important("⚠️ 构建失败: #{ex3.message}")
-            raise ex3
-          ensure
-            # 恢复项目文件
-            if File.exist?(backup_file)
-              FileUtils.mv(backup_file, project_file)
-              UI.message("✅ 已恢复项目文件")
-            end
-          end
+          # 关键设置：
+          # 1. SKIP_INSTALL=YES 对于 watchOS 目标，防止它们被安装
+          # 2. ONLY_ACTIVE_ARCH=YES 对于 watchOS 目标，跳过不匹配的架构
+          # 3. SUPPORTED_PLATFORMS 设置为空字符串，告诉 Xcode 这些目标不支持 iOS 平台
+          # 4. EXCLUDED_ARCHS 排除 watchOS 架构
+          # 5. -skipUnavailableActions 跳过不可用的操作（如 Embed Watch Content）
+          # 注意：watchOS 应用依赖 iOS 应用（这是正常的），但我们在构建 iOS 时不需要构建 watchOS 目标
+          # 我们使用构建设置来告诉 Xcode 跳过 watchOS 目标的构建，而不是修改项目文件
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDED_ARCHS[sdk=watchos*]=arm64' 'VALID_ARCHS[sdk=watchos*]=' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
