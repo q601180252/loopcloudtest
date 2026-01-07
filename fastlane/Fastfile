@@ -149,8 +149,23 @@ platform :ios do
       targets: ["Loop Widget Extension"]
     )
 
-    # 在 CI 环境中，使用 archive 而不是直接指定 destination
-    # 这样可以避免 iOS 平台安装问题
+    # 在构建前验证 iOS SDK 和平台可用性
+    if ENV['CI']
+      UI.message("验证 iOS SDK 和平台...")
+      begin
+        sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
+        if sdk_version.empty? || sdk_version.include?("error")
+          UI.important("⚠️ iOS SDK 可能未正确安装")
+        else
+          UI.success("✅ iOS SDK 版本: #{sdk_version}")
+        end
+      rescue => ex
+        UI.important("⚠️ 无法验证 iOS SDK: #{ex.message}")
+      end
+    end
+
+    # 在 CI 环境中构建 iOS 应用
+    # 使用 archive 模式，但不指定 destination（让 Xcode 自动处理）
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
@@ -160,9 +175,12 @@ platform :ios do
       archive_path: "#{GITHUB_WORKSPACE}/build/Loop.xcarchive",
       skip_codesigning: false,
       skip_archive: false,
-      # 不指定 destination，让 Xcode 自动选择合适的设备/平台
-      # 如果需要，可以使用 sdk 参数指定 SDK
-      sdk: "iphoneos"
+      # 只指定 SDK，不指定 destination
+      sdk: "iphoneos",
+      # 禁用自动添加 destination
+      build_for_distribution: true,
+      # 确保使用正确的 Xcode
+      xcode_path: "/Applications/Xcode_16.app"
     )
 
     copy_artifacts(
