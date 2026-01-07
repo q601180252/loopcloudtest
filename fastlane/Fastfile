@@ -149,13 +149,20 @@ platform :ios do
       targets: ["Loop Widget Extension"]
     )
 
+    # 在 CI 环境中，使用 archive 而不是直接指定 destination
+    # 这样可以避免 iOS 平台安装问题
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
       output_name: "Loop.ipa",
       configuration: "Release",
-      destination: 'generic/platform=iOS',
-      buildlog_path: 'buildlog'
+      buildlog_path: 'buildlog',
+      archive_path: "#{GITHUB_WORKSPACE}/build/Loop.xcarchive",
+      skip_codesigning: false,
+      skip_archive: false,
+      # 不指定 destination，让 Xcode 自动选择合适的设备/平台
+      # 如果需要，可以使用 sdk 参数指定 SDK
+      sdk: "iphoneos"
     )
 
     copy_artifacts(

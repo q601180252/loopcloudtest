@@ -152,31 +152,48 @@ jobs:
           echo "=========================================="
           echo "Selected Xcode version:"
           xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
           
+          # 确保使用正确的 Xcode
+          export DEVELOPER_DIR=$(xcode-select -p)
+          echo "Developer directory: $DEVELOPER_DIR"
+          
+          # 运行 Xcode 首次启动以安装必要组件
           echo ""
-          echo "=========================================="
-          echo "Installing iOS 18.0 Platform"
-          echo "=========================================="
-          
-          # Run first launch to install components
           echo "Running Xcode first launch..."
-          sudo xcodebuild -runFirstLaunch
+          sudo xcodebuild -runFirstLaunch || true
           
+          # 等待 Xcode 完成初始化
+          sleep 5
+          
+          # 检查可用的 iOS SDK
           echo ""
-          echo "Downloading iOS 18.0 platform..."
-          sudo xcodebuild -downloadPlatform iOS || echo "⚠️ Platform download command not available, trying alternative..."
+          echo "Available iOS SDKs:"
+          xcodebuild -showsdks | grep -i ios || echo "⚠️ No iOS SDKs found"
           
-          # Alternative: Download platform package directly
-          sudo xcodebuild -downloadAllPlatforms || echo "⚠️ Could not download all platforms"
+          # 获取当前 iOS SDK 版本
+          IOS_SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "")
+          if [ -z "$IOS_SDK_VERSION" ]; then
+            echo "⚠️ iOS SDK version not found, trying to install..."
+            
+            # 尝试安装 iOS 平台（使用完整路径避免 sudo 路径问题）
+            sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ Platform download command failed"
+          else
+            echo "✅ iOS SDK version: $IOS_SDK_VERSION"
+          fi
           
+          # 再次检查 SDK
           echo ""
-          echo "Available iOS SDKs and Platforms:"
+          echo "Final iOS SDK check:"
           xcodebuild -showsdks | grep -i ios
           
+          # 列出可用的构建目标
           echo ""
-          echo "Available destinations:"
-          xcodebuild -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -showdestinations 2>&1 | head -20 || echo "⚠️ Could not list destinations"
+          echo "Available destinations (if workspace exists):"
+          if [ -f "./LoopWorkspace.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild -workspace ./LoopWorkspace.xcworkspace -scheme LoopWorkspace -showdestinations 2>&1 | head -30 || echo "⚠️ Could not list destinations"
+          else
+            echo "⚠️ Workspace not found, skipping destination check"
+          fi
           
           echo ""
           echo "=========================================="
