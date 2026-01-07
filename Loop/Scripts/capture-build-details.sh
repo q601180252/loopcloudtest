@@ -52,13 +52,20 @@ fi
 info "Gathering build details in ${PWD}"
 
 if [ -e .git ]; then
-  rev=$(git rev-parse HEAD)
-  plutil -replace com-loopkit-Loop-git-revision -string ${rev:0:7} "${info_plist_path}"
-  branch=$(git branch --show-current)
-  if [ -n "$branch" ]; then
-    plutil -replace com-loopkit-Loop-git-branch -string "${branch}" "${info_plist_path}"
+  # Check if this is a valid git repository before executing git commands
+  if git rev-parse --git-dir > /dev/null 2>&1; then
+    rev=$(git rev-parse HEAD 2>/dev/null)
+    if [ -n "$rev" ]; then
+      plutil -replace com-loopkit-Loop-git-revision -string ${rev:0:7} "${info_plist_path}"
+    fi
+    branch=$(git branch --show-current 2>/dev/null)
+    if [ -n "$branch" ]; then
+      plutil -replace com-loopkit-Loop-git-branch -string "${branch}" "${info_plist_path}"
+    else
+      warn "No git branch found, not setting com-loopkit-Loop-git-branch"
+    fi
   else
-    warn "No git branch found, not setting com-loopkit-Loop-git-branch"
+    warn "Current directory is not a valid git repository, skipping git info"
   fi
 fi
 
@@ -92,11 +99,18 @@ if [ -e ../.git ]
 then
     pushd . > /dev/null
     cd ..
-    rev=$(git rev-parse HEAD)
-    plutil -replace com-loopkit-LoopWorkspace-git-revision -string "${rev:0:7}" "${info_plist_path}"
-    branch=$(git branch --show-current)
-    if [ -n "$branch" ]; then
-        plutil -replace com-loopkit-LoopWorkspace-git-branch -string "${branch}" "${info_plist_path}"
+    # Check if this is a valid git repository before executing git commands
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        rev=$(git rev-parse HEAD 2>/dev/null)
+        if [ -n "$rev" ]; then
+            plutil -replace com-loopkit-LoopWorkspace-git-revision -string "${rev:0:7}" "${info_plist_path}"
+        fi
+        branch=$(git branch --show-current 2>/dev/null)
+        if [ -n "$branch" ]; then
+            plutil -replace com-loopkit-LoopWorkspace-git-branch -string "${branch}" "${info_plist_path}"
+        fi
+    else
+        warn "Parent directory is not a valid git repository, skipping workspace git info"
     fi
     popd . > /dev/null
 fi
