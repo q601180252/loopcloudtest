@@ -165,7 +165,7 @@ platform :ios do
     end
 
     # 在 CI 环境中构建 iOS 应用
-    # 使用 archive 模式，但不指定 destination（让 Xcode 自动处理）
+    # 使用 archive 模式，只指定 SDK，让 fastlane 自动处理 destination
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
@@ -175,12 +175,8 @@ platform :ios do
       archive_path: "#{GITHUB_WORKSPACE}/build/Loop.xcarchive",
       skip_codesigning: false,
       skip_archive: false,
-      # 只指定 SDK，不指定 destination
-      sdk: "iphoneos",
-      # 禁用自动添加 destination
-      build_for_distribution: true,
-      # 确保使用正确的 Xcode
-      xcode_path: "/Applications/Xcode_16.app"
+      # 只指定 SDK，让 Xcode 自动选择合适的 destination
+      sdk: "iphoneos"
     )
 
     copy_artifacts(
