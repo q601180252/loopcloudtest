@@ -84,6 +84,23 @@ platform :ios do
         "com.libre.loopkit3.Loop.LoopWidgetExtension"
       ]
     )
+    
+    # 验证代码签名证书是否有效
+    if ENV['CI']
+      UI.message("验证代码签名证书...")
+      begin
+        # 列出所有可用的代码签名身份
+        identities = `security find-identity -v -p codesigning 2>&1`.strip
+        if identities.include?("Apple Distribution") || identities.include?("iPhone Distribution")
+          UI.success("✅ 找到有效的代码签名证书")
+          UI.message("可用证书:\n#{identities}")
+        else
+          UI.important("⚠️ 未找到有效的代码签名证书，可能需要重新生成")
+        end
+      rescue => ex
+        UI.important("⚠️ 无法验证代码签名证书: #{ex.message}")
+      end
+    end
 
     previous_build_number = latest_testflight_build_number(
       app_identifier: "com.libre.loopkit3.Loop",
@@ -104,48 +121,48 @@ platform :ios do
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop"],
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["Loop"]
     )
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["LoopCore", "LoopCore-watchOS", "LoopUI"]
     )
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.statuswidget"],
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["Loop Status Extension"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.LoopWatch.watchkitextension"],
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["WatchApp Extension"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.LoopWatch"],
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["WatchApp"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.Loop-Intent-Extension"],
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["Loop Intent Extension"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.LoopWidgetExtension"],
-      code_sign_identity: "iPhone Distribution",
+      code_sign_identity: "Apple Distribution",
       targets: ["Loop Widget Extension"]
     )
 
@@ -207,7 +224,8 @@ platform :ios do
           configuration: "Release",
           buildlog_path: 'buildlog',
           skip_codesigning: false,
-          skip_archive: false
+          skip_archive: false,
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
@@ -222,7 +240,7 @@ platform :ios do
         # 尝试不使用 destination，只使用 -sdk
         UI.message("尝试使用 -sdk iphoneos 而不指定 destination...")
         begin
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO archive | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
           
           # 如果成功，使用 gym 导出
           gym(
