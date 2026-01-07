@@ -174,7 +174,7 @@ platform :ios do
     end
 
     # 在 CI 环境中构建 iOS 应用
-    # 使用 xcargs 来覆盖 destination，避免 iOS 平台检查问题
+    # 使用 xcargs 来添加额外的构建参数
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
@@ -185,8 +185,8 @@ platform :ios do
       skip_codesigning: false,
       skip_archive: false,
       sdk: "iphoneos",
-      # 使用 xcargs 来构建，不指定 destination，只指定 SDK
-      xcargs: "-sdk iphoneos ARCHS=arm64 ONLY_ACTIVE_ARCH=NO"
+      # 使用 xcargs 添加额外的构建参数（不包含 -sdk，因为已经在 sdk 参数中指定）
+      xcargs: "ARCHS=arm64 ONLY_ACTIVE_ARCH=NO"
     )
 
     copy_artifacts(
