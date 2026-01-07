@@ -580,10 +580,14 @@ platform :ios do
       UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
     end
     
+    # 使用包含认证信息的 git_url
+    git_url_with_auth = "https://#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}@github.com/#{GITHUB_REPOSITORY_OWNER}/Match-Secrets.git"
+    
     match_nuke(
       type: "appstore",
       team_id: "#{TEAMID}",
       skip_confirmation: true,
+      git_url: git_url_with_auth,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
     )
   end
