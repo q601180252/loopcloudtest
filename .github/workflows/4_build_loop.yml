@@ -165,12 +165,13 @@ jobs:
           # 等待 Xcode 完成初始化
           sleep 10
           
-          # 尝试安装所有平台（这会安装 iOS 18.0 如果可用）
+          # 尝试安装所有平台（这会安装 iOS 18.0 和 watchOS 11.0 如果可用）
           echo ""
-          echo "Installing iOS platforms..."
+          echo "Installing iOS and watchOS platforms..."
           sudo xcodebuild -downloadAllPlatforms 2>&1 || {
             echo "⚠️ downloadAllPlatforms failed, trying individual platform install..."
-            sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ Individual platform install also failed"
+            sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform install failed"
+            sudo xcodebuild -downloadPlatform watchOS 2>&1 || echo "⚠️ watchOS platform install failed"
           }
           
           # 再次等待安装完成
@@ -181,12 +182,25 @@ jobs:
           echo "Available iOS SDKs:"
           xcodebuild -showsdks | grep -i ios || echo "⚠️ No iOS SDKs found"
           
+          # 检查可用的 watchOS SDK
+          echo ""
+          echo "Available watchOS SDKs:"
+          xcodebuild -showsdks | grep -i watchos || echo "⚠️ No watchOS SDKs found"
+          
           # 获取当前 iOS SDK 版本
           IOS_SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "")
           if [ -z "$IOS_SDK_VERSION" ]; then
             echo "⚠️ iOS SDK version not found"
           else
             echo "✅ iOS SDK version: $IOS_SDK_VERSION"
+          fi
+          
+          # 获取当前 watchOS SDK 版本
+          WATCHOS_SDK_VERSION=$(xcrun --sdk watchos --show-sdk-version 2>/dev/null || echo "")
+          if [ -z "$WATCHOS_SDK_VERSION" ]; then
+            echo "⚠️ watchOS SDK version not found"
+          else
+            echo "✅ watchOS SDK version: $WATCHOS_SDK_VERSION"
           fi
           
           # 检查 iOS 平台目录
@@ -199,6 +213,18 @@ jobs:
             ls -la "$IOS_PLATFORM_PATH" | head -5
           else
             echo "⚠️ iOS platform directory not found: $IOS_PLATFORM_PATH"
+          fi
+          
+          # 检查 watchOS 平台目录
+          echo ""
+          echo "Checking watchOS platform directory:"
+          WATCHOS_PLATFORM_PATH="$XCODE_PATH/Contents/Developer/Platforms/WatchOS.platform"
+          if [ -d "$WATCHOS_PLATFORM_PATH" ]; then
+            echo "✅ watchOS platform directory exists: $WATCHOS_PLATFORM_PATH"
+            ls -la "$WATCHOS_PLATFORM_PATH" | head -5
+          else
+            echo "⚠️ watchOS platform directory not found: $WATCHOS_PLATFORM_PATH"
+            exit 1 # Fail the step if watchOS platform is not found
           fi
           
           echo ""
