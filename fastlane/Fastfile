@@ -178,26 +178,53 @@ platform :ios do
     if ENV['CI']
       UI.message("在 CI 环境中使用自定义构建命令以避免 destination 问题...")
       
+      # 确保 DEVELOPER_DIR 正确设置
+      developer_dir = `xcode-select -p`.strip
+      ENV['DEVELOPER_DIR'] = developer_dir
+      UI.message("设置 DEVELOPER_DIR: #{developer_dir}")
+      
       # 确保必要的目录存在
       archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
       workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
       sh("mkdir -p #{GITHUB_WORKSPACE}/build")
       sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
       
+      # 先查询可用的 destinations
+      UI.message("查询可用的 destinations...")
+      begin
+        destinations_output = sh("xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -showdestinations -configuration Release 2>&1", log: false)
+        UI.message("可用 destinations:")
+        UI.message(destinations_output)
+      rescue => ex
+        UI.important("无法查询 destinations: #{ex.message}")
+      end
+      
+      # 构建命令：尝试不使用 -sdk，只使用 destination，让 xcodebuild 自动选择 SDK
+      # 如果这样不行，再尝试其他方法
       xcodebuild_cmd = [
         "xcodebuild",
-        "-workspace #{workspace_path}",
-        "-scheme LoopWorkspace",
-        "-configuration Release",
-        "-sdk iphoneos",
-        "-archivePath #{archive_path}",
+        "-workspace", workspace_path,
+        "-scheme", "LoopWorkspace",
+        "-configuration", "Release",
+        "-destination", "generic/platform=iOS",
+        "-archivePath", archive_path,
+        "-allowProvisioningUpdates",
         "ARCHS=arm64",
         "ONLY_ACTIVE_ARCH=NO",
         "archive"
-      ].join(" ")
+      ]
       
-      UI.message("执行构建命令: #{xcodebuild_cmd}")
-      sh("set -o pipefail && #{xcodebuild_cmd} | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+      # 将参数数组转换为命令字符串，对包含空格或特殊字符的参数进行转义
+      cmd_string = xcodebuild_cmd.map do |arg|
+        if arg.include?(' ') || arg.include?('=')
+          "'#{arg}'"
+        else
+          arg
+        end
+      end.join(" ")
+      
+      UI.message("执行构建命令: #{cmd_string}")
+      sh("set -o pipefail && #{cmd_string} | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
       
       # 使用 gym 仅导出 IPA（跳过构建和归档）
       gym(
