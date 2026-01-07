@@ -189,41 +189,26 @@ platform :ios do
       sh("mkdir -p #{GITHUB_WORKSPACE}/build")
       sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
       
-      # 先查询可用的 destinations
-      UI.message("查询可用的 destinations...")
-      destination_to_use = nil
-      begin
-        destinations_output = sh("xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -showdestinations -configuration Release 2>&1", log: false)
-        UI.message("可用 destinations:")
-        UI.message(destinations_output)
-        
-        # 尝试从输出中提取可用的 iOS destination ID
-        # 查找类似 "id:xxxxx" 或 "platform:iOS" 的行
-        destinations_output.each_line do |line|
-          if line.include?("platform:iOS") && line.include?("id:")
-            # 尝试提取 ID
-            if match = line.match(/id:([a-zA-Z0-9\-:]+)/)
-              destination_id = match[1]
-              UI.message("找到 iOS destination ID: #{destination_id}")
-              # 尝试使用这个 ID
-              destination_to_use = "id=#{destination_id}"
-              break
-            end
-          end
-        end
-        
-        # 如果没有找到具体的 ID，尝试使用 generic/platform=iOS
-        if destination_to_use.nil?
-          UI.message("未找到具体的 destination ID，将使用 generic/platform=iOS")
-          destination_to_use = "generic/platform=iOS"
-        end
-      rescue => ex
-        UI.important("无法查询 destinations: #{ex.message}，将使用默认 generic/platform=iOS")
-        destination_to_use = "generic/platform=iOS"
+      # 验证 iOS 平台是否已正确安装
+      UI.message("验证 iOS 平台安装状态...")
+      ios_sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
+      if ios_sdk_version.empty? || ios_sdk_version.include?("error")
+        UI.user_error!("❌ iOS SDK 未正确安装。请确保在 GitHub Actions 工作流中已安装 iOS 平台。")
       end
+      UI.success("✅ iOS SDK 版本: #{ios_sdk_version}")
       
-      # 构建命令：使用找到的 destination 或默认值
-      UI.message("使用 destination: #{destination_to_use}")
+      # 检查平台目录
+      xcode_path = `xcode-select -p`.strip.gsub('/Contents/Developer', '')
+      platform_path = "#{xcode_path}/Contents/Developer/Platforms/iPhoneOS.platform"
+      unless Dir.exist?(platform_path)
+        UI.user_error!("❌ iOS 平台目录不存在: #{platform_path}。请确保在 GitHub Actions 工作流中已安装 iOS 平台。")
+      end
+      UI.success("✅ iOS 平台目录存在: #{platform_path}")
+      
+      # 对于归档操作，始终使用 generic/platform=iOS，不需要设备 ID
+      # 设备 ID 仅用于在真实设备上运行，归档操作使用通用平台即可
+      destination_to_use = "generic/platform=iOS"
+      UI.message("使用 destination: #{destination_to_use} (归档操作使用通用平台)")
       xcodebuild_cmd = [
         "xcodebuild",
         "-workspace", workspace_path,

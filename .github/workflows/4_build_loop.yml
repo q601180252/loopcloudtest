@@ -168,22 +168,39 @@ jobs:
           # 尝试安装所有平台（这会安装 iOS 18.0 和 watchOS 11.0 如果可用）
           echo ""
           echo "Installing iOS and watchOS platforms..."
-          sudo xcodebuild -downloadAllPlatforms 2>&1 || {
+          
+          # 首先尝试下载所有平台
+          if sudo xcodebuild -downloadAllPlatforms 2>&1; then
+            echo "✅ downloadAllPlatforms completed"
+          else
             echo "⚠️ downloadAllPlatforms failed, trying individual platform install..."
-            sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform install failed"
-            sudo xcodebuild -downloadPlatform watchOS 2>&1 || echo "⚠️ watchOS platform install failed"
-          }
+            # 尝试单独安装 iOS 平台
+            if sudo xcodebuild -downloadPlatform iOS 2>&1; then
+              echo "✅ iOS platform install completed"
+            else
+              echo "❌ iOS platform install failed"
+            fi
+            
+            # 尝试单独安装 watchOS 平台
+            if sudo xcodebuild -downloadPlatform watchOS 2>&1; then
+              echo "✅ watchOS platform install completed"
+            else
+              echo "⚠️ watchOS platform install failed"
+            fi
+          fi
           
-          # 再次等待安装完成
-          sleep 15
-          
-          # 强制重新安装 iOS 平台（如果之前失败）
+          # 等待安装完成
           echo ""
-          echo "Force reinstalling iOS platform..."
-          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform reinstall failed"
+          echo "Waiting for platform installation to complete..."
+          sleep 20
+          
+          # 再次尝试安装 iOS 平台以确保它被正确安装
+          echo ""
+          echo "Verifying and reinstalling iOS platform if needed..."
+          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform reinstall attempt failed"
           
           # 再次等待
-          sleep 10
+          sleep 15
           
           # 验证平台安装是否成功
           echo ""
@@ -227,12 +244,21 @@ jobs:
           echo "Available watchOS SDKs:"
           xcodebuild -showsdks | grep -i watchos || echo "⚠️ No watchOS SDKs found"
           
-          # 获取当前 iOS SDK 版本
+          # 获取当前 iOS SDK 版本并验证
           IOS_SDK_VERSION=$(xcrun --sdk iphoneos --show-sdk-version 2>/dev/null || echo "")
           if [ -z "$IOS_SDK_VERSION" ]; then
-            echo "⚠️ iOS SDK version not found"
+            echo "❌ iOS SDK version not found - platform installation may have failed"
+            echo "This will cause the build to fail. Please check the platform installation steps above."
+            exit 1
           else
             echo "✅ iOS SDK version: $IOS_SDK_VERSION"
+            # 验证是否是 iOS 18.0 或更高版本（Xcode 16.0 应该包含 iOS 18.0）
+            if [[ "$IOS_SDK_VERSION" == 18.* ]] || [[ "$IOS_SDK_VERSION" == 1[89].* ]] || [[ "$IOS_SDK_VERSION" == 2*.* ]]; then
+              echo "✅ iOS SDK version is 18.0 or higher, which is correct for Xcode 16.0"
+            else
+              echo "⚠️ iOS SDK version is $IOS_SDK_VERSION, expected 18.0 or higher for Xcode 16.0"
+              echo "This may cause build issues, but continuing..."
+            fi
           fi
           
           # 获取当前 watchOS SDK 版本
@@ -243,7 +269,7 @@ jobs:
             echo "✅ watchOS SDK version: $WATCHOS_SDK_VERSION"
           fi
           
-          # 检查 iOS 平台目录
+          # 检查 iOS 平台目录（必须存在，否则构建会失败）
           echo ""
           echo "Checking iOS platform directory:"
           XCODE_PATH=$(xcode-select -p | sed 's|/Contents/Developer||')
@@ -251,8 +277,27 @@ jobs:
           if [ -d "$IOS_PLATFORM_PATH" ]; then
             echo "✅ iOS platform directory exists: $IOS_PLATFORM_PATH"
             ls -la "$IOS_PLATFORM_PATH" | head -5
+            
+            # 验证关键文件是否存在
+            if [ ! -f "$IOS_PLATFORM_PATH/Info.plist" ]; then
+              echo "❌ iOS platform Info.plist missing - platform installation incomplete"
+              exit 1
+            fi
+            if [ ! -d "$IOS_PLATFORM_PATH/Developer/SDKs" ]; then
+              echo "❌ iOS platform SDKs directory missing - platform installation incomplete"
+              exit 1
+            fi
+            SDK_COUNT=$(ls -1 "$IOS_PLATFORM_PATH/Developer/SDKs" 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$SDK_COUNT" -eq 0 ]; then
+              echo "❌ No iOS SDKs found in platform directory - platform installation incomplete"
+              exit 1
+            else
+              echo "✅ Found $SDK_COUNT iOS SDK(s) in platform directory"
+            fi
           else
-            echo "⚠️ iOS platform directory not found: $IOS_PLATFORM_PATH"
+            echo "❌ iOS platform directory not found: $IOS_PLATFORM_PATH"
+            echo "This will cause the build to fail. Platform installation did not complete successfully."
+            exit 1
           fi
           
           # 检查 watchOS 平台目录
