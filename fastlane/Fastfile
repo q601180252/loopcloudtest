@@ -174,20 +174,49 @@ platform :ios do
     end
 
     # 在 CI 环境中构建 iOS 应用
-    # 使用 xcargs 来添加额外的构建参数
-    gym(
-      export_method: "app-store",
-      scheme: "LoopWorkspace",
-      output_name: "Loop.ipa",
-      configuration: "Release",
-      buildlog_path: 'buildlog',
-      archive_path: "#{GITHUB_WORKSPACE}/build/Loop.xcarchive",
-      skip_codesigning: false,
-      skip_archive: false,
-      sdk: "iphoneos",
-      # 使用 xcargs 添加额外的构建参数（不包含 -sdk，因为已经在 sdk 参数中指定）
-      xcargs: "ARCHS=arm64 ONLY_ACTIVE_ARCH=NO"
-    )
+    # 使用 skip_build_archive 跳过 gym 的自动构建，手动执行 xcodebuild
+    if ENV['CI']
+      UI.message("在 CI 环境中使用自定义构建命令以避免 destination 问题...")
+      
+      # 手动执行 xcodebuild archive
+      archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
+      sh("mkdir -p #{GITHUB_WORKSPACE}/build")
+      
+      xcodebuild_cmd = [
+        "xcodebuild",
+        "-workspace ./LoopWorkspace.xcworkspace",
+        "-scheme LoopWorkspace",
+        "-configuration Release",
+        "-sdk iphoneos",
+        "-archivePath #{archive_path}",
+        "ARCHS=arm64",
+        "ONLY_ACTIVE_ARCH=NO",
+        "archive"
+      ].join(" ")
+      
+      UI.message("执行构建命令: #{xcodebuild_cmd}")
+      sh("set -o pipefail && #{xcodebuild_cmd} | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+      
+      # 使用 gym 仅导出 IPA（跳过构建和归档）
+      gym(
+        export_method: "app-store",
+        scheme: "LoopWorkspace",
+        output_name: "Loop.ipa",
+        archive_path: archive_path,
+        skip_build_archive: true,
+        buildlog_path: 'buildlog'
+      )
+    else
+      # 本地环境使用标准 gym
+      gym(
+        export_method: "app-store",
+        scheme: "LoopWorkspace",
+        output_name: "Loop.ipa",
+        configuration: "Release",
+        buildlog_path: 'buildlog',
+        destination: 'generic/platform=iOS'
+      )
+    end
 
     copy_artifacts(
       target_path: "artifacts",
