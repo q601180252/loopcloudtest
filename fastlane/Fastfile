@@ -155,6 +155,34 @@ platform :ios do
         else
           UI.success("✅ 证书可以通过 codesign 验证")
         end
+        
+        # 验证证书是否过期或撤销
+        UI.message("检查证书有效期...")
+        begin
+          # 尝试使用 security 命令检查证书有效期
+          cert_validity = `security find-certificate -a -c "Apple Distribution" -Z "#{keychain_path}" 2>&1 | grep -A 5 "Apple Distribution" | head -10`.strip
+          if cert_validity.include?("expired") || cert_validity.include?("revoked")
+            UI.important("⚠️ 证书可能已过期或撤销")
+          else
+            UI.message("证书有效性检查通过")
+          end
+        rescue => ex
+          UI.important("⚠️ 无法检查证书有效期: #{ex.message}")
+        end
+        
+        # 确保 keychain 已解锁，Xcode 需要访问证书
+        UI.message("确保 keychain 已解锁...")
+        begin
+          # 尝试解锁 keychain（如果设置了密码）
+          if ENV['MATCH_PASSWORD']
+            `security unlock-keychain -p "#{ENV['MATCH_PASSWORD']}" "#{keychain_path}" 2>&1`.strip
+            UI.success("✅ Keychain 已解锁")
+          else
+            UI.message("未设置 MATCH_PASSWORD，跳过 keychain 解锁")
+          end
+        rescue => ex
+          UI.important("⚠️ 无法解锁 keychain: #{ex.message}")
+        end
       rescue => ex
         UI.important("⚠️ 证书验证过程中出现错误: #{ex.message}")
         UI.important("继续构建，但如果构建失败，请检查证书配置")
@@ -285,7 +313,8 @@ platform :ios do
       begin
         UI.message("尝试使用 gym 自动处理 destination...")
         # 排除 watchOS 目标以避免冲突和产品类型错误
-        # 使用 -exclude-targets 来排除 watchOS 相关目标
+        # 使用构建设置来跳过 watchOS 目标的构建
+        # SKIP_INSTALL=YES 和 ONLY_ACTIVE_ARCH=YES 结合使用可以跳过不匹配的目标
         gym(
           export_method: "app-store",
           scheme: "LoopWorkspace",
@@ -294,7 +323,7 @@ platform :ios do
           buildlog_path: 'buildlog',
           skip_codesigning: false,
           skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]= EXCLUDE_ARCHS[sdk=watchos*]=arm64"
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]='"
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
@@ -342,8 +371,9 @@ platform :ios do
           
           UI.message("尝试使用 destination: #{destination} 和 -sdk iphoneos...")
           # 使用构建设置来排除 watchOS 目标，避免冲突和产品类型错误
-          # 通过设置 SUPPORTED_PLATFORMS 为空来排除 watchOS 平台
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDE_ARCHS[sdk=watchos*]=arm64' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          # 通过设置 SKIP_INSTALL=YES 和 ONLY_ACTIVE_ARCH=YES 来跳过 watchOS 目标的构建
+          # 这样可以防止 Xcode 尝试构建 watchOS 目标，从而避免产品类型解析错误
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
