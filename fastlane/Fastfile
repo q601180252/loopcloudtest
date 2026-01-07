@@ -49,11 +49,26 @@ platform :ios do
     increment_build_number(
       xcodeproj: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       build_number: current_build_number
-    )      
+    )
+    
+    # 验证必要的环境变量
+    if GH_PAT.nil? || GH_PAT.empty?
+      UI.user_error!("GH_PAT 环境变量未设置或为空")
+    end
+    
+    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
+      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
+    end
+    
+    # 调试信息（不输出敏感信息）
+    UI.message("正在使用仓库所有者: #{GITHUB_REPOSITORY_OWNER}")
+    UI.message("GH_PAT 已设置: #{GH_PAT.length > 0 ? '是' : '否'}")
     
     match(
       type: "appstore",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+      clone_branch_directly: true,
+      shallow_clone: true,
       app_identifier: [
         "com.libre.loopkit3.Loop", 
         "com.libre.loopkit3.Loop.statuswidget", 
@@ -222,6 +237,15 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
     
+    # 验证必要的环境变量
+    if GH_PAT.nil? || GH_PAT.empty?
+      UI.user_error!("GH_PAT 环境变量未设置或为空")
+    end
+    
+    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
+      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
+    end
+    
     match(
       type: "appstore",
       force: false,
@@ -255,6 +279,15 @@ platform :ios do
 
     find_bundle_id("com.libre.loopkit3.Loop")
 
+    # 验证必要的环境变量
+    if GH_PAT.nil? || GH_PAT.empty?
+      UI.user_error!("GH_PAT 环境变量未设置或为空")
+    end
+    
+    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
+      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
+    end
+
     match(
       type: "appstore",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
@@ -273,6 +306,15 @@ platform :ios do
       issuer_id: "#{FASTLANE_ISSUER_ID}",
       key_content: "#{FASTLANE_KEY}"
     )
+    
+    # 验证必要的环境变量
+    if GH_PAT.nil? || GH_PAT.empty?
+      UI.user_error!("GH_PAT 环境变量未设置或为空")
+    end
+    
+    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
+      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
+    end
     
     match_nuke(
       type: "appstore",
