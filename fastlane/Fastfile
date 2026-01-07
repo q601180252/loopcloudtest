@@ -278,10 +278,49 @@ platform :ios do
         sh("mkdir -p #{GITHUB_WORKSPACE}/build")
         sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
         
-        # 尝试不使用 destination，只使用 -sdk
-        UI.message("尝试使用 -sdk iphoneos 而不指定 destination...")
+        # 尝试明确指定 destination
+        UI.message("查询可用的 destinations...")
         begin
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          # 查询可用的 destinations
+          destinations_output = `xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -showdestinations -configuration Release 2>&1`.strip
+          UI.message("可用 destinations:\n#{destinations_output}")
+          
+          # 尝试查找 generic/platform=iOS 的 destination
+          destination = nil
+          if destinations_output.include?("generic/platform=iOS")
+            destination = "generic/platform=iOS"
+            UI.message("使用 destination: #{destination}")
+          elsif destinations_output.include?("platform=iOS")
+            # 尝试提取第一个 iOS destination
+            ios_destinations = destinations_output.split("\n").select { |line| line.include?("platform=iOS") && !line.include?("Simulator") }
+            if ios_destinations.any?
+              # 尝试提取 id
+              first_dest = ios_destinations.first
+              if first_dest =~ /id=([^,]+)/
+                destination = "id=#{$1}"
+                UI.message("使用 destination: #{destination}")
+              else
+                destination = "generic/platform=iOS"
+                UI.message("使用默认 destination: #{destination}")
+              end
+            else
+              destination = "generic/platform=iOS"
+              UI.message("使用默认 destination: #{destination}")
+            end
+          else
+            destination = "generic/platform=iOS"
+            UI.message("使用默认 destination: #{destination}")
+          end
+          
+          UI.message("尝试使用 destination: #{destination} 和 -sdk iphoneos...")
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          
+          # 检查 archive 是否成功创建
+          unless File.exist?(archive_path)
+            UI.user_error!("❌ Archive 文件未创建: #{archive_path}")
+          end
+          
+          UI.success("✅ Archive 创建成功: #{archive_path}")
           
           # 如果成功，使用 gym 导出
           gym(
@@ -293,7 +332,16 @@ platform :ios do
             buildlog_path: 'buildlog'
           )
         rescue => ex2
-          UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}")
+          # 显示更详细的错误信息
+          UI.important("⚠️ 构建失败，尝试查看详细日志...")
+          if File.exist?("#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
+            log_content = File.read("#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
+            # 显示最后 50 行日志
+            last_lines = log_content.split("\n").last(50).join("\n")
+            UI.important("构建日志最后 50 行:\n#{last_lines}")
+          end
+          
+          UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}\n请检查构建日志: #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
         end
       end
     else
