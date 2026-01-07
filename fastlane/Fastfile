@@ -213,6 +213,14 @@ platform :ios do
       available_sdks = `xcodebuild -showsdks 2>&1`.strip
       UI.message("可用 SDK:\n#{available_sdks}")
       
+      # 验证 watchOS SDK 是否可用（watchOS 应用需要）
+      watchos_sdk_version = `xcrun --sdk watchos --show-sdk-version 2>&1`.strip
+      if watchos_sdk_version.empty? || watchos_sdk_version.include?("error")
+        UI.important("⚠️ watchOS SDK 可能未正确安装，watchOS 应用可能无法构建")
+      else
+        UI.success("✅ watchOS SDK 版本: #{watchos_sdk_version}")
+      end
+      
       # 尝试使用 gym，不指定 destination，让 fastlane 自动处理
       # 如果失败，再尝试手动指定 destination
       begin
@@ -225,7 +233,7 @@ platform :ios do
           buildlog_path: 'buildlog',
           skip_codesigning: false,
           skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos"
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
