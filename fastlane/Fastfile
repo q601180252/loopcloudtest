@@ -513,71 +513,40 @@ platform :ios do
     # 使用包含认证信息的 git_url
     git_url_with_auth = "https://#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}@github.com/#{GITHUB_REPOSITORY_OWNER}/Match-Secrets.git"
     
-    # 尝试创建证书，如果失败（例如证书不匹配），则先清理再重新创建
-    begin
-      match(
-        type: "appstore",
-        force: false,
-        verbose: true,
-        git_url: git_url_with_auth,
-        git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
-        app_identifier: [
-          "com.libre.loopkit3.Loop", 
-          "com.libre.loopkit3.Loop.statuswidget", 
-          "com.libre.loopkit3.Loop.LoopWatch.watchkitextension", 
-          "com.libre.loopkit3.Loop.LoopWatch", 
-          "com.libre.loopkit3.Loop.Loop-Intent-Extension",
-          "com.libre.loopkit3.Loop.LoopWidgetExtension",
-        ]
-      )
-    rescue => ex
-      # 如果错误信息表明证书在存储中但不在 Developer Portal 中，需要先清理
-      if ex.message.include?("is not available on the Developer Portal") || 
-         ex.message.include?("not available on the Developer Portal") ||
-         ex.message.include?("revoked") ||
-         ex.message.include?("expired")
-        UI.important("⚠️ 检测到证书不匹配或已过期/撤销")
-        UI.message("证书在 Match-Secrets 中存在，但在 Apple Developer Portal 中不可用")
-        UI.message("将先清理旧证书，然后重新创建...")
-        
-        # 先清理旧证书
-        begin
-          match_nuke(
-            type: "appstore",
-            team_id: "#{TEAMID}",
-            skip_confirmation: true,
-            git_url: git_url_with_auth,
-            git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
-          )
-          UI.success("✅ 旧证书已清理")
-        rescue => nuke_ex
-          UI.important("⚠️ 清理证书时出现错误: #{nuke_ex.message}")
-          UI.message("继续尝试创建新证书...")
-        end
-        
-        # 重新创建证书
-        UI.message("正在创建新证书...")
-        match(
+    # 如果设置了 FORCE_NUKE_CERTS 环境变量，先清理证书
+    if ENV['FORCE_NUKE_CERTS'] == 'true'
+      UI.important("⚠️ FORCE_NUKE_CERTS 已设置，将先清理旧证书...")
+      begin
+        match_nuke(
           type: "appstore",
-          force: true,  # 强制创建新证书
-          verbose: true,
+          team_id: "#{TEAMID}",
+          skip_confirmation: true,
           git_url: git_url_with_auth,
-          git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
-          app_identifier: [
-            "com.libre.loopkit3.Loop", 
-            "com.libre.loopkit3.Loop.statuswidget", 
-            "com.libre.loopkit3.Loop.LoopWatch.watchkitextension", 
-            "com.libre.loopkit3.Loop.LoopWatch", 
-            "com.libre.loopkit3.Loop.Loop-Intent-Extension",
-            "com.libre.loopkit3.Loop.LoopWidgetExtension",
-          ]
+          git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
         )
-        UI.success("✅ 新证书已成功创建")
-      else
-        # 其他错误，直接抛出
-        raise ex
+        UI.success("✅ 旧证书已清理")
+      rescue => nuke_ex
+        UI.important("⚠️ 清理证书时出现错误: #{nuke_ex.message}")
+        UI.message("继续尝试创建新证书...")
       end
     end
+    
+    # 尝试创建证书，使用 force 参数如果设置了 FORCE_NUKE_CERTS
+    match(
+      type: "appstore",
+      force: (ENV['FORCE_NUKE_CERTS'] == 'true'),  # 如果强制清理，则强制创建
+      verbose: true,
+      git_url: git_url_with_auth,
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
+      app_identifier: [
+        "com.libre.loopkit3.Loop", 
+        "com.libre.loopkit3.Loop.statuswidget", 
+        "com.libre.loopkit3.Loop.LoopWatch.watchkitextension", 
+        "com.libre.loopkit3.Loop.LoopWatch", 
+        "com.libre.loopkit3.Loop.Loop-Intent-Extension",
+        "com.libre.loopkit3.Loop.LoopWidgetExtension",
+      ]
+    )
   end
 
   desc "Validate Secrets"

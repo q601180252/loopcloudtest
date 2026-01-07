@@ -56,6 +56,36 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
 
       - name: Create Certificates
+        id: create_certs
+        run: bundle exec fastlane certs || echo "cert_failed=true" >> $GITHUB_ENV
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Auto-fix Certificate Mismatch
+        if: env.cert_failed == 'true' && (vars.FORCE_NUKE_CERTS != 'true' && env.need_nuke != 'true')
+        run: |
+          echo "⚠️ 证书创建失败，可能是证书不匹配问题"
+          echo "自动清理旧证书并重新创建..."
+          bundle exec fastlane nuke_certs
+        env:
+          TEAMID: ${{ secrets.TEAMID }}
+          FASTLANE_ISSUER_ID: ${{ secrets.FASTLANE_ISSUER_ID }}
+          FASTLANE_KEY_ID: ${{ secrets.FASTLANE_KEY_ID }}
+          FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+
+      - name: Retry Create Certificates
+        if: env.cert_failed == 'true' && (vars.FORCE_NUKE_CERTS != 'true' && env.need_nuke != 'true')
         run: bundle exec fastlane certs
         env:
           TEAMID: ${{ secrets.TEAMID }}
@@ -66,6 +96,7 @@ jobs:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          FORCE_NUKE_CERTS: 'true'
 
       - name: Success Message
         run: |
