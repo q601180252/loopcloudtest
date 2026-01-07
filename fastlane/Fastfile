@@ -159,13 +159,22 @@ platform :ios do
         else
           UI.success("✅ iOS SDK 版本: #{sdk_version}")
         end
+        
+        # 检查平台目录
+        xcode_path = `xcode-select -p`.strip.gsub('/Contents/Developer', '')
+        platform_path = "#{xcode_path}/Contents/Developer/Platforms/iPhoneOS.platform"
+        if Dir.exist?(platform_path)
+          UI.success("✅ iOS 平台目录存在: #{platform_path}")
+        else
+          UI.important("⚠️ iOS 平台目录不存在: #{platform_path}")
+        end
       rescue => ex
         UI.important("⚠️ 无法验证 iOS SDK: #{ex.message}")
       end
     end
 
     # 在 CI 环境中构建 iOS 应用
-    # 使用 archive 模式，只指定 SDK，让 fastlane 自动处理 destination
+    # 使用 xcargs 来覆盖 destination，避免 iOS 平台检查问题
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
@@ -175,8 +184,9 @@ platform :ios do
       archive_path: "#{GITHUB_WORKSPACE}/build/Loop.xcarchive",
       skip_codesigning: false,
       skip_archive: false,
-      # 只指定 SDK，让 Xcode 自动选择合适的 destination
-      sdk: "iphoneos"
+      sdk: "iphoneos",
+      # 使用 xcargs 来构建，不指定 destination，只指定 SDK
+      xcargs: "-sdk iphoneos ARCHS=arm64 ONLY_ACTIVE_ARCH=NO"
     )
 
     copy_artifacts(
