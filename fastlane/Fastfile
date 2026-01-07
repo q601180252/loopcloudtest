@@ -323,7 +323,7 @@ platform :ios do
           buildlog_path: 'buildlog',
           skip_codesigning: false,
           skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]='"
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDED_ARCHS[sdk=watchos*]=arm64'"
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
@@ -372,8 +372,9 @@ platform :ios do
           UI.message("尝试使用 destination: #{destination} 和 -sdk iphoneos...")
           # 使用构建设置来排除 watchOS 目标，避免冲突和产品类型错误
           # 通过设置 SKIP_INSTALL=YES 和 ONLY_ACTIVE_ARCH=YES 来跳过 watchOS 目标的构建
-          # 这样可以防止 Xcode 尝试构建 watchOS 目标，从而避免产品类型解析错误
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          # 设置 EXCLUDED_ARCHS 和 SUPPORTED_PLATFORMS 来防止 watchOS 目标被构建
+          # 这样可以防止 Xcode 尝试构建 watchOS 目标，从而避免产品类型解析错误和重复构建
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDED_ARCHS[sdk=watchos*]=arm64' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
