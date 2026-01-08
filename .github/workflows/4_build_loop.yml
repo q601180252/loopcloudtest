@@ -161,6 +161,71 @@ jobs:
           echo ""
           echo "=========================================="
       
+      - name: Install iOS Platform
+        run: |
+          echo "=========================================="
+          echo "Installing iOS Platform"
+          echo "=========================================="
+          
+          # Accept Xcode license if needed
+          sudo xcodebuild -license accept || echo "License may already be accepted"
+          
+          # Run Xcode first launch to install necessary components
+          sudo xcodebuild -runFirstLaunch || true
+          
+          # Wait for initialization
+          sleep 10
+          
+          # Install iOS platform
+          echo "Installing iOS platform..."
+          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform install attempt 1 failed"
+          sleep 10
+          
+          # Try again if first attempt failed
+          sudo xcodebuild -downloadPlatform iOS 2>&1 || echo "⚠️ iOS platform install attempt 2 failed"
+          sleep 10
+          
+          # Verify platform installation
+          echo ""
+          echo "Verifying platform installation..."
+          XCODE_PATH=$(xcode-select -p | sed 's|/Contents/Developer||')
+          IOS_PLATFORM_PATH="$XCODE_PATH/Contents/Developer/Platforms/iPhoneOS.platform"
+          
+          if [ -d "$IOS_PLATFORM_PATH" ]; then
+            echo "✅ iOS platform directory exists: $IOS_PLATFORM_PATH"
+            ls -la "$IOS_PLATFORM_PATH" | head -5
+            
+            # Verify key files
+            if [ -f "$IOS_PLATFORM_PATH/Info.plist" ]; then
+              echo "✅ iOS platform Info.plist exists"
+            else
+              echo "❌ iOS platform Info.plist missing"
+              exit 1
+            fi
+            
+            if [ -d "$IOS_PLATFORM_PATH/Developer/SDKs" ]; then
+              echo "✅ iOS platform SDKs directory exists"
+              SDK_COUNT=$(ls -1 "$IOS_PLATFORM_PATH/Developer/SDKs" 2>/dev/null | wc -l | tr -d ' ')
+              echo "✅ Found $SDK_COUNT iOS SDK(s)"
+            else
+              echo "❌ iOS platform SDKs directory missing"
+              exit 1
+            fi
+          else
+            echo "❌ iOS platform directory not found: $IOS_PLATFORM_PATH"
+            exit 1
+          fi
+          
+          # Test destination detection
+          echo ""
+          echo "Testing destination detection..."
+          if [ -f "LoopWorkspace.xcworkspace/contents.xcworkspacedata" ]; then
+            xcodebuild -workspace LoopWorkspace.xcworkspace -scheme LoopWorkspace -showdestinations -configuration Release 2>&1 | grep -i "iOS" | head -5 || echo "⚠️ Cannot show iOS destinations"
+          fi
+          
+          echo ""
+          echo "=========================================="
+      
       - name: Workaround iOS 18.0 Platform Issue
         run: |
           echo "Attempting to create iOS 18.0 platform symlink from iOS 18.4..."
