@@ -319,29 +319,56 @@ platform :ios do
       ios_frameworks_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks.log"
       ios_frameworks_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks-raw.log"
       sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
+      
+      # 尝试构建 iOS frameworks
+      # 使用 build-for-testing 可以确保构建所有依赖的 frameworks
+      ios_frameworks_success = false
       begin
-        # 使用 workspace 构建 iOS 平台的 frameworks
-        # 通过设置 -destination 'generic/platform=iOS' 和 ARCHS=arm64 确保只构建 iOS 目标
-        # 不使用 -sdk 参数，让 Xcode 为每个目标选择正确的 SDK（iOS 目标使用 iphoneos）
-        # 添加 SUPPORTED_PLATFORMS 确保只构建 iOS 目标，跳过 watchOS 目标
-        # 这确保 LoopKit.framework 在 ExtractAppIntentsMetadata 阶段运行前已存在
-        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos build 2>&1 | tee #{ios_frameworks_raw_log} | xcbeautify > #{ios_frameworks_log}")
-        UI.success("✅ iOS frameworks 构建完成")
+        # 方法1: 使用 build-for-testing 构建所有 iOS frameworks
+        # 这会构建所有 iOS 相关的 targets，包括 frameworks
+        UI.message("方法1: 使用 build-for-testing 构建 iOS frameworks...")
+        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos build-for-testing 2>&1 | tee #{ios_frameworks_raw_log} | xcbeautify > #{ios_frameworks_log}")
+        UI.success("✅ iOS frameworks 构建完成（方法1）")
+        ios_frameworks_success = true
       rescue => ex
-        UI.important("⚠️ iOS frameworks 构建过程中出现错误: #{ex.message}")
+        UI.important("⚠️ 方法1失败: #{ex.message}")
         # 显示构建日志中的错误信息
         if File.exist?(ios_frameworks_raw_log)
           log_content = File.read(ios_frameworks_raw_log)
           error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
           if error_lines.any?
-            UI.important("iOS frameworks 构建日志中的错误（最后 30 个）:")
+            UI.important("方法1构建日志中的错误（最后 30 个）:")
             error_lines.last(30).each { |line| UI.important(line) }
           end
-          # 显示最后 50 行原始日志
-          last_lines = log_content.split("\n").last(50).join("\n")
-          UI.important("iOS frameworks 构建日志最后 50 行:\n#{last_lines}")
         end
-        UI.message("⚠️ iOS frameworks 构建失败，但继续尝试完整构建（Xcode 会处理依赖关系）...")
+        
+        # 方法2: 尝试直接构建 LoopKit.framework（最关键的依赖）
+        begin
+          UI.message("方法2: 直接构建 LoopKit.framework...")
+          loopkit_project = "#{GITHUB_WORKSPACE}/LoopKit/LoopKit.xcodeproj"
+          sh("set -o pipefail && xcodebuild -project #{loopkit_project} -target LoopKit -configuration Release -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build 2>&1 | tee -a #{ios_frameworks_raw_log} | xcbeautify >> #{ios_frameworks_log}")
+          UI.success("✅ LoopKit.framework 构建完成（方法2）")
+          ios_frameworks_success = true
+        rescue => ex2
+          UI.important("⚠️ 方法2也失败: #{ex2.message}")
+          # 显示详细错误信息
+          if File.exist?(ios_frameworks_raw_log)
+            log_content = File.read(ios_frameworks_raw_log)
+            error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
+            if error_lines.any?
+              UI.important("所有方法构建日志中的错误（最后 50 个）:")
+              error_lines.last(50).each { |line| UI.important(line) }
+            end
+            # 显示最后 100 行原始日志
+            last_lines = log_content.split("\n").last(100).join("\n")
+            UI.important("iOS frameworks 构建日志最后 100 行:\n#{last_lines}")
+          end
+        end
+      end
+      
+      # 如果所有方法都失败，输出警告但继续（Xcode 可能会在完整构建时处理依赖）
+      unless ios_frameworks_success
+        UI.important("⚠️ 所有 iOS frameworks 预构建方法都失败了，但继续尝试完整构建（Xcode 会处理依赖关系）...")
       end
       
       # 第二步：使用 gym 构建完整应用（包括 watchOS）
