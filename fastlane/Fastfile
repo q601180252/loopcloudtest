@@ -318,6 +318,7 @@ platform :ios do
       UI.message("构建所有 iOS frameworks（LoopKit, LoopKitUI, LoopCore, LoopUI 等）...")
       ios_frameworks_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks.log"
       ios_frameworks_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks-raw.log"
+      sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
       begin
         # 使用 workspace 构建 iOS 平台的 frameworks
         # 通过设置 -destination 'generic/platform=iOS' 和 ARCHS=arm64 确保只构建 iOS 目标
@@ -331,13 +332,16 @@ platform :ios do
         # 显示构建日志中的错误信息
         if File.exist?(ios_frameworks_raw_log)
           log_content = File.read(ios_frameworks_raw_log)
-          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") }
+          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
           if error_lines.any?
-            UI.important("iOS frameworks 构建日志中的错误（最后 20 个）:")
-            error_lines.last(20).each { |line| UI.important(line) }
+            UI.important("iOS frameworks 构建日志中的错误（最后 30 个）:")
+            error_lines.last(30).each { |line| UI.important(line) }
           end
+          # 显示最后 50 行原始日志
+          last_lines = log_content.split("\n").last(50).join("\n")
+          UI.important("iOS frameworks 构建日志最后 50 行:\n#{last_lines}")
         end
-        UI.message("继续尝试完整构建（Xcode 会处理依赖关系）...")
+        UI.message("⚠️ iOS frameworks 构建失败，但继续尝试完整构建（Xcode 会处理依赖关系）...")
       end
       
       # 第二步：使用 gym 构建完整应用（包括 watchOS）
@@ -449,23 +453,39 @@ platform :ios do
           if File.exist?(raw_log_path)
             raw_log_content = File.read(raw_log_path)
             # 查找所有错误行
-            error_lines = raw_log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") }
+            error_lines = raw_log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
             if error_lines.any?
-              UI.important("原始构建日志中的错误（最后 30 个）:")
-              error_lines.last(30).each { |line| UI.important(line) }
+              UI.important("原始构建日志中的错误（最后 50 个）:")
+              error_lines.last(50).each { |line| UI.important(line) }
             end
             
-            # 显示原始日志的最后 100 行
-            last_raw_lines = raw_log_content.split("\n").last(100).join("\n")
-            UI.important("原始构建日志最后 100 行:\n#{last_raw_lines}")
+            # 显示原始日志的最后 150 行
+            last_raw_lines = raw_log_content.split("\n").last(150).join("\n")
+            UI.important("原始构建日志最后 150 行:\n#{last_raw_lines}")
+          else
+            UI.important("⚠️ 原始构建日志文件不存在: #{raw_log_path}")
           end
           
           # 也显示格式化的日志
-          if File.exist?("#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
-            log_content = File.read("#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
-            # 显示最后 50 行日志
-            last_lines = log_content.split("\n").last(50).join("\n")
-            UI.important("格式化构建日志最后 50 行:\n#{last_lines}")
+          formatted_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log"
+          if File.exist?(formatted_log_path)
+            log_content = File.read(formatted_log_path)
+            # 显示最后 100 行日志
+            last_lines = log_content.split("\n").last(100).join("\n")
+            UI.important("格式化构建日志最后 100 行:\n#{last_lines}")
+          else
+            UI.important("⚠️ 格式化构建日志文件不存在: #{formatted_log_path}")
+          end
+          
+          # 也检查 iOS frameworks 构建日志
+          ios_frameworks_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks-raw.log"
+          if File.exist?(ios_frameworks_raw_log)
+            ios_log_content = File.read(ios_frameworks_raw_log)
+            ios_error_lines = ios_log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
+            if ios_error_lines.any?
+              UI.important("iOS frameworks 构建日志中的错误（最后 20 个）:")
+              ios_error_lines.last(20).each { |line| UI.important(line) }
+            end
           end
           
           UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}\n请检查构建日志: #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log (原始) 或 App-LoopWorkspace.log (格式化)")
