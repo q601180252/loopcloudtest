@@ -337,9 +337,8 @@ platform :ios do
         # 重要：iOS 目标使用 arm64，但 watchOS 目标需要使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
         # 使用条件 ARCHS 设置，让每个平台使用正确的架构
         # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
-        # 架构设置：只设置 iOS 架构，让 Xcode 自动为 watchOS 选择正确的架构
-        # 注意：条件设置会导致警告，因为可能被错误地应用到 iOS 目标
-        # watchOS 目标会根据其 SDKROOT=watchos 自动使用正确的架构
+        # 架构设置：使用条件设置，只对 iOS SDK 设置架构，让 watchOS 目标使用项目文件中的设置
+        # watchOS 目标在项目文件中已设置 ARCHS = "arm64_32 armv7k"
         gym(
           export_method: "app-store",
           scheme: "LoopWorkspace",
@@ -348,7 +347,7 @@ platform :ios do
           buildlog_path: 'buildlog',
           skip_codesigning: false,
           skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=iphonesimulator*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
@@ -405,12 +404,10 @@ platform :ios do
           # 2. iOS 目标使用 arm64，watchOS 目标使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
           # 3. -skipUnavailableActions 跳过不可用的操作
           # 4. 确保 watchOS 平台已安装（在 workflow 中已验证）
-          # 5. 架构设置：只设置 iOS 架构，让 Xcode 自动为 watchOS 选择正确的架构
-          # 注意：条件设置 ARCHS[sdk=watchos*] 会导致警告，因为它可能被错误地应用到 iOS 目标
-          # 相反，我们只设置 iOS 架构，让每个目标的 SDKROOT 决定使用的架构
-          # watchOS 目标会自动使用正确的架构（arm64_32 和 armv7k）
+          # 5. 架构设置：使用条件设置，只对 iOS SDK 设置架构，让 watchOS 目标使用项目文件中的设置
+          # watchOS 目标在项目文件中已设置 ARCHS = "arm64_32 armv7k"
           raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=iphonesimulator*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
