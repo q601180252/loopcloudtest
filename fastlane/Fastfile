@@ -314,9 +314,12 @@ platform :ios do
       workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
       
       # 先单独构建 iOS 的 LoopKit framework，确保它存在
+      # 使用 LoopKit 项目来构建，而不是 workspace scheme
       UI.message("构建 LoopKit framework for iOS...")
+      loopkit_project_path = "#{GITHUB_WORKSPACE}/LoopKit/LoopKit.xcodeproj"
       begin
-        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopKit -configuration Release -destination 'generic/platform=iOS' -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/LoopKit-iOS.log | xcbeautify || true")
+        # 使用 LoopKit 项目构建 iOS 的 LoopKit target
+        sh("set -o pipefail && xcodebuild -project #{loopkit_project_path} -target LoopKit -configuration Release -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/LoopKit-iOS.log | xcbeautify || true")
         UI.success("✅ LoopKit framework (iOS) 构建完成")
       rescue => ex
         UI.important("⚠️ LoopKit framework 构建过程中出现错误: #{ex.message}")
