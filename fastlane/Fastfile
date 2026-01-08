@@ -49,32 +49,11 @@ platform :ios do
     increment_build_number(
       xcodeproj: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       build_number: current_build_number
-    )
-    
-    # 验证必要的环境变量
-    if GH_PAT.nil? || GH_PAT.empty?
-      UI.user_error!("GH_PAT 环境变量未设置或为空")
-    end
-    
-    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
-      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
-    end
-    
-    # 调试信息（不输出敏感信息）
-    UI.message("正在使用仓库所有者: #{GITHUB_REPOSITORY_OWNER}")
-    UI.message("GH_PAT 已设置: #{GH_PAT.length > 0 ? '是' : '否'}")
-    
-    # 配置 git 凭据，确保认证信息正确传递
-    ENV['GIT_TERMINAL_PROMPT'] = '0'
-    
-    # 使用包含认证信息的 git_url，这样更可靠
-    # 在 CI 环境中这是安全的，因为 token 不会暴露给最终用户
-    git_url_with_auth = "https://#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}@github.com/#{GITHUB_REPOSITORY_OWNER}/Match-Secrets.git"
+    )      
     
     match(
       type: "appstore",
-      git_url: git_url_with_auth,
-      shallow_clone: true,
+      git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
         "com.libre.loopkit3.Loop", 
         "com.libre.loopkit3.Loop.statuswidget", 
@@ -84,110 +63,6 @@ platform :ios do
         "com.libre.loopkit3.Loop.LoopWidgetExtension"
       ]
     )
-    
-    # 验证代码签名证书是否有效
-    if ENV['CI']
-      UI.message("验证代码签名证书...")
-      begin
-        # 获取 keychain 路径
-        keychain_path = ENV['KEYCHAIN_PATH'] || "#{ENV['HOME']}/Library/Keychains/fastlane_tmp_keychain"
-        
-        # 列出所有可用的代码签名身份
-        identities = `security find-identity -v -p codesigning "#{keychain_path}" 2>&1`.strip
-        
-        # 检查是否有有效的 Apple Distribution 证书
-        if identities.include?("Apple Distribution")
-          UI.success("✅ 找到 Apple Distribution 证书")
-          
-          # 提取证书信息并验证
-          cert_lines = identities.split("\n").select { |line| line.include?("Apple Distribution") }
-          cert_lines.each do |line|
-            UI.message("证书信息: #{line}")
-            
-            # 尝试提取证书哈希并验证
-            if line =~ /([A-F0-9]{40})/
-              cert_hash = $1
-              UI.message("验证证书哈希: #{cert_hash}")
-              
-              # 检查证书是否有效（未过期、未撤销）
-              cert_info = `security find-certificate -c "Apple Distribution" -p "#{keychain_path}" 2>&1`.strip
-              if cert_info.include?("BEGIN CERTIFICATE")
-                UI.success("✅ 证书文件存在")
-                
-                # 尝试验证证书的有效性（检查是否过期）
-                cert_details = `security find-certificate -c "Apple Distribution" -Z "#{keychain_path}" 2>&1`.strip
-                if cert_details.include?("SHA-1")
-                  UI.message("证书详细信息: #{cert_details.split("\n").first(5).join("\n")}")
-                end
-                
-                # 检查证书是否在系统 keychain 中也可用（Xcode 可能需要）
-                system_cert_check = `security find-certificate -c "Apple Distribution" -p 2>&1`.strip
-                if system_cert_check.include?("BEGIN CERTIFICATE")
-                  UI.success("✅ 证书在系统 keychain 中也可用")
-                else
-                  UI.important("⚠️ 证书不在系统 keychain 中，可能需要复制")
-                  # 尝试将证书复制到系统 keychain（需要密码，在 CI 中可能不可行）
-                  # `security import "#{keychain_path}" -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign 2>&1`
-                end
-              else
-                UI.important("⚠️ 无法读取证书文件")
-              end
-            end
-          end
-        elsif identities.include?("iPhone Distribution")
-          UI.important("⚠️ 找到 iPhone Distribution 证书，但建议使用 Apple Distribution")
-          UI.message("可用证书:\n#{identities}")
-        else
-          UI.user_error!("❌ 未找到有效的代码签名证书。请检查 match 是否正确安装了证书。")
-        end
-        
-        # 也检查系统 keychain
-        system_identities = `security find-identity -v -p codesigning 2>&1`.strip
-        if system_identities.include?("Apple Distribution") || system_identities.include?("iPhone Distribution")
-          UI.message("系统 keychain 中也找到证书")
-        end
-        
-        # 验证证书是否可以被 codesign 使用
-        UI.message("验证证书是否可用于代码签名...")
-        codesign_check = `codesign --display --verbose=4 "#{keychain_path}" 2>&1`.strip
-        if codesign_check.empty? || codesign_check.include?("error")
-          UI.important("⚠️ 无法使用 codesign 验证证书，但继续构建...")
-        else
-          UI.success("✅ 证书可以通过 codesign 验证")
-        end
-        
-        # 验证证书是否过期或撤销
-        UI.message("检查证书有效期...")
-        begin
-          # 尝试使用 security 命令检查证书有效期
-          cert_validity = `security find-certificate -a -c "Apple Distribution" -Z "#{keychain_path}" 2>&1 | grep -A 5 "Apple Distribution" | head -10`.strip
-          if cert_validity.include?("expired") || cert_validity.include?("revoked")
-            UI.important("⚠️ 证书可能已过期或撤销")
-          else
-            UI.message("证书有效性检查通过")
-          end
-        rescue => ex
-          UI.important("⚠️ 无法检查证书有效期: #{ex.message}")
-        end
-        
-        # 确保 keychain 已解锁，Xcode 需要访问证书
-        UI.message("确保 keychain 已解锁...")
-        begin
-          # 尝试解锁 keychain（如果设置了密码）
-          if ENV['MATCH_PASSWORD']
-            `security unlock-keychain -p "#{ENV['MATCH_PASSWORD']}" "#{keychain_path}" 2>&1`.strip
-            UI.success("✅ Keychain 已解锁")
-          else
-            UI.message("未设置 MATCH_PASSWORD，跳过 keychain 解锁")
-          end
-        rescue => ex
-          UI.important("⚠️ 无法解锁 keychain: #{ex.message}")
-        end
-      rescue => ex
-        UI.important("⚠️ 证书验证过程中出现错误: #{ex.message}")
-        UI.important("继续构建，但如果构建失败，请检查证书配置")
-      end
-    end
 
     previous_build_number = latest_testflight_build_number(
       app_identifier: "com.libre.loopkit3.Loop",
@@ -208,395 +83,60 @@ platform :ios do
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop"],
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["Loop"]
     )
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["LoopCore", "LoopCore-watchOS", "LoopUI"]
     )
 
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.statuswidget"],
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["Loop Status Extension"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.LoopWatch.watchkitextension"],
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["WatchApp Extension"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.LoopWatch"],
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["WatchApp"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.Loop-Intent-Extension"],
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["Loop Intent Extension"]
     )
     
     update_code_signing_settings(
       path: "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj",
       profile_name: mapping["com.libre.loopkit3.Loop.LoopWidgetExtension"],
-      code_sign_identity: "Apple Distribution",
+      code_sign_identity: "iPhone Distribution",
       targets: ["Loop Widget Extension"]
     )
 
-    # 在构建前验证 iOS SDK 和平台可用性
-    if ENV['CI']
-      UI.message("验证 iOS SDK 和平台...")
-      begin
-        sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
-        if sdk_version.empty? || sdk_version.include?("error")
-          UI.important("⚠️ iOS SDK 可能未正确安装")
-        else
-          UI.success("✅ iOS SDK 版本: #{sdk_version}")
-        end
-        
-        # 检查平台目录
-        xcode_path = `xcode-select -p`.strip.gsub('/Contents/Developer', '')
-        platform_path = "#{xcode_path}/Contents/Developer/Platforms/iPhoneOS.platform"
-        if Dir.exist?(platform_path)
-          UI.success("✅ iOS 平台目录存在: #{platform_path}")
-        else
-          UI.important("⚠️ iOS 平台目录不存在: #{platform_path}")
-        end
-      rescue => ex
-        UI.important("⚠️ 无法验证 iOS SDK: #{ex.message}")
-      end
-    end
-
-    # 在 CI 环境中构建 iOS 应用
-    # 尝试使用 gym 的默认行为，让 fastlane 处理 destination
-    if ENV['CI']
-      UI.message("在 CI 环境中使用 gym 构建...")
-      
-      # 确保 DEVELOPER_DIR 正确设置
-      developer_dir = `xcode-select -p`.strip
-      ENV['DEVELOPER_DIR'] = developer_dir
-      UI.message("设置 DEVELOPER_DIR: #{developer_dir}")
-      
-      # 验证 iOS SDK 是否可用
-      UI.message("验证 iOS SDK...")
-      ios_sdk_version = `xcrun --sdk iphoneos --show-sdk-version 2>&1`.strip
-      if ios_sdk_version.empty? || ios_sdk_version.include?("error")
-        UI.important("⚠️ iOS SDK 可能未正确安装，但继续尝试构建...")
-      else
-        UI.success("✅ iOS SDK 版本: #{ios_sdk_version}")
-      end
-      
-      # 列出所有可用的 SDK 用于调试
-      available_sdks = `xcodebuild -showsdks 2>&1`.strip
-      UI.message("可用 SDK:\n#{available_sdks}")
-      
-      # 验证 watchOS SDK 是否可用（watchOS 应用需要）
-      watchos_sdk_version = `xcrun --sdk watchos --show-sdk-version 2>&1`.strip
-      if watchos_sdk_version.empty? || watchos_sdk_version.include?("error")
-        UI.important("⚠️ watchOS SDK 可能未正确安装，watchOS 应用可能无法构建")
-      else
-        UI.success("✅ watchOS SDK 版本: #{watchos_sdk_version}")
-      end
-      
-      # 根据项目要求：先编译 iOS，然后编译 watchOS
-      # 第一步：先构建所有 iOS frameworks（解决 ExtractAppIntentsMetadata 和依赖问题）
-      UI.message("步骤 1/2: 先构建所有 iOS frameworks...")
-      workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
-      
-      # 先单独构建所有 iOS frameworks，确保它们存在（解决 ExtractAppIntentsMetadata 依赖问题）
-      # 使用 workspace scheme，但只构建 iOS 相关的 targets
-      UI.message("构建所有 iOS frameworks（LoopKit, LoopKitUI, LoopCore, LoopUI 等）...")
-      ios_frameworks_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks.log"
-      ios_frameworks_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks-raw.log"
-      sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
-      
-      # 尝试构建 iOS frameworks
-      # 使用 build-for-testing 可以确保构建所有依赖的 frameworks
-      ios_frameworks_success = false
-      begin
-        # 方法1: 使用 build-for-testing 构建所有 iOS frameworks
-        # 这会构建所有 iOS 相关的 targets，包括 frameworks
-        UI.message("方法1: 使用 build-for-testing 构建 iOS frameworks...")
-        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos build-for-testing 2>&1 | tee #{ios_frameworks_raw_log} | xcbeautify > #{ios_frameworks_log}")
-        UI.success("✅ iOS frameworks 构建完成（方法1）")
-        ios_frameworks_success = true
-      rescue => ex
-        UI.important("⚠️ 方法1失败: #{ex.message}")
-        # 显示构建日志中的错误信息
-        if File.exist?(ios_frameworks_raw_log)
-          log_content = File.read(ios_frameworks_raw_log)
-          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
-          if error_lines.any?
-            UI.important("方法1构建日志中的错误（最后 30 个）:")
-            error_lines.last(30).each { |line| UI.important(line) }
-          end
-        end
-        
-        # 方法2: 尝试直接构建 LoopKit.framework（最关键的依赖）
-        begin
-          UI.message("方法2: 直接构建 LoopKit.framework...")
-          loopkit_project = "#{GITHUB_WORKSPACE}/LoopKit/LoopKit.xcodeproj"
-          sh("set -o pipefail && xcodebuild -project #{loopkit_project} -target LoopKit -configuration Release -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build 2>&1 | tee -a #{ios_frameworks_raw_log} | xcbeautify >> #{ios_frameworks_log}")
-          UI.success("✅ LoopKit.framework 构建完成（方法2）")
-          ios_frameworks_success = true
-        rescue => ex2
-          UI.important("⚠️ 方法2也失败: #{ex2.message}")
-          # 显示详细错误信息
-          if File.exist?(ios_frameworks_raw_log)
-            log_content = File.read(ios_frameworks_raw_log)
-            error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
-            if error_lines.any?
-              UI.important("所有方法构建日志中的错误（最后 50 个）:")
-              error_lines.last(50).each { |line| UI.important(line) }
-            end
-            # 显示最后 100 行原始日志
-            last_lines = log_content.split("\n").last(100).join("\n")
-            UI.important("iOS frameworks 构建日志最后 100 行:\n#{last_lines}")
-          end
-        end
-      end
-      
-      # 如果所有方法都失败，输出警告但继续（Xcode 可能会在完整构建时处理依赖）
-      unless ios_frameworks_success
-        UI.important("⚠️ 所有 iOS frameworks 预构建方法都失败了，但继续尝试完整构建（Xcode 会处理依赖关系）...")
-      end
-      
-      # 第二步：先构建 iOS 应用（不包括 watchOS）
-      # 根据项目要求：必须先编译 iOS，然后才能编译 watchOS
-      UI.message("步骤 2/3: 先构建 iOS 应用（Loop.app，不包括 watchOS）...")
-      ios_app_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-App.log"
-      ios_app_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-App-raw.log"
-      begin
-        # 只构建 iOS 应用，排除 watchOS 目标
-        # 使用 -project 和 -target Loop 明确指定只构建 Loop target
-        # 注意：不能同时使用 -workspace 和 -target，必须使用 -project
-        # 添加 SUPPORTED_PLATFORMS=iphoneos 明确排除 watchOS 平台
-        # 这样可以避免 Xcode 尝试构建 watchOS targets（WatchApp 和 WatchApp Extension）
-        loop_project = "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj"
-        sh("set -o pipefail && xcodebuild -project #{loop_project} -target Loop -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS=iphoneos build 2>&1 | tee #{ios_app_raw_log} | xcbeautify > #{ios_app_log}")
-        UI.success("✅ iOS 应用（Loop.app）构建完成")
-      rescue => ex_ios
-        UI.important("⚠️ iOS 应用构建失败: #{ex_ios.message}")
-        if File.exist?(ios_app_raw_log)
-          log_content = File.read(ios_app_raw_log)
-          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
-          if error_lines.any?
-            UI.important("iOS 应用构建日志中的错误（最后 30 个）:")
-            error_lines.last(30).each { |line| UI.important(line) }
-          end
-        end
-        UI.user_error!("❌ iOS 应用构建失败，无法继续构建 watchOS。请检查日志: #{ios_app_raw_log}")
-      end
-      
-      # 第三步：构建 watchOS 应用
-      UI.message("步骤 3/3: 构建 watchOS 应用（WatchApp 和 WatchApp Extension）...")
-      watchos_log = "#{GITHUB_WORKSPACE}/buildlog/watchOS.log"
-      watchos_raw_log = "#{GITHUB_WORKSPACE}/buildlog/watchOS-raw.log"
-      begin
-        # 构建 watchOS 目标
-        # 使用 -target 明确指定 watchOS targets
-        loop_project = "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj"
-        # 先构建 WatchApp Extension（依赖关系）
-        sh("set -o pipefail && xcodebuild -project #{loop_project} -target 'WatchApp Extension' -configuration Release -sdk watchos -destination 'generic/platform=watchOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64_32 build 2>&1 | tee #{watchos_raw_log} | xcbeautify > #{watchos_log}")
-        # 然后构建 WatchApp
-        sh("set -o pipefail && xcodebuild -project #{loop_project} -target WatchApp -configuration Release -sdk watchos -destination 'generic/platform=watchOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64_32 build 2>&1 | tee -a #{watchos_raw_log} | xcbeautify >> #{watchos_log}")
-        UI.success("✅ watchOS 应用构建完成")
-      rescue => ex_watchos
-        UI.important("⚠️ watchOS 应用构建失败: #{ex_watchos.message}")
-        if File.exist?(watchos_raw_log)
-          log_content = File.read(watchos_raw_log)
-          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
-          if error_lines.any?
-            UI.important("watchOS 应用构建日志中的错误（最后 30 个）:")
-            error_lines.last(30).each { |line| UI.important(line) }
-          end
-        end
-        UI.user_error!("❌ watchOS 应用构建失败。请检查日志: #{watchos_raw_log}")
-      end
-      
-      # 第四步：归档完整应用（组合 iOS 和 watchOS）
-      # 此时 iOS 和 watchOS 都已经构建完成，只需要将它们组合并归档
-      UI.message("步骤 4/4: 归档完整应用（组合 iOS 和 watchOS）...")
-      archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
-      workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
-      sh("mkdir -p #{GITHUB_WORKSPACE}/build")
-      begin
-        # 使用 xcodebuild archive 归档完整应用
-        # 由于 iOS 和 watchOS 都已经构建完成，Xcode 会使用已构建的产品
-        # 使用 workspace 和 scheme 确保所有 targets 都被包含
-        # scheme 中已设置 parallelizeBuildables=NO，确保顺序构建
-        # 关键设置：
-        # 1. 不使用 -sdk 参数，让 Xcode 为每个目标选择正确的 SDK
-        # 2. iOS 目标使用 arm64，watchOS 目标使用 arm64_32（项目文件中已设置）
-        # 3. -skipUnavailableActions 跳过不可用的操作
-        # 4. 添加 SUPPORTED_PLATFORMS 确保 iOS 和 watchOS 目标都能正确构建
-        raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
-        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination 'generic/platform=iOS' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
-        
-        # 检查 archive 是否成功创建
-        unless File.exist?(archive_path)
-          UI.user_error!("❌ Archive 文件未创建: #{archive_path}")
-        end
-        
-        UI.success("✅ Archive 创建成功: #{archive_path}")
-        
-        # 使用 gym 导出 IPA
-        gym(
-          export_method: "app-store",
-          scheme: "LoopWorkspace",
-          output_name: "Loop.ipa",
-          archive_path: archive_path,
-          skip_build_archive: true,
-          buildlog_path: 'buildlog'
-        )
-      rescue => ex
-        UI.important("⚠️ gym 自动构建失败: #{ex.message}")
-        UI.message("尝试手动指定 destination...")
-        
-        # 备用方法：手动构建
-        archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
-        workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
-        sh("mkdir -p #{GITHUB_WORKSPACE}/build")
-        sh("mkdir -p #{GITHUB_WORKSPACE}/buildlog")
-        
-        # 尝试明确指定 destination
-        UI.message("查询可用的 destinations...")
-        begin
-          # 查询可用的 destinations
-          destinations_output = `xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -showdestinations -configuration Release 2>&1`.strip
-          UI.message("可用 destinations:\n#{destinations_output}")
-          
-          # 尝试查找 generic/platform=iOS 的 destination
-          destination = nil
-          if destinations_output.include?("generic/platform=iOS")
-            destination = "generic/platform=iOS"
-            UI.message("使用 destination: #{destination}")
-          elsif destinations_output.include?("platform=iOS")
-            # 尝试提取第一个 iOS destination
-            ios_destinations = destinations_output.split("\n").select { |line| line.include?("platform=iOS") && !line.include?("Simulator") }
-            if ios_destinations.any?
-              # 尝试提取 id
-              first_dest = ios_destinations.first
-              if first_dest =~ /id=([^,]+)/
-                destination = "id=#{$1}"
-                UI.message("使用 destination: #{destination}")
-              else
-                destination = "generic/platform=iOS"
-                UI.message("使用默认 destination: #{destination}")
-              end
-            else
-              destination = "generic/platform=iOS"
-              UI.message("使用默认 destination: #{destination}")
-            end
-          else
-            destination = "generic/platform=iOS"
-            UI.message("使用默认 destination: #{destination}")
-          end
-          
-          UI.message("尝试使用 destination: #{destination} 进行归档（先构建 iOS，然后构建 watchOS）...")
-          # 归档 Loop 应用时，需要同时构建 iOS 和 watchOS 目标
-          # 但根据项目要求，需要先编译 iOS，然后编译 watchOS
-          # Loop 应用依赖于 WatchApp，WatchApp 需要被嵌入到 Loop.app 中
-          # Xcode 会自动为每个目标使用正确的 SDK（iOS 目标使用 iphoneos，watchOS 目标使用 watchos）
-          # scheme 中已设置 parallelizeBuildables=NO，确保顺序构建
-          # 关键设置：
-          # 1. 不使用 -sdk 参数，让 Xcode 为每个目标选择正确的 SDK
-          # 2. iOS 目标使用 arm64，watchOS 目标使用 arm64_32（因为 WATCHOS_DEPLOYMENT_TARGET=9.0 >= 9.0）
-          # 3. -skipUnavailableActions 跳过不可用的操作
-          # 4. 确保 watchOS 平台已安装（在 workflow 中已验证）
-          # 5. 架构设置：
-          #    - iOS 目标：使用 ARCHS[sdk=iphoneos*]=arm64 明确指定
-          #    - watchOS 目标：不在这里设置，使用项目文件中的设置（ARCHS = "arm64_32"）
-          #    这样可以避免 iOS targets 收到 watchOS 架构设置的警告
-          # 注意：archive 构建使用 generic/platform=iOS，不使用 simulator，所以只需要排除 simulator 架构
-          # 添加 SUPPORTED_PLATFORMS 确保 iOS 和 watchOS 目标都能正确构建
-          raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
-          
-          # 检查 archive 是否成功创建
-          unless File.exist?(archive_path)
-            UI.user_error!("❌ Archive 文件未创建: #{archive_path}")
-          end
-          
-          UI.success("✅ Archive 创建成功: #{archive_path}")
-          
-          # 如果成功，使用 gym 导出
-          gym(
-            export_method: "app-store",
-            scheme: "LoopWorkspace",
-            output_name: "Loop.ipa",
-            archive_path: archive_path,
-            skip_build_archive: true,
-            buildlog_path: 'buildlog'
-          )
-        rescue => ex2
-          # 显示更详细的错误信息
-          UI.important("⚠️ 构建失败，尝试查看详细日志...")
-          
-          # 首先查看原始日志（不含 xcbeautify 格式化）的最后错误
-          raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
-          if File.exist?(raw_log_path)
-            raw_log_content = File.read(raw_log_path)
-            # 查找所有错误行
-            error_lines = raw_log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
-            if error_lines.any?
-              UI.important("原始构建日志中的错误（最后 50 个）:")
-              error_lines.last(50).each { |line| UI.important(line) }
-            end
-            
-            # 显示原始日志的最后 150 行
-            last_raw_lines = raw_log_content.split("\n").last(150).join("\n")
-            UI.important("原始构建日志最后 150 行:\n#{last_raw_lines}")
-          else
-            UI.important("⚠️ 原始构建日志文件不存在: #{raw_log_path}")
-          end
-          
-          # 也显示格式化的日志
-          formatted_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log"
-          if File.exist?(formatted_log_path)
-            log_content = File.read(formatted_log_path)
-            # 显示最后 100 行日志
-            last_lines = log_content.split("\n").last(100).join("\n")
-            UI.important("格式化构建日志最后 100 行:\n#{last_lines}")
-          else
-            UI.important("⚠️ 格式化构建日志文件不存在: #{formatted_log_path}")
-          end
-          
-          # 也检查 iOS frameworks 构建日志
-          ios_frameworks_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks-raw.log"
-          if File.exist?(ios_frameworks_raw_log)
-            ios_log_content = File.read(ios_frameworks_raw_log)
-            ios_error_lines = ios_log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
-            if ios_error_lines.any?
-              UI.important("iOS frameworks 构建日志中的错误（最后 20 个）:")
-              ios_error_lines.last(20).each { |line| UI.important(line) }
-            end
-          end
-          
-          UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}\n请检查构建日志: #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log (原始) 或 App-LoopWorkspace.log (格式化)")
-        end
-      end
-    else
-      # 本地环境使用标准 gym
-      gym(
-        export_method: "app-store",
-        scheme: "LoopWorkspace",
-        output_name: "Loop.ipa",
-        configuration: "Release",
-        buildlog_path: 'buildlog',
-        destination: 'generic/platform=iOS'
-      )
-    end
+    # Use iOS Simulator destination (which is installed) to bypass device platform check  
+    gym(
+      export_method: "app-store",
+      scheme: "LoopWorkspace",
+      output_name: "Loop.ipa",
+      configuration: "Release",
+      destination: 'generic/platform=iOS Simulator',
+      buildlog_path: 'buildlog'
+    )
 
     copy_artifacts(
       target_path: "artifacts",
@@ -683,42 +223,10 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
     
-    # 验证必要的环境变量
-    if GH_PAT.nil? || GH_PAT.empty?
-      UI.user_error!("GH_PAT 环境变量未设置或为空")
-    end
-    
-    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
-      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
-    end
-    
-    # 使用包含认证信息的 git_url
-    git_url_with_auth = "https://#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}@github.com/#{GITHUB_REPOSITORY_OWNER}/Match-Secrets.git"
-    
-    # 如果设置了 FORCE_NUKE_CERTS 环境变量，先清理证书
-    if ENV['FORCE_NUKE_CERTS'] == 'true'
-      UI.important("⚠️ FORCE_NUKE_CERTS 已设置，将先清理旧证书...")
-      begin
-        match_nuke(
-          type: "appstore",
-          team_id: "#{TEAMID}",
-          skip_confirmation: true,
-          git_url: git_url_with_auth,
-          git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
-        )
-        UI.success("✅ 旧证书已清理")
-      rescue => nuke_ex
-        UI.important("⚠️ 清理证书时出现错误: #{nuke_ex.message}")
-        UI.message("继续尝试创建新证书...")
-      end
-    end
-    
-    # 尝试创建证书，使用 force 参数如果设置了 FORCE_NUKE_CERTS
     match(
       type: "appstore",
-      force: (ENV['FORCE_NUKE_CERTS'] == 'true'),  # 如果强制清理，则强制创建
+      force: false,
       verbose: true,
-      git_url: git_url_with_auth,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
       app_identifier: [
         "com.libre.loopkit3.Loop", 
@@ -748,15 +256,6 @@ platform :ios do
 
     find_bundle_id("com.libre.loopkit3.Loop")
 
-    # 验证必要的环境变量
-    if GH_PAT.nil? || GH_PAT.empty?
-      UI.user_error!("GH_PAT 环境变量未设置或为空")
-    end
-    
-    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
-      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
-    end
-
     match(
       type: "appstore",
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}"),
@@ -776,23 +275,10 @@ platform :ios do
       key_content: "#{FASTLANE_KEY}"
     )
     
-    # 验证必要的环境变量
-    if GH_PAT.nil? || GH_PAT.empty?
-      UI.user_error!("GH_PAT 环境变量未设置或为空")
-    end
-    
-    if GITHUB_REPOSITORY_OWNER.nil? || GITHUB_REPOSITORY_OWNER.empty?
-      UI.user_error!("GITHUB_REPOSITORY_OWNER 环境变量未设置或为空")
-    end
-    
-    # 使用包含认证信息的 git_url
-    git_url_with_auth = "https://#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}@github.com/#{GITHUB_REPOSITORY_OWNER}/Match-Secrets.git"
-    
     match_nuke(
       type: "appstore",
       team_id: "#{TEAMID}",
       skip_confirmation: true,
-      git_url: git_url_with_auth,
       git_basic_authorization: Base64.strict_encode64("#{GITHUB_REPOSITORY_OWNER}:#{GH_PAT}")
     )
   end
