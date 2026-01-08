@@ -339,6 +339,7 @@ platform :ios do
         # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
         # 架构设置：使用条件设置，只对 iOS SDK 设置架构，让 watchOS 目标使用项目文件中的设置
         # watchOS 目标在项目文件中已设置 ARCHS = "arm64_32 armv7k"
+        # 注意：archive 构建不使用 simulator，所以不需要设置 simulator 架构，只需要排除它
         gym(
           export_method: "app-store",
           scheme: "LoopWorkspace",
@@ -347,7 +348,7 @@ platform :ios do
           buildlog_path: 'buildlog',
           skip_codesigning: false,
           skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=iphonesimulator*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
@@ -406,8 +407,9 @@ platform :ios do
           # 4. 确保 watchOS 平台已安装（在 workflow 中已验证）
           # 5. 架构设置：使用条件设置，只对 iOS SDK 设置架构，让 watchOS 目标使用项目文件中的设置
           # watchOS 目标在项目文件中已设置 ARCHS = "arm64_32 armv7k"
+          # 注意：archive 构建使用 generic/platform=iOS，不使用 simulator，所以只需要排除 simulator 架构
           raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=iphonesimulator*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
