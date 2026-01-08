@@ -309,20 +309,20 @@ platform :ios do
       end
       
       # 根据项目要求：先编译 iOS，然后编译 watchOS
-      # 第一步：先构建 iOS 的 LoopKit framework（解决 ExtractAppIntentsMetadata 问题）
-      UI.message("步骤 1/2: 先构建 iOS 的 LoopKit framework...")
+      # 第一步：先构建所有 iOS frameworks（解决 ExtractAppIntentsMetadata 和依赖问题）
+      UI.message("步骤 1/2: 先构建所有 iOS frameworks...")
       workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
       
-      # 先单独构建 iOS 的 LoopKit framework，确保它存在
-      # 使用 LoopKit 项目来构建，而不是 workspace scheme
-      UI.message("构建 LoopKit framework for iOS...")
-      loopkit_project_path = "#{GITHUB_WORKSPACE}/LoopKit/LoopKit.xcodeproj"
+      # 先单独构建所有 iOS frameworks，确保它们存在
+      # 使用 workspace scheme，但只构建 iOS 相关的 targets
+      UI.message("构建所有 iOS frameworks（LoopKit, LoopKitUI, LoopCore, LoopUI 等）...")
       begin
-        # 使用 LoopKit 项目构建 iOS 的 LoopKit target
-        sh("set -o pipefail && xcodebuild -project #{loopkit_project_path} -target LoopKit -configuration Release -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/LoopKit-iOS.log | xcbeautify || true")
-        UI.success("✅ LoopKit framework (iOS) 构建完成")
+        # 使用 workspace 构建，但限制为 iOS 平台，避免构建 watchOS 目标
+        # 通过设置 SDK 和排除 watchOS 平台来实现
+        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination 'generic/platform=iOS' -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS=iphoneos build-for-testing 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/iOS-Frameworks.log | xcbeautify || true")
+        UI.success("✅ iOS frameworks 构建完成")
       rescue => ex
-        UI.important("⚠️ LoopKit framework 构建过程中出现错误: #{ex.message}")
+        UI.important("⚠️ iOS frameworks 构建过程中出现错误: #{ex.message}")
         UI.message("继续尝试完整构建（Xcode 会处理依赖关系）...")
       end
       
@@ -404,7 +404,9 @@ platform :ios do
           # 4. 确保 watchOS 平台已安装（在 workflow 中已验证）
           # 5. 设置 SUPPORTED_PLATFORMS 以确保架构设置只应用到正确的平台
           # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          # 先尝试不使用 xcbeautify，以便查看原始错误信息
+          raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
@@ -425,14 +427,32 @@ platform :ios do
         rescue => ex2
           # 显示更详细的错误信息
           UI.important("⚠️ 构建失败，尝试查看详细日志...")
+          
+          # 首先查看原始日志（不含 xcbeautify 格式化）的最后错误
+          raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
+          if File.exist?(raw_log_path)
+            raw_log_content = File.read(raw_log_path)
+            # 查找所有错误行
+            error_lines = raw_log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") }
+            if error_lines.any?
+              UI.important("原始构建日志中的错误（最后 30 个）:")
+              error_lines.last(30).each { |line| UI.important(line) }
+            end
+            
+            # 显示原始日志的最后 100 行
+            last_raw_lines = raw_log_content.split("\n").last(100).join("\n")
+            UI.important("原始构建日志最后 100 行:\n#{last_raw_lines}")
+          end
+          
+          # 也显示格式化的日志
           if File.exist?("#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
             log_content = File.read("#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
             # 显示最后 50 行日志
             last_lines = log_content.split("\n").last(50).join("\n")
-            UI.important("构建日志最后 50 行:\n#{last_lines}")
+            UI.important("格式化构建日志最后 50 行:\n#{last_lines}")
           end
           
-          UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}\n请检查构建日志: #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
+          UI.user_error!("❌ 所有构建方法都失败了。最后错误: #{ex2.message}\n请检查构建日志: #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log (原始) 或 App-LoopWorkspace.log (格式化)")
         end
       end
     else
