@@ -55,4 +55,3 @@ jobs:
           echo "3. Add 'Time Sensitive Notifications' capability to Loop identifier"
           echo ""
           echo "After completing these steps, run '3. Create Certificates' workflow"
-
