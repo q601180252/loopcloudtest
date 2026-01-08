@@ -268,6 +268,77 @@ jobs:
           echo ""
           echo "=========================================="
       
+      - name: Install watchOS Platform
+        run: |
+          echo "=========================================="
+          echo "Installing watchOS Platform"
+          echo "=========================================="
+          
+          # Install watchOS platform (multiple attempts)
+          echo "Installing watchOS platform..."
+          for i in {1..3}; do
+            echo "watchOS platform install attempt $i..."
+            if sudo xcodebuild -downloadPlatform watchOS 2>&1; then
+              echo "✅ watchOS platform install succeeded on attempt $i"
+              break
+            else
+              echo "⚠️ watchOS platform install attempt $i failed"
+              sleep 10
+            fi
+          done
+          
+          # Additional wait for platform to be fully registered
+          sleep 15
+          
+          # Verify watchOS platform installation
+          echo ""
+          echo "Verifying watchOS platform installation..."
+          XCODE_PATH=$(xcode-select -p | sed 's|/Contents/Developer||')
+          WATCHOS_PLATFORM_PATH="$XCODE_PATH/Contents/Developer/Platforms/WatchOS.platform"
+          
+          if [ -d "$WATCHOS_PLATFORM_PATH" ]; then
+            echo "✅ watchOS platform directory exists: $WATCHOS_PLATFORM_PATH"
+            ls -la "$WATCHOS_PLATFORM_PATH" | head -5
+            
+            # Verify key files
+            if [ -f "$WATCHOS_PLATFORM_PATH/Info.plist" ]; then
+              echo "✅ watchOS platform Info.plist exists"
+            else
+              echo "❌ watchOS platform Info.plist missing"
+              exit 1
+            fi
+            
+            if [ -d "$WATCHOS_PLATFORM_PATH/Developer/SDKs" ]; then
+              echo "✅ watchOS platform SDKs directory exists"
+              SDK_COUNT=$(ls -1 "$WATCHOS_PLATFORM_PATH/Developer/SDKs" 2>/dev/null | wc -l | tr -d ' ')
+              echo "✅ Found $SDK_COUNT watchOS SDK(s)"
+              ls -1 "$WATCHOS_PLATFORM_PATH/Developer/SDKs" 2>/dev/null || echo "⚠️ Cannot list SDKs"
+            else
+              echo "❌ watchOS platform SDKs directory missing"
+              exit 1
+            fi
+          else
+            echo "❌ watchOS platform directory not found: $WATCHOS_PLATFORM_PATH"
+            exit 1
+          fi
+          
+          # Test watchOS SDK availability
+          echo ""
+          echo "Testing watchOS SDK availability..."
+          echo "Available watchOS SDKs:"
+          xcodebuild -showsdks 2>&1 | grep -i "watchos" || echo "⚠️ Cannot show watchOS SDKs"
+          
+          # Verify watchOS SDK version
+          WATCHOS_SDK_VERSION=$(xcrun --sdk watchos --show-sdk-version 2>/dev/null || echo "")
+          if [ -z "$WATCHOS_SDK_VERSION" ]; then
+            echo "⚠️ watchOS SDK version not found"
+          else
+            echo "✅ watchOS SDK version: $WATCHOS_SDK_VERSION"
+          fi
+          
+          echo ""
+          echo "=========================================="
+      
       - name: Workaround iOS 18.0 Platform Issue
         run: |
           echo "Attempting to create iOS 18.0 platform symlink from iOS 18.4..."
