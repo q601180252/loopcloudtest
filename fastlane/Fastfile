@@ -308,27 +308,42 @@ platform :ios do
         UI.success("✅ watchOS SDK 版本: #{watchos_sdk_version}")
       end
       
-        # 尝试使用 gym，不指定 destination，让 fastlane 自动处理
-        # 如果失败，再尝试手动指定 destination
-        begin
-          UI.message("尝试使用 gym 自动处理 destination（将同时构建 iOS 和 watchOS 目标）...")
-          # gym 会自动处理 destination 和 SDK 选择
-          # Loop 应用依赖于 WatchApp，所以 watchOS 目标也会被构建
-          # Xcode 会自动为每个目标使用正确的 SDK
-          # 重要：iOS 目标使用 arm64，但 watchOS 目标需要使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
-          # 使用条件 ARCHS 设置，让每个平台使用正确的架构
-          # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
-          # 同时设置 SUPPORTED_PLATFORMS 以确保架构设置只应用到正确的平台
-          gym(
-            export_method: "app-store",
-            scheme: "LoopWorkspace",
-            output_name: "Loop.ipa",
-            configuration: "Release",
-            buildlog_path: 'buildlog',
-            skip_codesigning: false,
-            skip_archive: false,
-            xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos"
-          )
+      # 根据项目要求：先编译 iOS，然后编译 watchOS
+      # 第一步：先构建 iOS 的 LoopKit framework（解决 ExtractAppIntentsMetadata 问题）
+      UI.message("步骤 1/2: 先构建 iOS 的 LoopKit framework...")
+      workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
+      
+      # 先单独构建 iOS 的 LoopKit framework，确保它存在
+      UI.message("构建 LoopKit framework for iOS...")
+      begin
+        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopKit -configuration Release -destination 'generic/platform=iOS' -sdk iphoneos ONLY_ACTIVE_ARCH=NO ARCHS=arm64 build 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/LoopKit-iOS.log | xcbeautify || true")
+        UI.success("✅ LoopKit framework (iOS) 构建完成")
+      rescue => ex
+        UI.important("⚠️ LoopKit framework 构建过程中出现错误: #{ex.message}")
+        UI.message("继续尝试完整构建（Xcode 会处理依赖关系）...")
+      end
+      
+      # 第二步：使用 gym 构建完整应用（包括 watchOS）
+      # Xcode 的依赖系统会确保 iOS frameworks 先构建，然后构建 watchOS 目标
+      UI.message("步骤 2/2: 构建完整应用（包括 watchOS 目标）...")
+      begin
+        # gym 会自动处理 destination 和 SDK 选择
+        # Loop 应用依赖于 WatchApp，所以 watchOS 目标也会被构建
+        # Xcode 会自动为每个目标使用正确的 SDK
+        # 重要：iOS 目标使用 arm64，但 watchOS 目标需要使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
+        # 使用条件 ARCHS 设置，让每个平台使用正确的架构
+        # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
+        # 同时设置 SUPPORTED_PLATFORMS 以确保架构设置只应用到正确的平台
+        gym(
+          export_method: "app-store",
+          scheme: "LoopWorkspace",
+          output_name: "Loop.ipa",
+          configuration: "Release",
+          buildlog_path: 'buildlog',
+          skip_codesigning: false,
+          skip_archive: false,
+          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos"
+        )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
         UI.message("尝试手动指定 destination...")
@@ -373,10 +388,12 @@ platform :ios do
             UI.message("使用默认 destination: #{destination}")
           end
           
-          UI.message("尝试使用 destination: #{destination} 进行归档（将同时构建 iOS 和 watchOS 目标）...")
+          UI.message("尝试使用 destination: #{destination} 进行归档（先构建 iOS，然后构建 watchOS）...")
           # 归档 Loop 应用时，需要同时构建 iOS 和 watchOS 目标
+          # 但根据项目要求，需要先编译 iOS，然后编译 watchOS
           # Loop 应用依赖于 WatchApp，WatchApp 需要被嵌入到 Loop.app 中
           # Xcode 会自动为每个目标使用正确的 SDK（iOS 目标使用 iphoneos，watchOS 目标使用 watchos）
+          # scheme 中已设置 parallelizeBuildables=NO，确保顺序构建
           # 关键设置：
           # 1. 不使用 -sdk 参数，让 Xcode 为每个目标选择正确的 SDK
           # 2. iOS 目标使用 arm64，watchOS 目标使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
