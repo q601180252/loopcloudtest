@@ -377,9 +377,10 @@ platform :ios do
           # 3. SUPPORTED_PLATFORMS 设置为空字符串，告诉 Xcode 这些目标不支持 iOS 平台
           # 4. EXCLUDED_ARCHS 排除 watchOS 架构
           # 5. -skipUnavailableActions 跳过不可用的操作（如 Embed Watch Content）
+          # 6. SDKROOT 明确设置为 iphoneos，防止 Xcode 尝试构建 watchOS 目标
           # 注意：watchOS 应用依赖 iOS 应用（这是正常的），但我们在构建 iOS 时不需要构建 watchOS 目标
-          # 我们使用构建设置来告诉 Xcode 跳过 watchOS 目标的构建，而不是修改项目文件
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDED_ARCHS[sdk=watchos*]=arm64' 'VALID_ARCHS[sdk=watchos*]=' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          # 我们使用构建设置和 scheme 配置（buildForArchiving=NO）来告诉 Xcode 跳过 watchOS 目标的构建
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -sdk iphoneos -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ARCHS=arm64 ONLY_ACTIVE_ARCH=NO EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 'SKIP_INSTALL[sdk=watchos*]=YES' 'ONLY_ACTIVE_ARCH[sdk=watchos*]=YES' 'SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos' 'SUPPORTED_PLATFORMS[sdk=watchos*]=' 'EXCLUDED_ARCHS[sdk=watchos*]=arm64' 'VALID_ARCHS[sdk=watchos*]=' 'SDKROOT[sdk=watchos*]=iphoneos' 'TARGETED_DEVICE_FAMILY[sdk=watchos*]=' archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
