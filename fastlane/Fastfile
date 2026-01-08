@@ -128,13 +128,14 @@ platform :ios do
       targets: ["Loop Widget Extension"]
     )
 
-    # Use iOS Simulator destination (which is installed) to bypass device platform check  
+    # Build for App Store - use generic iOS platform (not Simulator)
+    # Note: App Store builds require device platform, not simulator
     gym(
       export_method: "app-store",
       scheme: "LoopWorkspace",
       output_name: "Loop.ipa",
       configuration: "Release",
-      destination: 'generic/platform=iOS Simulator',
+      destination: 'generic/platform=iOS',
       buildlog_path: 'buildlog'
     )
 
