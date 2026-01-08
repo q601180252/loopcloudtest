@@ -31,6 +31,8 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<key>MinimumOSVersion</key>
+	<string>7.1</string>
 	<key>WKCompanionAppBundleIdentifier</key>
 	<string>$(COMPANION_APP_BUNDLE_IDENTIFIER)</string>
 	<key>WKWatchKitApp</key>
