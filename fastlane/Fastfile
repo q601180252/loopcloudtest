@@ -371,27 +371,91 @@ platform :ios do
         UI.important("⚠️ 所有 iOS frameworks 预构建方法都失败了，但继续尝试完整构建（Xcode 会处理依赖关系）...")
       end
       
-      # 第二步：使用 gym 构建完整应用（包括 watchOS）
-      # Xcode 的依赖系统会确保 iOS frameworks 先构建，然后构建 watchOS 目标
-      UI.message("步骤 2/2: 构建完整应用（包括 watchOS 目标）...")
+      # 第二步：先构建 iOS 应用（不包括 watchOS）
+      # 根据项目要求：必须先编译 iOS，然后才能编译 watchOS
+      UI.message("步骤 2/3: 先构建 iOS 应用（Loop.app，不包括 watchOS）...")
+      ios_app_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-App.log"
+      ios_app_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-App-raw.log"
       begin
-        # gym 会自动处理 destination 和 SDK 选择
-        # Loop 应用依赖于 WatchApp，所以 watchOS 目标也会被构建
-        # Xcode 会自动为每个目标使用正确的 SDK
-        # 重要：iOS 目标使用 arm64，watchOS 目标使用 arm64_32（因为 WATCHOS_DEPLOYMENT_TARGET=9.0 >= 9.0）
-        # 使用条件 ARCHS 设置，让每个平台使用正确的架构
-        # 架构设置：使用条件设置，只对 iOS SDK 设置架构，让 watchOS 目标使用项目文件中的设置
-        # watchOS 目标在项目文件中已设置 ARCHS = "arm64_32"（watchOS 9.0+ 只需要 arm64_32）
-        # 注意：archive 构建不使用 simulator，所以不需要设置 simulator 架构，只需要排除它
+        # 只构建 iOS 应用，排除 watchOS 目标
+        # 使用 -target Loop 明确指定只构建 Loop target
+        # 这会构建 Loop.app 及其所有 iOS 依赖，但不构建 watchOS 目标
+        loop_project = "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj"
+        sh("set -o pipefail && xcodebuild -project #{loop_project} -target Loop -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 build 2>&1 | tee #{ios_app_raw_log} | xcbeautify > #{ios_app_log}")
+        UI.success("✅ iOS 应用（Loop.app）构建完成")
+      rescue => ex_ios
+        UI.important("⚠️ iOS 应用构建失败: #{ex_ios.message}")
+        if File.exist?(ios_app_raw_log)
+          log_content = File.read(ios_app_raw_log)
+          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
+          if error_lines.any?
+            UI.important("iOS 应用构建日志中的错误（最后 30 个）:")
+            error_lines.last(30).each { |line| UI.important(line) }
+          end
+        end
+        UI.user_error!("❌ iOS 应用构建失败，无法继续构建 watchOS。请检查日志: #{ios_app_raw_log}")
+      end
+      
+      # 第三步：构建 watchOS 应用
+      UI.message("步骤 3/3: 构建 watchOS 应用（WatchApp 和 WatchApp Extension）...")
+      watchos_log = "#{GITHUB_WORKSPACE}/buildlog/watchOS.log"
+      watchos_raw_log = "#{GITHUB_WORKSPACE}/buildlog/watchOS-raw.log"
+      begin
+        # 构建 watchOS 目标
+        # 使用 -target 明确指定 watchOS targets
+        loop_project = "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj"
+        # 先构建 WatchApp Extension（依赖关系）
+        sh("set -o pipefail && xcodebuild -project #{loop_project} -target 'WatchApp Extension' -configuration Release -sdk watchos -destination 'generic/platform=watchOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64_32 build 2>&1 | tee #{watchos_raw_log} | xcbeautify > #{watchos_log}")
+        # 然后构建 WatchApp
+        sh("set -o pipefail && xcodebuild -project #{loop_project} -target WatchApp -configuration Release -sdk watchos -destination 'generic/platform=watchOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64_32 build 2>&1 | tee -a #{watchos_raw_log} | xcbeautify >> #{watchos_log}")
+        UI.success("✅ watchOS 应用构建完成")
+      rescue => ex_watchos
+        UI.important("⚠️ watchOS 应用构建失败: #{ex_watchos.message}")
+        if File.exist?(watchos_raw_log)
+          log_content = File.read(watchos_raw_log)
+          error_lines = log_content.split("\n").select { |line| line.include?("error:") || line.include?("ERROR") || line.include?("failed") || line.include?("FAILED") }
+          if error_lines.any?
+            UI.important("watchOS 应用构建日志中的错误（最后 30 个）:")
+            error_lines.last(30).each { |line| UI.important(line) }
+          end
+        end
+        UI.user_error!("❌ watchOS 应用构建失败。请检查日志: #{watchos_raw_log}")
+      end
+      
+      # 第四步：归档完整应用（组合 iOS 和 watchOS）
+      # 此时 iOS 和 watchOS 都已经构建完成，只需要将它们组合并归档
+      UI.message("步骤 4/4: 归档完整应用（组合 iOS 和 watchOS）...")
+      archive_path = "#{GITHUB_WORKSPACE}/build/Loop.xcarchive"
+      workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
+      sh("mkdir -p #{GITHUB_WORKSPACE}/build")
+      begin
+        # 使用 xcodebuild archive 归档完整应用
+        # 由于 iOS 和 watchOS 都已经构建完成，Xcode 会使用已构建的产品
+        # 使用 workspace 和 scheme 确保所有 targets 都被包含
+        # scheme 中已设置 parallelizeBuildables=NO，确保顺序构建
+        # 关键设置：
+        # 1. 不使用 -sdk 参数，让 Xcode 为每个目标选择正确的 SDK
+        # 2. iOS 目标使用 arm64，watchOS 目标使用 arm64_32（项目文件中已设置）
+        # 3. -skipUnavailableActions 跳过不可用的操作
+        # 4. 添加 SUPPORTED_PLATFORMS 确保 iOS 和 watchOS 目标都能正确构建
+        raw_log_path = "#{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace-raw.log"
+        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination 'generic/platform=iOS' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos archive 2>&1 | tee #{raw_log_path} | xcbeautify > #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log")
+        
+        # 检查 archive 是否成功创建
+        unless File.exist?(archive_path)
+          UI.user_error!("❌ Archive 文件未创建: #{archive_path}")
+        end
+        
+        UI.success("✅ Archive 创建成功: #{archive_path}")
+        
+        # 使用 gym 导出 IPA
         gym(
           export_method: "app-store",
           scheme: "LoopWorkspace",
           output_name: "Loop.ipa",
-          configuration: "Release",
-          buildlog_path: 'buildlog',
-          skip_codesigning: false,
-          skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
+          archive_path: archive_path,
+          skip_build_archive: true,
+          buildlog_path: 'buildlog'
         )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
