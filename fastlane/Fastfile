@@ -378,10 +378,12 @@ platform :ios do
       ios_app_raw_log = "#{GITHUB_WORKSPACE}/buildlog/iOS-App-raw.log"
       begin
         # 只构建 iOS 应用，排除 watchOS 目标
-        # 使用 -target Loop 明确指定只构建 Loop target
-        # 这会构建 Loop.app 及其所有 iOS 依赖，但不构建 watchOS 目标
-        loop_project = "#{GITHUB_WORKSPACE}/Loop/Loop.xcodeproj"
-        sh("set -o pipefail && xcodebuild -project #{loop_project} -target Loop -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 build 2>&1 | tee #{ios_app_raw_log} | xcbeautify > #{ios_app_log}")
+        # 使用 workspace 和 -target Loop 明确指定只构建 Loop target
+        # 添加 SUPPORTED_PLATFORMS=iphoneos 明确排除 watchOS 平台
+        # 这样可以避免 Xcode 尝试构建 watchOS targets（WatchApp 和 WatchApp Extension）
+        # 使用 workspace 可以更好地处理依赖关系，避免 Multiple commands produce 错误
+        workspace_path = "#{GITHUB_WORKSPACE}/LoopWorkspace.xcworkspace"
+        sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -target Loop -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' ONLY_ACTIVE_ARCH=NO ARCHS=arm64 EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS=iphoneos build 2>&1 | tee #{ios_app_raw_log} | xcbeautify > #{ios_app_log}")
         UI.success("✅ iOS 应用（Loop.app）构建完成")
       rescue => ex_ios
         UI.important("⚠️ iOS 应用构建失败: #{ex_ios.message}")
