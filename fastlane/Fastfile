@@ -308,26 +308,27 @@ platform :ios do
         UI.success("✅ watchOS SDK 版本: #{watchos_sdk_version}")
       end
       
-      # 尝试使用 gym，不指定 destination，让 fastlane 自动处理
-      # 如果失败，再尝试手动指定 destination
-      begin
-        UI.message("尝试使用 gym 自动处理 destination（将同时构建 iOS 和 watchOS 目标）...")
-        # gym 会自动处理 destination 和 SDK 选择
-        # Loop 应用依赖于 WatchApp，所以 watchOS 目标也会被构建
-        # Xcode 会自动为每个目标使用正确的 SDK
-        # 重要：iOS 目标使用 arm64，但 watchOS 目标需要使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
-        # 使用条件 ARCHS 设置，让每个平台使用正确的架构
-        # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
-        gym(
-          export_method: "app-store",
-          scheme: "LoopWorkspace",
-          output_name: "Loop.ipa",
-          configuration: "Release",
-          buildlog_path: 'buildlog',
-          skip_codesigning: false,
-          skip_archive: false,
-          xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64"
-        )
+        # 尝试使用 gym，不指定 destination，让 fastlane 自动处理
+        # 如果失败，再尝试手动指定 destination
+        begin
+          UI.message("尝试使用 gym 自动处理 destination（将同时构建 iOS 和 watchOS 目标）...")
+          # gym 会自动处理 destination 和 SDK 选择
+          # Loop 应用依赖于 WatchApp，所以 watchOS 目标也会被构建
+          # Xcode 会自动为每个目标使用正确的 SDK
+          # 重要：iOS 目标使用 arm64，但 watchOS 目标需要使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
+          # 使用条件 ARCHS 设置，让每个平台使用正确的架构
+          # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
+          # 同时设置 SUPPORTED_PLATFORMS 以确保架构设置只应用到正确的平台
+          gym(
+            export_method: "app-store",
+            scheme: "LoopWorkspace",
+            output_name: "Loop.ipa",
+            configuration: "Release",
+            buildlog_path: 'buildlog',
+            skip_codesigning: false,
+            skip_archive: false,
+            xcargs: "ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos"
+          )
       rescue => ex
         UI.important("⚠️ gym 自动构建失败: #{ex.message}")
         UI.message("尝试手动指定 destination...")
@@ -381,8 +382,9 @@ platform :ios do
           # 2. iOS 目标使用 arm64，watchOS 目标使用 arm64_32 和 armv7k（因为 WATCHOS_DEPLOYMENT_TARGET=7.1 < 9.0）
           # 3. -skipUnavailableActions 跳过不可用的操作
           # 4. 确保 watchOS 平台已安装（在 workflow 中已验证）
+          # 5. 设置 SUPPORTED_PLATFORMS 以确保架构设置只应用到正确的平台
           # 注意：多个架构值需要用引号包裹整个值，确保 shell 正确解析
-          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
+          sh("set -o pipefail && xcodebuild -workspace #{workspace_path} -scheme LoopWorkspace -configuration Release -destination '#{destination}' -archivePath #{archive_path} -allowProvisioningUpdates -skipUnavailableActions ONLY_ACTIVE_ARCH=NO ARCHS[sdk=iphoneos*]=arm64 ARCHS[sdk=watchos*]='arm64_32 armv7k' EXCLUDED_ARCHS[sdk=iphonesimulator*]=arm64 SUPPORTED_PLATFORMS[sdk=iphoneos*]=iphoneos SUPPORTED_PLATFORMS[sdk=watchos*]=watchos archive 2>&1 | tee #{GITHUB_WORKSPACE}/buildlog/App-LoopWorkspace.log | xcbeautify")
           
           # 检查 archive 是否成功创建
           unless File.exist?(archive_path)
