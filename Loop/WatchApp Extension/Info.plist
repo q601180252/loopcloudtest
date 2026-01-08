@@ -58,6 +58,6 @@
 	<key>WKExtensionDelegateClassName</key>
 	<string>$(PRODUCT_MODULE_NAME).ExtensionDelegate</string>
 	<key>MinimumOSVersion</key>
-	<string>7.1</string>
+	<string>9.0</string>
 </dict>
 </plist>
