@@ -41,6 +41,10 @@ public final class MicroTechSensor {
     }
 
     public func start() throws {
+        guard !(isStarted && commandBuilder != nil && activeSession != nil) else {
+            return
+        }
+
         do {
             let baseMaterial = MicroTechAidexKeyMaterial.derive(serial: session.sensorSerial)
             let pairingKey = baseMaterial.key
@@ -69,6 +73,10 @@ public final class MicroTechSensor {
             isStarted = true
             delegate?.microTechSensorDidConnect(self, session: session)
         } catch {
+            isStarted = false
+            commandBuilder = nil
+            activeSession = nil
+            peripheralSession.disconnect()
             delegate?.microTechSensor(self, didError: error)
             throw error
         }

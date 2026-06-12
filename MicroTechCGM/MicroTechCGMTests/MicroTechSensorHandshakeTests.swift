@@ -126,9 +126,72 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
         XCTAssertEqual(1, fake.calls.filter { $0 == .disconnect }.count)
     }
 
+    func testStartFailureDisconnectsPeripheralWithoutDisconnectNotification() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let failurePoints: [FakeMicroTechPeripheralSession.FailurePoint] = [.subscribe, .write, .read]
+
+        try failurePoints.forEach { failurePoint in
+            let fake = FakeMicroTechPeripheralSession(
+                deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+                deviceName: "LinX-ABC123",
+                f002Challenge: try encryptedChallenge(for: material),
+                failurePoint: failurePoint
+            )
+            let observer = ReadingObserver()
+            let sensor = MicroTechSensor(
+                session: MicroTechAidexSession(
+                    remoteIdentifier: fake.deviceIdentifier,
+                    deviceName: fake.deviceName,
+                    sensorSerial: "ABC123"
+                ),
+                peripheralSession: fake
+            )
+            sensor.delegate = observer
+
+            XCTAssertThrowsError(try sensor.start()) { error in
+                XCTAssertEqual(error as? MicroTechSensorHandshakeTestError, .forcedFailure)
+            }
+
+            XCTAssertEqual(1, fake.calls.filter { $0 == .disconnect }.count)
+            XCTAssertTrue(observer.connectedSessions.isEmpty)
+            XCTAssertEqual(0, observer.disconnectCount)
+            XCTAssertEqual(1, observer.errors.count)
+        }
+    }
+
+    func testStartIsIdempotentAfterSuccessfulHandshake() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let observer = ReadingObserver()
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake
+        )
+        sensor.delegate = observer
+
+        try sensor.start()
+        let firstStartCalls = fake.calls
+        try sensor.start()
+
+        XCTAssertEqual(firstStartCalls, fake.calls)
+        XCTAssertEqual(1, observer.connectedSessions.count)
+    }
+
     private func encryptedChallenge(for material: MicroTechAidexKeyMaterial) throws -> Data {
         try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: material.key)
     }
+}
+
+enum MicroTechSensorHandshakeTestError: Error, Equatable {
+    case forcedFailure
 }
 
 final class FakeMicroTechPeripheralSession: MicroTechPeripheralSession {
@@ -139,27 +202,49 @@ final class FakeMicroTechPeripheralSession: MicroTechPeripheralSession {
         case disconnect
     }
 
+    enum FailurePoint {
+        case subscribe
+        case write
+        case read
+    }
+
     let deviceIdentifier: UUID
     let deviceName: String
     private let f002Challenge: Data
+    private let failurePoint: FailurePoint?
     private(set) var calls: [Call] = []
 
-    init(deviceIdentifier: UUID, deviceName: String, f002Challenge: Data) {
+    init(
+        deviceIdentifier: UUID,
+        deviceName: String,
+        f002Challenge: Data,
+        failurePoint: FailurePoint? = nil
+    ) {
         self.deviceIdentifier = deviceIdentifier
         self.deviceName = deviceName
         self.f002Challenge = f002Challenge
+        self.failurePoint = failurePoint
     }
 
     func subscribe(_ characteristic: CBUUID) throws {
         calls.append(.subscribe(characteristic.uuidString))
+        if failurePoint == .subscribe {
+            throw MicroTechSensorHandshakeTestError.forcedFailure
+        }
     }
 
     func write(_ value: Data, to characteristic: CBUUID) throws {
         calls.append(.write(value.microTechHexadecimalString, characteristic.uuidString))
+        if failurePoint == .write {
+            throw MicroTechSensorHandshakeTestError.forcedFailure
+        }
     }
 
     func read(_ characteristic: CBUUID) throws -> Data {
         calls.append(.read(characteristic.uuidString))
+        if failurePoint == .read {
+            throw MicroTechSensorHandshakeTestError.forcedFailure
+        }
         return f002Challenge
     }
 

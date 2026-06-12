@@ -148,17 +148,18 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
         }
 
         condition.lock()
+        guard pendingCommand == nil else {
+            condition.unlock()
+            throw MicroTechPeripheralManagerError.invalidCommand
+        }
+
+        pendingCommand = command
         defer {
             pendingCommand = nil
             pendingError = nil
             condition.unlock()
         }
 
-        guard pendingCommand == nil else {
-            throw MicroTechPeripheralManagerError.invalidCommand
-        }
-
-        pendingCommand = command
         action()
 
         let completed = condition.wait(until: Date(timeIntervalSinceNow: timeout))
