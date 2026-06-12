@@ -1,5 +1,9 @@
 import Foundation
 
+public enum MicroTechAidexCommandBuilderError: Error, Equatable {
+    case indexOutOfRange(Int)
+}
+
 public struct MicroTechAidexCommandBuilder {
     public let keyMaterial: MicroTechAidexKeyMaterial
 
@@ -22,6 +26,10 @@ public struct MicroTechAidexCommandBuilder {
     }
 
     public func cmd23(index: Int) throws -> Data {
+        guard (0...0xFFFF).contains(index) else {
+            throw MicroTechAidexCommandBuilderError.indexOutOfRange(index)
+        }
+
         var payload = Data([0x23])
         payload.append(UInt8(index & 0xFF))
         payload.append(UInt8((index >> 8) & 0xFF))

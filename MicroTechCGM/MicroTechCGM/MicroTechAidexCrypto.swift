@@ -6,6 +6,7 @@ public enum MicroTechAidexCryptoError: Error, Equatable {
     case invalidKeyLength(Int)
     case invalidIVLength(Int)
     case aesFailure(Int32)
+    case invalidAESBlockOutputLength(Int)
     case emptyChallenge
     case keyTooShort(Int)
 }
@@ -106,6 +107,9 @@ public enum MicroTechAidexCrypto {
 
         guard status == kCCSuccess else {
             throw MicroTechAidexCryptoError.aesFailure(Int32(status))
+        }
+        guard outputLength == kCCBlockSizeAES128 else {
+            throw MicroTechAidexCryptoError.invalidAESBlockOutputLength(outputLength)
         }
 
         return Array(output.prefix(outputLength))
