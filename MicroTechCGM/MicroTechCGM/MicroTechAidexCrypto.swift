@@ -1,13 +1,5 @@
 import Foundation
 
-public enum MicroTechAidexCryptoError: Error, Equatable {
-    case invalidKeyLength(Int)
-    case invalidIVLength(Int)
-    case aesFailure(Int32)
-    case emptyChallenge
-    case keyTooShort(Int)
-}
-
 public enum MicroTechAidexCrypto {
     public static func crc16Ccitt(_ data: Data) -> UInt16 {
         var crc: UInt16 = 0xFFFF

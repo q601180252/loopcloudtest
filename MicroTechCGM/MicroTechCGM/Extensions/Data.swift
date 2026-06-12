@@ -1,12 +1,11 @@
 import Foundation
 
-public enum MicroTechDataError: Error, Equatable {
+enum MicroTechDataError: Error, Equatable {
     case oddLengthHexString
     case invalidHexByte(String)
-    case offsetOutOfBounds
 }
 
-public extension Data {
+extension Data {
     init(microTechHexadecimalString string: String) throws {
         let normalized = string.filter { !$0.isWhitespace }
         guard normalized.count.isMultiple(of: 2) else {
