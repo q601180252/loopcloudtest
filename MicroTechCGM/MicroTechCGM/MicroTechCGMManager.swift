@@ -5,6 +5,7 @@ import LoopKit
 public final class MicroTechCGMManager: CGMManager {
     private let lockedState: Locked<MicroTechCGMManagerState>
     private let delegate = WeakSynchronizedDelegate<CGMManagerDelegate>()
+    private var sensor: MicroTechSensor?
 
     public static let pluginIdentifier = "MicroTechLinXCGMManager"
 
@@ -90,6 +91,21 @@ public final class MicroTechCGMManager: CGMManager {
         completion(.noData)
     }
 
+    public func delete(completion: @escaping () -> Void) {
+        sensor?.stop()
+        sensor = nil
+        mutateState { state in
+            state.remoteIdentifier = nil
+            state.deviceName = nil
+            state.sensorSerial = nil
+            state.activationTime = nil
+            state.lastReadingDate = nil
+            state.latestReading = nil
+            state.latestSampleNumber = nil
+        }
+        notifyDelegateOfDeletion(completion: completion)
+    }
+
     public func acknowledgeAlert(alertIdentifier: Alert.AlertIdentifier, completion: @escaping (Error?) -> Void) {
         completion(nil)
     }
@@ -107,11 +123,8 @@ public final class MicroTechCGMManager: CGMManager {
             return nil
         }
 
-        var oldValue: MicroTechCGMManagerState!
         var sample: NewGlucoseSample?
-        let newValue = lockedState.mutate { state in
-            oldValue = state
-
+        mutateState { state in
             if state.sensorSerial == reading.sensorSerial,
                let latestSampleNumber = state.latestSampleNumber,
                reading.sampleNumber <= latestSampleNumber
@@ -126,7 +139,6 @@ public final class MicroTechCGMManager: CGMManager {
             sample = makeSample(from: reading, state: state)
         }
 
-        notifyStateDidChange(from: oldValue, to: newValue)
         return sample
     }
 
@@ -146,6 +158,24 @@ public final class MicroTechCGMManager: CGMManager {
             syncIdentifier: reading.syncIdentifier,
             device: device(for: state)
         )
+    }
+
+    @discardableResult
+    private func mutateState(_ mutation: (inout MicroTechCGMManagerState) -> Void) -> MicroTechCGMManagerState {
+        var oldValue: MicroTechCGMManagerState!
+        let newValue = lockedState.mutate { state in
+            oldValue = state
+            mutation(&state)
+        }
+
+        notifyStateDidChange(from: oldValue, to: newValue)
+        return newValue
+    }
+
+    private func notifyDelegateOfReadingResult(_ result: CGMReadingResult) {
+        delegate.notify { delegate in
+            delegate?.cgmManager(self, hasNew: result)
+        }
     }
 
     private func notifyStateDidChange(from oldValue: MicroTechCGMManagerState, to newValue: MicroTechCGMManagerState) {
@@ -170,5 +200,39 @@ public final class MicroTechCGMManager: CGMManager {
             localIdentifier: state.remoteIdentifier?.uuidString,
             udiDeviceIdentifier: nil
         )
+    }
+}
+
+extension MicroTechCGMManager: MicroTechSensorDelegate {
+    public func microTechSensorDidConnect(_ sensor: MicroTechSensor, session: MicroTechAidexSession) {
+        self.sensor = sensor
+        mutateState { state in
+            state.remoteIdentifier = session.remoteIdentifier
+            state.deviceName = session.deviceName
+            state.sensorSerial = session.sensorSerial
+        }
+    }
+
+    public func microTechSensorDidDisconnect(_ sensor: MicroTechSensor) {
+        delegate.notify { delegate in
+            delegate?.cgmManager(self, didUpdate: self.cgmManagerStatus)
+        }
+    }
+
+    public func microTechSensor(_ sensor: MicroTechSensor, didRead reading: MicroTechGlucoseReading) {
+        guard let sample = accept(reading) else {
+            notifyDelegateOfReadingResult(.noData)
+            return
+        }
+
+        notifyDelegateOfReadingResult(.newData([sample]))
+    }
+
+    public func microTechSensor(_ sensor: MicroTechSensor, didReadHistory history: MicroTechAidexHistoryPacket) {
+        notifyDelegateOfReadingResult(.noData)
+    }
+
+    public func microTechSensor(_ sensor: MicroTechSensor, didError error: Error) {
+        notifyDelegateOfReadingResult(.error(error))
     }
 }

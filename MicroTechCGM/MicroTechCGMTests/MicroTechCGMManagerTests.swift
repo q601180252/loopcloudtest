@@ -74,6 +74,109 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertNil(manager.state.latestSampleNumber)
     }
 
+    func testSensorConnectAndCurrentReadUpdateStateAndEmitNewData() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let readingDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(sensor, didRead: makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: readingDate))
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(manager.state.sensorSerial, "ABC123")
+        XCTAssertEqual(manager.state.deviceName, "LinX-ABC123")
+        XCTAssertEqual(manager.state.latestSampleNumber, 42)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
+    }
+
+    func testSensorHistoryReadDoesNotChangeLatestSampleNumberOrEmitNewGlucoseSample() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x02]),
+                startTimeOffset: 42,
+                records: [
+                    MicroTechAidexHistoryRecord(
+                        timeOffset: 41,
+                        glucose: 122,
+                        rawValue: 122
+                    ),
+                ]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(manager.state.latestSampleNumber, 42)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
+        XCTAssertEqual(delegate.noDataCount, 1)
+    }
+
+    func testDeleteClearsSensorStatePreservesUploadReadingsAndStopsActiveSensor() throws {
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        state.activationTime = Date(timeIntervalSince1970: 1_699_999_000)
+        state.lastReadingDate = Date(timeIntervalSince1970: 1_700_000_000)
+        state.latestReading = makeReading(
+            sampleNumber: 42,
+            glucoseMgdl: 123,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        state.latestSampleNumber = 42
+        state.uploadReadings = true
+        let manager = MicroTechCGMManager(state: state)
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let material = MicroTechAidexKeyMaterial.derive(serial: session.sensorSerial)
+        let peripheralSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: session.remoteIdentifier,
+            deviceName: session.deviceName,
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let sensor = MicroTechSensor(session: session, peripheralSession: peripheralSession)
+        sensor.delegate = manager
+        try sensor.start()
+        let deletionExpectation = expectation(description: "manager deletion")
+
+        manager.delete {
+            deletionExpectation.fulfill()
+        }
+
+        wait(for: [deletionExpectation], timeout: 1)
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertNil(manager.state.deviceName)
+        XCTAssertNil(manager.state.sensorSerial)
+        XCTAssertNil(manager.state.activationTime)
+        XCTAssertNil(manager.state.lastReadingDate)
+        XCTAssertNil(manager.state.latestReading)
+        XCTAssertNil(manager.state.latestSampleNumber)
+        XCTAssertEqual(manager.state.uploadReadings, true)
+        XCTAssertEqual(1, peripheralSession.calls.filter { $0 == .disconnect }.count)
+    }
+
     private func makeReading(
         sampleNumber: Int,
         glucoseMgdl: Int,
@@ -101,7 +204,121 @@ final class MicroTechCGMManagerTests: XCTestCase {
         )
     }
 
+    private func makeSession() -> MicroTechAidexSession {
+        MicroTechAidexSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            sensorSerial: "ABC123"
+        )
+    }
+
+    private func makeSensor(session: MicroTechAidexSession) -> MicroTechSensor {
+        MicroTechSensor(
+            session: session,
+            peripheralSession: FakeMicroTechPeripheralSession(
+                deviceIdentifier: session.remoteIdentifier,
+                deviceName: session.deviceName,
+                f002Challenge: Data()
+            )
+        )
+    }
+
+    private func encryptedChallenge(for material: MicroTechAidexKeyMaterial) throws -> Data {
+        try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: material.key)
+    }
+
     private static let mgdlUnit = HKUnit
         .gramUnit(with: .milli)
         .unitDivided(by: .literUnit(with: .deci))
+}
+
+private final class TestCGMManagerDelegate: CGMManagerDelegate {
+    let readingResultsExpectation: XCTestExpectation
+    private(set) var readingResults: [CGMReadingResult] = []
+
+    init(expectedReadingResultCount: Int) {
+        readingResultsExpectation = XCTestExpectation(description: "reading results")
+        readingResultsExpectation.expectedFulfillmentCount = max(expectedReadingResultCount, 1)
+        readingResultsExpectation.isInverted = expectedReadingResultCount == 0
+    }
+
+    var newDataSampleSyncIdentifiers: [String] {
+        readingResults.flatMap { result -> [String] in
+            if case .newData(let samples) = result {
+                return samples.map(\.syncIdentifier)
+            }
+            return []
+        }
+    }
+
+    var noDataCount: Int {
+        readingResults.filter { result in
+            if case .noData = result {
+                return true
+            }
+            return false
+        }.count
+    }
+
+    func startDateToFilterNewData(for manager: CGMManager) -> Date? {
+        nil
+    }
+
+    func cgmManager(_ manager: CGMManager, hasNew readingResult: CGMReadingResult) {
+        readingResults.append(readingResult)
+        readingResultsExpectation.fulfill()
+    }
+
+    func cgmManager(_ manager: CGMManager, hasNew events: [PersistedCgmEvent]) {
+    }
+
+    func cgmManagerWantsDeletion(_ manager: CGMManager) {
+    }
+
+    func cgmManagerDidUpdateState(_ manager: CGMManager) {
+    }
+
+    func credentialStoragePrefix(for manager: CGMManager) -> String {
+        "MicroTechCGMManagerTests"
+    }
+
+    func cgmManager(_ manager: CGMManager, didUpdate status: CGMManagerStatus) {
+    }
+
+    func deviceManager(
+        _ manager: DeviceManager,
+        logEventForDeviceIdentifier deviceIdentifier: String?,
+        type: DeviceLogEntryType,
+        message: String,
+        completion: ((Error?) -> Void)?
+    ) {
+        completion?(nil)
+    }
+
+    func issueAlert(_ alert: Alert) {
+    }
+
+    func retractAlert(identifier: Alert.Identifier) {
+    }
+
+    func doesIssuedAlertExist(identifier: Alert.Identifier, completion: @escaping (Result<Bool, Error>) -> Void) {
+        completion(.success(false))
+    }
+
+    func lookupAllUnretracted(
+        managerIdentifier: String,
+        completion: @escaping (Result<[PersistedAlert], Error>) -> Void
+    ) {
+        completion(.success([]))
+    }
+
+    func lookupAllUnacknowledgedUnretracted(
+        managerIdentifier: String,
+        completion: @escaping (Result<[PersistedAlert], Error>) -> Void
+    ) {
+        completion(.success([]))
+    }
+
+    func recordRetractedAlert(_ alert: Alert, at date: Date) {
+    }
 }
