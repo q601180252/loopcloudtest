@@ -208,6 +208,30 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(delegate.readingResults.isEmpty)
     }
 
+    func testConnectFromDeletedSensorIsIgnored() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession(sensorSerial: "ABC123")
+        let sensor = makeSensor(session: session)
+        let deletionExpectation = expectation(description: "manager deletion")
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.delete {
+            deletionExpectation.fulfill()
+        }
+        manager.microTechSensorDidConnect(sensor, session: session)
+
+        wait(for: [deletionExpectation], timeout: 1)
+        wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertNil(manager.state.deviceName)
+        XCTAssertNil(manager.state.sensorSerial)
+        XCTAssertNil(manager.state.latestSampleNumber)
+        XCTAssertTrue(delegate.readingResults.isEmpty)
+    }
+
     func testReadFromPreviousSensorIsIgnoredAfterNewSensorConnects() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
@@ -252,6 +276,30 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.deviceName, "LinX-XYZ789")
         XCTAssertEqual(manager.state.latestSampleNumber, 43)
         XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["XYZ789-43"])
+    }
+
+    func testConnectFromPreviousSensorIsIgnoredAfterNewSensorConnects() throws {
+        let manager = MicroTechCGMManager()
+        let sessionA = makeSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            sensorSerial: "ABC123"
+        )
+        let sessionB = makeSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000456")!,
+            deviceName: "LinX-XYZ789",
+            sensorSerial: "XYZ789"
+        )
+        let sensorA = makeSensor(session: sessionA)
+        let sensorB = makeSensor(session: sessionB)
+
+        manager.microTechSensorDidConnect(sensorA, session: sessionA)
+        manager.microTechSensorDidConnect(sensorB, session: sessionB)
+        manager.microTechSensorDidConnect(sensorA, session: sessionA)
+
+        XCTAssertEqual(manager.state.remoteIdentifier, sessionB.remoteIdentifier)
+        XCTAssertEqual(manager.state.sensorSerial, "XYZ789")
+        XCTAssertEqual(manager.state.deviceName, "LinX-XYZ789")
     }
 
     private func makeReading(

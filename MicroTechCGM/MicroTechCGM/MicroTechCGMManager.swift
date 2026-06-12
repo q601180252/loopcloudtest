@@ -4,8 +4,8 @@ import LoopKit
 
 public final class MicroTechCGMManager: CGMManager {
     private let lockedState: Locked<MicroTechCGMManagerState>
+    private let lockedSensorIdentity: Locked<MicroTechSensorIdentityState>
     private let delegate = WeakSynchronizedDelegate<CGMManagerDelegate>()
-    private var sensor: MicroTechSensor?
 
     public static let pluginIdentifier = "MicroTechLinXCGMManager"
 
@@ -58,14 +58,17 @@ public final class MicroTechCGMManager: CGMManager {
 
     public init() {
         lockedState = Locked(MicroTechCGMManagerState())
+        lockedSensorIdentity = Locked(MicroTechSensorIdentityState())
     }
 
     init(state: MicroTechCGMManagerState) {
         lockedState = Locked(state)
+        lockedSensorIdentity = Locked(MicroTechSensorIdentityState())
     }
 
     public required init?(rawState: RawStateValue) {
         lockedState = Locked(MicroTechCGMManagerState(rawValue: rawState))
+        lockedSensorIdentity = Locked(MicroTechSensorIdentityState())
     }
 
     public var rawState: RawStateValue {
@@ -92,8 +95,15 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public func delete(completion: @escaping () -> Void) {
-        let sensorToStop = sensor
-        sensor = nil
+        var sensorToStop: MicroTechSensor?
+        lockedSensorIdentity.mutate { state in
+            sensorToStop = state.activeSensor
+            if let activeIdentifier = state.activeIdentifier {
+                state.retiredIdentifiers.insert(activeIdentifier)
+            }
+            state.activeSensor = nil
+            state.activeIdentifier = nil
+        }
         mutateState { state in
             state.remoteIdentifier = nil
             state.deviceName = nil
@@ -180,7 +190,28 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     private func isCurrentSensor(_ sensor: MicroTechSensor) -> Bool {
-        self.sensor === sensor
+        let identifier = ObjectIdentifier(sensor)
+        let state = lockedSensorIdentity.value
+        return state.activeIdentifier == identifier && !state.retiredIdentifiers.contains(identifier)
+    }
+
+    private func acceptSensorConnection(_ sensor: MicroTechSensor) -> Bool {
+        let identifier = ObjectIdentifier(sensor)
+        var isAccepted = false
+        lockedSensorIdentity.mutate { state in
+            guard !state.retiredIdentifiers.contains(identifier) else {
+                return
+            }
+
+            if let activeIdentifier = state.activeIdentifier, activeIdentifier != identifier {
+                state.retiredIdentifiers.insert(activeIdentifier)
+            }
+
+            state.activeSensor = sensor
+            state.activeIdentifier = identifier
+            isAccepted = true
+        }
+        return isAccepted
     }
 
     private func notifyStateDidChange(from oldValue: MicroTechCGMManagerState, to newValue: MicroTechCGMManagerState) {
@@ -210,7 +241,10 @@ public final class MicroTechCGMManager: CGMManager {
 
 extension MicroTechCGMManager: MicroTechSensorDelegate {
     public func microTechSensorDidConnect(_ sensor: MicroTechSensor, session: MicroTechAidexSession) {
-        self.sensor = sensor
+        guard acceptSensorConnection(sensor), isCurrentSensor(sensor) else {
+            return
+        }
+
         mutateState { state in
             state.remoteIdentifier = session.remoteIdentifier
             state.deviceName = session.deviceName
@@ -256,4 +290,10 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
 
         notifyDelegateOfReadingResult(.error(error))
     }
+}
+
+private struct MicroTechSensorIdentityState {
+    var activeSensor: MicroTechSensor?
+    var activeIdentifier: ObjectIdentifier?
+    var retiredIdentifiers: Set<ObjectIdentifier> = []
 }
