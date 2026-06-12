@@ -232,6 +232,25 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(delegate.readingResults.isEmpty)
     }
 
+    func testConnectAfterDeleteBeforeFirstActiveSensorIsIgnored() throws {
+        let manager = MicroTechCGMManager()
+        let session = makeSession(sensorSerial: "ABC123")
+        let sensor = makeSensor(session: session)
+        let deletionExpectation = expectation(description: "manager deletion")
+
+        manager.delete {
+            deletionExpectation.fulfill()
+        }
+        wait(for: [deletionExpectation], timeout: 1)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertNil(manager.state.deviceName)
+        XCTAssertNil(manager.state.sensorSerial)
+        XCTAssertNil(manager.state.latestSampleNumber)
+    }
+
     func testReadFromPreviousSensorIsIgnoredAfterNewSensorConnects() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
