@@ -16,7 +16,7 @@ public struct MicroTechGlucoseReading: Equatable, GlucoseDisplayable {
         self.sensorSerial = sensorSerial
         self.sampleNumber = current.timeOffset
         self.glucoseMgdl = current.glucose
-        self.trend = current.trend + 1
+        self.trend = current.trend
         self.receivedAt = receivedAt
         self.status = current.status
         self.quality = current.quality

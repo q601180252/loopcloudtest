@@ -49,7 +49,8 @@ final class MicroTechAidexParserTests: XCTestCase {
         }
         let reading = MicroTechGlucoseReading(current: current, sensorSerial: "ABC123", receivedAt: Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertEqual(123, reading.glucoseMgdl)
+        XCTAssertEqual(-1, reading.trend)
         XCTAssertEqual("ABC123-42", reading.syncIdentifier)
-        XCTAssertEqual(.flat, reading.trendType)
+        XCTAssertEqual(.down, reading.trendType)
     }
 }
