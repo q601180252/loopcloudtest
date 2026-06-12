@@ -11,7 +11,11 @@
 		0953E94BE1B9C92AD42D4A5D /* MicroTechCGMUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; };
 		20C66928172A229C8E4632D7 /* MicroTechCGM.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		308E8F29016A03023F490A90 /* MicroTechCGMUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		64AA99D88C0A9D9303C10B1D /* Data.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FCC8349CCEDADA71BEC9C5 /* Data.swift */; };
+		91F6307AD80AAA417711ADDA /* MicroTechAidexCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED15B7808334C0A1617E2D73 /* MicroTechAidexCrypto.swift */; };
+		B23411F81E99A943473C9CA6 /* MicroTechAidexCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C06C4AF1A39FA24AA22300 /* MicroTechAidexCryptoTests.swift */; };
 		BB5EE567FE694DA2C1D3CB7F /* MicroTechCGM.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; };
+		CEF002725E6BAFB45341A9D0 /* MicroTechAidexProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD5DB317E20A76353BD59AC /* MicroTechAidexProfile.swift */; };
 		E39687EDB521FE0683E66C80 /* MicroTechCGM.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; };
 /* End PBXBuildFile section */
 
@@ -63,9 +67,13 @@
 
 /* Begin PBXFileReference section */
 		0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGM.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		13C06C4AF1A39FA24AA22300 /* MicroTechAidexCryptoTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexCryptoTests.swift; sourceTree = "<group>"; };
+		36FCC8349CCEDADA71BEC9C5 /* Data.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Data.swift; sourceTree = "<group>"; };
 		73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.loopplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMPlugin.loopplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 		9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9EE8B38E25EACA952AE1DF14 /* MicroTechCGMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MicroTechCGMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DCD5DB317E20A76353BD59AC /* MicroTechAidexProfile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexProfile.swift; sourceTree = "<group>"; };
+		ED15B7808334C0A1617E2D73 /* MicroTechAidexCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexCrypto.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -104,6 +112,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		035DD85A2FF9EBC68F49DFA0 /* MicroTechCGM */ = {
+			isa = PBXGroup;
+			children = (
+				ED15B7808334C0A1617E2D73 /* MicroTechAidexCrypto.swift */,
+				9DE1B457343607AF6C3BD929 /* Extensions */,
+				DCD5DB317E20A76353BD59AC /* MicroTechAidexProfile.swift */,
+			);
+			path = MicroTechCGM;
+			sourceTree = "<group>";
+		};
 		1B60A03D6BDA4BC50F740149 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -119,12 +137,30 @@
 			name = iOS;
 			sourceTree = "<group>";
 		};
+		9DE1B457343607AF6C3BD929 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				36FCC8349CCEDADA71BEC9C5 /* Data.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
 		CA52734546940AA8A6D78102 = {
 			isa = PBXGroup;
 			children = (
 				FD9AD9EE1EF2F73F21041FEA /* Products */,
 				1B60A03D6BDA4BC50F740149 /* Frameworks */,
+				E6FCA0FD3C9173113317E1B6 /* MicroTechCGMTests */,
+				035DD85A2FF9EBC68F49DFA0 /* MicroTechCGM */,
 			);
+			sourceTree = "<group>";
+		};
+		E6FCA0FD3C9173113317E1B6 /* MicroTechCGMTests */ = {
+			isa = PBXGroup;
+			children = (
+				13C06C4AF1A39FA24AA22300 /* MicroTechAidexCryptoTests.swift */,
+			);
+			path = MicroTechCGMTests;
 			sourceTree = "<group>";
 		};
 		FD9AD9EE1EF2F73F21041FEA /* Products */ = {
@@ -323,6 +359,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				91F6307AD80AAA417711ADDA /* MicroTechAidexCrypto.swift in Sources */,
+				CEF002725E6BAFB45341A9D0 /* MicroTechAidexProfile.swift in Sources */,
+				64AA99D88C0A9D9303C10B1D /* Data.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -330,6 +369,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B23411F81E99A943473C9CA6 /* MicroTechAidexCryptoTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
