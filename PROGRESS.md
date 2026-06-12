@@ -15,7 +15,7 @@
 - **核心交付**：
   1. `docs/superpowers/specs/2026-06-12-microtech-linx-cgm-design.md`：微泰 LinX CGM 接入设计。
 - **验证结果**：`git diff --check` 已通过；设计文档已检查无未定项。
-- **commit hash**：待提交后记录。
+- **commit hash**：`673447a`
 - **push 状态**：待推送。
 
 ### 2026-06-12 001 - 安装通用开发规则
