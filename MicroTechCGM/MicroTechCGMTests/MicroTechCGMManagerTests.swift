@@ -37,6 +37,32 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.glucoseDisplay as? MicroTechGlucoseReading, reading)
     }
 
+    func testAcceptRejectsOlderSampleNumberForSameSensorSerial() {
+        let manager = MicroTechCGMManager()
+        let firstReading = makeReading(
+            sampleNumber: 42,
+            glucoseMgdl: 123,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let latestReading = makeReading(
+            sampleNumber: 43,
+            glucoseMgdl: 124,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_300)
+        )
+        let oldReading = makeReading(
+            sampleNumber: 42,
+            glucoseMgdl: 122,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_600)
+        )
+
+        XCTAssertEqual(manager.accept(firstReading)?.syncIdentifier, "ABC123-42")
+        XCTAssertEqual(manager.accept(latestReading)?.syncIdentifier, "ABC123-43")
+        XCTAssertNil(manager.accept(oldReading))
+        XCTAssertEqual(manager.state.latestSampleNumber, 43)
+        XCTAssertEqual(manager.state.latestReading, latestReading)
+        XCTAssertEqual(manager.glucoseDisplay as? MicroTechGlucoseReading, latestReading)
+    }
+
     func testAcceptRejectsInvalidTherapyReadings() {
         let manager = MicroTechCGMManager()
         let date = Date(timeIntervalSince1970: 1_700_000_000)

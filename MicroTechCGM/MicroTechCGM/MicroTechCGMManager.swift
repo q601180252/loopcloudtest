@@ -112,7 +112,10 @@ public final class MicroTechCGMManager: CGMManager {
         let newValue = lockedState.mutate { state in
             oldValue = state
 
-            guard state.sensorSerial != reading.sensorSerial || state.latestSampleNumber != reading.sampleNumber else {
+            if state.sensorSerial == reading.sensorSerial,
+               let latestSampleNumber = state.latestSampleNumber,
+               reading.sampleNumber <= latestSampleNumber
+            {
                 return
             }
 
