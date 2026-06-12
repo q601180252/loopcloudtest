@@ -36,6 +36,10 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
         peripheral.name ?? "MicroTech LinX"
     }
 
+    var isConnected: Bool {
+        peripheral.state == .connected
+    }
+
     private let peripheral: CBPeripheral
     private weak var centralManager: CBCentralManager?
     private let condition = NSCondition()
@@ -91,7 +95,7 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
 
     public func subscribe(_ characteristic: CBUUID) throws {
         let cbCharacteristic = try requiredCharacteristic(characteristic)
-        try run(.notification(characteristic, enabled: true)) {
+        try run(.notification(characteristic)) {
             peripheral.setNotifyValue(true, for: cbCharacteristic)
         }
     }
@@ -171,7 +175,7 @@ private extension MicroTechPeripheralManager {
     enum Command: Equatable {
         case discoverServices
         case discoverCharacteristics(CBUUID)
-        case notification(CBUUID, enabled: Bool)
+        case notification(CBUUID)
         case read(CBUUID)
         case write(CBUUID)
     }
@@ -196,7 +200,7 @@ extension MicroTechPeripheralManager: CBPeripheralDelegate {
     }
 
     public func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        complete(.notification(characteristic.uuid, enabled: characteristic.isNotifying), error: error)
+        complete(.notification(characteristic.uuid), error: error)
     }
 
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {

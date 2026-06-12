@@ -100,6 +100,32 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
         XCTAssertTrue(observer.errors.isEmpty)
     }
 
+    func testStopOnlyNotifiesDisconnectOnce() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let observer = ReadingObserver()
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake
+        )
+        sensor.delegate = observer
+
+        try sensor.start()
+        sensor.stop()
+        sensor.stop()
+
+        XCTAssertEqual(1, observer.disconnectCount)
+        XCTAssertEqual(1, fake.calls.filter { $0 == .disconnect }.count)
+    }
+
     private func encryptedChallenge(for material: MicroTechAidexKeyMaterial) throws -> Data {
         try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: material.key)
     }

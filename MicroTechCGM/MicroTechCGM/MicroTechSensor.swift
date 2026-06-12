@@ -31,6 +31,7 @@ public final class MicroTechSensor {
     private let session: MicroTechAidexSession
     private var peripheralSession: MicroTechPeripheralSession
     private let handshakeQueue = DispatchQueue(label: "com.loopkit.MicroTechCGM.sensorHandshake")
+    private var isStarted = false
     private var activeSession: MicroTechAidexSession?
     private var commandBuilder: MicroTechAidexCommandBuilder?
 
@@ -65,6 +66,7 @@ public final class MicroTechSensor {
                 deviceName: session.deviceName,
                 sensorSerial: session.sensorSerial
             )
+            isStarted = true
             delegate?.microTechSensorDidConnect(self, session: session)
         } catch {
             delegate?.microTechSensor(self, didError: error)
@@ -104,6 +106,10 @@ public final class MicroTechSensor {
     }
 
     public func stop() {
+        guard isStarted else {
+            return
+        }
+        isStarted = false
         peripheralSession.disconnect()
         commandBuilder = nil
         activeSession = nil
