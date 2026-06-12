@@ -30,6 +30,7 @@ public final class MicroTechSensor {
 
     private let session: MicroTechAidexSession
     private var peripheralSession: MicroTechPeripheralSession
+    private let handshakeQueue = DispatchQueue(label: "com.loopkit.MicroTechCGM.sensorHandshake")
     private var activeSession: MicroTechAidexSession?
     private var commandBuilder: MicroTechAidexCommandBuilder?
 
@@ -40,7 +41,7 @@ public final class MicroTechSensor {
 
     public func start() throws {
         do {
-            let baseMaterial = MicroTechAidexKeyMaterial.derive(deviceName: session.deviceName)
+            let baseMaterial = MicroTechAidexKeyMaterial.derive(serial: session.sensorSerial)
             let pairingKey = baseMaterial.key
 
             try peripheralSession.subscribe(MicroTechAidexProfile.f002UUID)
@@ -117,10 +118,11 @@ extension MicroTechSensor: MicroTechBluetoothManagerDelegate {
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didReady peripheralSession: MicroTechPeripheralSession) {
         self.peripheralSession = peripheralSession
-        do {
-            try start()
-        } catch {
-            delegate?.microTechSensor(self, didError: error)
+        handshakeQueue.async {
+            do {
+                try self.start()
+            } catch {
+            }
         }
     }
 

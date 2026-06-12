@@ -71,9 +71,8 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
             MicroTechAidexProfile.f003UUID,
         ]
 
-        if service.characteristics?.contains(where: { requiredCharacteristics.contains($0.uuid) }) != true ||
-            service.characteristics?.count ?? 0 < requiredCharacteristics.count
-        {
+        let knownCharacteristicUUIDs = service.characteristics?.map(\.uuid) ?? []
+        if requiredCharacteristics.contains(where: { !knownCharacteristicUUIDs.contains($0) }) {
             try run(.discoverCharacteristics(service.uuid)) {
                 peripheral.discoverCharacteristics(requiredCharacteristics, for: service)
             }

@@ -34,6 +34,35 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
         ], fake.calls)
     }
 
+    func testHandshakeUsesSessionSerialWhenDeviceNameDoesNotContainSerial() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "AiDEX",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake
+        )
+
+        try sensor.start()
+
+        XCTAssertEqual([
+            .subscribe(MicroTechAidexProfile.f002UUID.uuidString),
+            .subscribe(MicroTechAidexProfile.f001UUID.uuidString),
+            .write(material.key.microTechHexadecimalString, MicroTechAidexProfile.f001UUID.uuidString),
+            .write(material.key.microTechHexadecimalString, MicroTechAidexProfile.f001UUID.uuidString),
+            .read(MicroTechAidexProfile.f002UUID.uuidString),
+            .subscribe(MicroTechAidexProfile.f003UUID.uuidString),
+            .write("B0D893", MicroTechAidexProfile.f002UUID.uuidString),
+        ], fake.calls)
+    }
+
     func testF003NotificationEmitsCurrentReading() throws {
         let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
         let plain = try Data(microTechHexadecimalString: "010003FF2A007B00D204C409B80B0100003FC5")
