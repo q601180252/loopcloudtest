@@ -11,6 +11,7 @@
 		0953E94BE1B9C92AD42D4A5D /* MicroTechCGMUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; };
 		20C66928172A229C8E4632D7 /* MicroTechCGM.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		308E8F29016A03023F490A90 /* MicroTechCGMUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		335B43A7F9ECDC57EF004650 /* MicroTechAidexCommandBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D733F2EB53DA17ED74FA3E5 /* MicroTechAidexCommandBuilder.swift */; };
 		64AA99D88C0A9D9303C10B1D /* Data.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36FCC8349CCEDADA71BEC9C5 /* Data.swift */; };
 		91F6307AD80AAA417711ADDA /* MicroTechAidexCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED15B7808334C0A1617E2D73 /* MicroTechAidexCrypto.swift */; };
 		B23411F81E99A943473C9CA6 /* MicroTechAidexCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C06C4AF1A39FA24AA22300 /* MicroTechAidexCryptoTests.swift */; };
@@ -67,6 +68,7 @@
 
 /* Begin PBXFileReference section */
 		0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGM.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		0D733F2EB53DA17ED74FA3E5 /* MicroTechAidexCommandBuilder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexCommandBuilder.swift; sourceTree = "<group>"; };
 		13C06C4AF1A39FA24AA22300 /* MicroTechAidexCryptoTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexCryptoTests.swift; sourceTree = "<group>"; };
 		36FCC8349CCEDADA71BEC9C5 /* Data.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Data.swift; sourceTree = "<group>"; };
 		73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.loopplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMPlugin.loopplugin; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -118,6 +120,7 @@
 				ED15B7808334C0A1617E2D73 /* MicroTechAidexCrypto.swift */,
 				9DE1B457343607AF6C3BD929 /* Extensions */,
 				DCD5DB317E20A76353BD59AC /* MicroTechAidexProfile.swift */,
+				0D733F2EB53DA17ED74FA3E5 /* MicroTechAidexCommandBuilder.swift */,
 			);
 			path = MicroTechCGM;
 			sourceTree = "<group>";
@@ -362,6 +365,7 @@
 				91F6307AD80AAA417711ADDA /* MicroTechAidexCrypto.swift in Sources */,
 				CEF002725E6BAFB45341A9D0 /* MicroTechAidexProfile.swift in Sources */,
 				64AA99D88C0A9D9303C10B1D /* Data.swift in Sources */,
+				335B43A7F9ECDC57EF004650 /* MicroTechAidexCommandBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

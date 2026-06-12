@@ -24,4 +24,44 @@ final class MicroTechAidexCryptoTests: XCTestCase {
         XCTAssertTrue(MicroTechAidexCrypto.hasValidTrailingCRC(try Data(microTechHexadecimalString: "010203ADAD")))
         XCTAssertFalse(MicroTechAidexCrypto.hasValidTrailingCRC(try Data(microTechHexadecimalString: "010203ADAE")))
     }
+
+    func testSerialKeyDerivation() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        XCTAssertEqual("ABC123", material.sensorSerial)
+        XCTAssertEqual("C21D3C97C38DD60B2B0E129EC9EA1C84", material.key.microTechHexadecimalString)
+        XCTAssertEqual("5A837629840E30374590EE4D7DF612DE", material.iv.microTechHexadecimalString)
+
+        let fromName = MicroTechAidexKeyMaterial.derive(deviceName: "LinX-ABC123")
+        XCTAssertEqual(material, fromName)
+    }
+
+    func testAESCfbRoundTrip() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let plain = try Data(microTechHexadecimalString: "010003FF2A007B00D204C409B80B0100003FC5")
+        let encrypted = try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: plain)
+        XCTAssertEqual("A11963C33AD331B94B3352FFBF39B9455B9C01", encrypted.microTechHexadecimalString)
+        let decrypted = try MicroTechAidexCrypto.decryptCfb128(key: material.key, iv: material.iv, cipher: encrypted)
+        XCTAssertEqual(plain, decrypted)
+    }
+
+    func testCommandBuilderVectors() throws {
+        let builder = MicroTechAidexCommandBuilder(keyMaterial: .derive(serial: "ABC123"))
+        XCTAssertEqual("B0D893", try builder.cmd10().microTechHexadecimalString)
+        XCTAssertEqual("B1F983", try builder.cmd11().microTechHexadecimalString)
+        XCTAssertEqual("9118EA07", try builder.cmd31().microTechHexadecimalString)
+        XCTAssertEqual("94181FF8", try builder.cmd34().microTechHexadecimalString)
+        XCTAssertEqual("95182ECB", try builder.cmd35().microTechHexadecimalString)
+        XCTAssertEqual("8333601BEA", try builder.cmd23(index: 42).microTechHexadecimalString)
+        XCTAssertEqual("53955E", try builder.clearStorage().microTechHexadecimalString)
+    }
+
+    func testSessionMaterialFromChallenge() throws {
+        let base = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let pairingKey = base.key
+        let plainSessionKey = try Data(microTechHexadecimalString: "00112233445566778899AABBCCDDEEFF")
+        let encryptedChallenge = try MicroTechAidexCrypto.encryptCfb128(key: pairingKey, iv: base.iv, plain: plainSessionKey)
+        let session = try MicroTechAidexKeyMaterial.deriveSessionMaterial(baseMaterial: base, encryptedChallenge: encryptedChallenge, pairingKey: pairingKey)
+        XCTAssertEqual("00112233445566778899AABBCCDDEEFF", session.key.microTechHexadecimalString)
+        XCTAssertEqual(base.iv, session.iv)
+    }
 }
