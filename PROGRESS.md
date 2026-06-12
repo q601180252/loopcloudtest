@@ -15,8 +15,8 @@
 - **核心交付**：
   1. `docs/superpowers/plans/2026-06-12-microtech-linx-cgm.md`：微泰 LinX CGM 实现计划。
 - **验证结果**：`git diff --check` 已通过；计划文档已检查无未定项。
-- **commit hash**：待提交后记录。
-- **push 状态**：待推送。
+- **commit hash**：`5fe63f8`
+- **push 状态**：已随本轮推送到 `origin/main`。
 
 ### 2026-06-12 002 - 设计微泰 LinX CGM 接入
 
