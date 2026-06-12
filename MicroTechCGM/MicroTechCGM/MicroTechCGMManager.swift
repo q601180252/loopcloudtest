@@ -92,7 +92,7 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public func delete(completion: @escaping () -> Void) {
-        sensor?.stop()
+        let sensorToStop = sensor
         sensor = nil
         mutateState { state in
             state.remoteIdentifier = nil
@@ -103,6 +103,7 @@ public final class MicroTechCGMManager: CGMManager {
             state.latestReading = nil
             state.latestSampleNumber = nil
         }
+        sensorToStop?.stop()
         notifyDelegateOfDeletion(completion: completion)
     }
 
@@ -178,6 +179,10 @@ public final class MicroTechCGMManager: CGMManager {
         }
     }
 
+    private func isCurrentSensor(_ sensor: MicroTechSensor) -> Bool {
+        self.sensor === sensor
+    }
+
     private func notifyStateDidChange(from oldValue: MicroTechCGMManagerState, to newValue: MicroTechCGMManagerState) {
         guard oldValue != newValue else {
             return
@@ -214,12 +219,20 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
     }
 
     public func microTechSensorDidDisconnect(_ sensor: MicroTechSensor) {
+        guard isCurrentSensor(sensor) else {
+            return
+        }
+
         delegate.notify { delegate in
             delegate?.cgmManager(self, didUpdate: self.cgmManagerStatus)
         }
     }
 
     public func microTechSensor(_ sensor: MicroTechSensor, didRead reading: MicroTechGlucoseReading) {
+        guard isCurrentSensor(sensor) else {
+            return
+        }
+
         guard let sample = accept(reading) else {
             notifyDelegateOfReadingResult(.noData)
             return
@@ -229,10 +242,18 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
     }
 
     public func microTechSensor(_ sensor: MicroTechSensor, didReadHistory history: MicroTechAidexHistoryPacket) {
+        guard isCurrentSensor(sensor) else {
+            return
+        }
+
         notifyDelegateOfReadingResult(.noData)
     }
 
     public func microTechSensor(_ sensor: MicroTechSensor, didError error: Error) {
+        guard isCurrentSensor(sensor) else {
+            return
+        }
+
         notifyDelegateOfReadingResult(.error(error))
     }
 }

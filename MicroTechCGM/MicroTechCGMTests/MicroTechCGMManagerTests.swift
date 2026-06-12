@@ -166,6 +166,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
         }
 
         wait(for: [deletionExpectation], timeout: 1)
+        wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
         XCTAssertNil(manager.state.remoteIdentifier)
         XCTAssertNil(manager.state.deviceName)
         XCTAssertNil(manager.state.sensorSerial)
@@ -177,11 +178,88 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(1, peripheralSession.calls.filter { $0 == .disconnect }.count)
     }
 
+    func testReadFromDeletedSensorIsIgnored() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession(sensorSerial: "ABC123")
+        let sensor = makeSensor(session: session)
+        let deletionExpectation = expectation(description: "manager deletion")
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.delete {
+            deletionExpectation.fulfill()
+        }
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                sensorSerial: "ABC123"
+            )
+        )
+
+        wait(for: [deletionExpectation], timeout: 1)
+        wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
+        XCTAssertNil(manager.state.sensorSerial)
+        XCTAssertNil(manager.state.latestSampleNumber)
+        XCTAssertTrue(delegate.readingResults.isEmpty)
+    }
+
+    func testReadFromPreviousSensorIsIgnoredAfterNewSensorConnects() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let sessionA = makeSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            sensorSerial: "ABC123"
+        )
+        let sessionB = makeSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000456")!,
+            deviceName: "LinX-XYZ789",
+            sensorSerial: "XYZ789"
+        )
+        let sensorA = makeSensor(session: sessionA)
+        let sensorB = makeSensor(session: sessionB)
+
+        manager.microTechSensorDidConnect(sensorA, session: sessionA)
+        manager.microTechSensorDidConnect(sensorB, session: sessionB)
+        manager.microTechSensor(
+            sensorA,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                sensorSerial: "ABC123"
+            )
+        )
+        manager.microTechSensor(
+            sensorB,
+            didRead: makeReading(
+                sampleNumber: 43,
+                glucoseMgdl: 124,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_300),
+                sensorSerial: "XYZ789"
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(manager.state.sensorSerial, "XYZ789")
+        XCTAssertEqual(manager.state.deviceName, "LinX-XYZ789")
+        XCTAssertEqual(manager.state.latestSampleNumber, 43)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["XYZ789-43"])
+    }
+
     private func makeReading(
         sampleNumber: Int,
         glucoseMgdl: Int,
         receivedAt: Date,
-        quality: Int = 0
+        quality: Int = 0,
+        sensorSerial: String = "ABC123"
     ) -> MicroTechGlucoseReading {
         let packet = MicroTechAidexCurrentPacket(
             rawBytes: Data([0x01]),
@@ -199,16 +277,20 @@ final class MicroTechCGMManagerTests: XCTestCase {
         )
         return MicroTechGlucoseReading(
             current: packet,
-            sensorSerial: "ABC123",
+            sensorSerial: sensorSerial,
             receivedAt: receivedAt
         )
     }
 
-    private func makeSession() -> MicroTechAidexSession {
+    private func makeSession(
+        remoteIdentifier: UUID = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+        deviceName: String = "LinX-ABC123",
+        sensorSerial: String = "ABC123"
+    ) -> MicroTechAidexSession {
         MicroTechAidexSession(
-            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
-            deviceName: "LinX-ABC123",
-            sensorSerial: "ABC123"
+            remoteIdentifier: remoteIdentifier,
+            deviceName: deviceName,
+            sensorSerial: sensorSerial
         )
     }
 
