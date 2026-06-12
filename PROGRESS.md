@@ -9,6 +9,15 @@
 
 ## 进展日志
 
+### 2026-06-12 002 - 设计微泰 LinX CGM 接入
+
+- **任务**：观察 Loop 现有 CGM 插件接入方式，并结合 `aoji` 中 LinX/Aidex BLE 连接方式，形成微泰 LinX CGM 完整 BLE 直连接入设计。
+- **核心交付**：
+  1. `docs/superpowers/specs/2026-06-12-microtech-linx-cgm-design.md`：微泰 LinX CGM 接入设计。
+- **验证结果**：`git diff --check` 已通过；设计文档已检查无未定项。
+- **commit hash**：待提交后记录。
+- **push 状态**：待推送。
+
 ### 2026-06-12 001 - 安装通用开发规则
 
 - **任务**：读取 `docs/通用开发规则模板.md`，将规则适配为本项目开发要求。
