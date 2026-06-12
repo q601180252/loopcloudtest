@@ -17,5 +17,5 @@
   2. `PROGRESS.md`：倒序进展日志入口。
   3. `docs/通用开发规则模板.md`：保留通用规则来源。
 - **验证结果**：`git diff --check` 已通过；`AGENTS.md` 与 `PROGRESS.md` 已读取确认。
-- **commit hash**：待提交后记录。
-- **push 状态**：待推送。
+- **commit hash**：89a7387
+- **push 状态**：已随本轮推送到 `origin/main`。
