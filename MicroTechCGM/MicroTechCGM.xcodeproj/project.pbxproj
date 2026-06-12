@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1989A195B8FF8BB534519A4D /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93DF861FCDB2F62EF3FAC32C /* Foundation.framework */; };
-		4CB4ADDBF7986B975545D091 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93DF861FCDB2F62EF3FAC32C /* Foundation.framework */; };
-		E6BC67313F9FE494B51FD794 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93DF861FCDB2F62EF3FAC32C /* Foundation.framework */; };
-		E9DE390EBE9963CAE0F8A776 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 93DF861FCDB2F62EF3FAC32C /* Foundation.framework */; };
+		060675AB09A568DB99454B9B /* MicroTechCGM.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; };
+		0953E94BE1B9C92AD42D4A5D /* MicroTechCGMUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; };
+		20C66928172A229C8E4632D7 /* MicroTechCGM.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		308E8F29016A03023F490A90 /* MicroTechCGMUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		BB5EE567FE694DA2C1D3CB7F /* MicroTechCGM.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; };
+		E39687EDB521FE0683E66C80 /* MicroTechCGM.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,10 +46,24 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		18C3548AB0F249986B0D4BA2 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				20C66928172A229C8E4632D7 /* MicroTechCGM.framework in Embed Frameworks */,
+				308E8F29016A03023F490A90 /* MicroTechCGMUI.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGM.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMPlugin.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		93DF861FCDB2F62EF3FAC32C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.loopplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMPlugin.loopplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 		9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9EE8B38E25EACA952AE1DF14 /* MicroTechCGMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MicroTechCGMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -57,7 +73,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E9DE390EBE9963CAE0F8A776 /* Foundation.framework in Frameworks */,
+				060675AB09A568DB99454B9B /* MicroTechCGM.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,7 +81,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E6BC67313F9FE494B51FD794 /* Foundation.framework in Frameworks */,
+				E39687EDB521FE0683E66C80 /* MicroTechCGM.framework in Frameworks */,
+				0953E94BE1B9C92AD42D4A5D /* MicroTechCGMUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -73,7 +90,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4CB4ADDBF7986B975545D091 /* Foundation.framework in Frameworks */,
+				BB5EE567FE694DA2C1D3CB7F /* MicroTechCGM.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,7 +98,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1989A195B8FF8BB534519A4D /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,7 +115,6 @@
 		5AA59760BED6E5317AAC1673 /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				93DF861FCDB2F62EF3FAC32C /* Foundation.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";
@@ -117,7 +132,7 @@
 			children = (
 				0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */,
 				9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */,
-				73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.framework */,
+				73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.loopplugin */,
 				9EE8B38E25EACA952AE1DF14 /* MicroTechCGMTests.xctest */,
 			);
 			name = Products;
@@ -195,6 +210,7 @@
 				3DB30BA23EF7D664B6BC70BC /* Sources */,
 				6D6B6B7D3A5A6F0A3FD4CC6F /* Frameworks */,
 				E8F43ECF3785C6FAF0C5BF31 /* Resources */,
+				18C3548AB0F249986B0D4BA2 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -204,7 +220,7 @@
 			);
 			name = MicroTechCGMPlugin;
 			productName = MicroTechCGMPlugin;
-			productReference = 73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.framework */;
+			productReference = 73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.loopplugin */;
 			productType = "com.apple.product-type.framework";
 		};
 		AF2008C48127C37DBDB2B1A7 /* MicroTechCGMTests */ = {
