@@ -31,8 +31,16 @@ struct MicroTechSettingsView: View {
             }
 
             Section {
-                Button(LocalizedString("Scan for Sensor", comment: "MicroTech settings scan button label")) {
-                    viewModel.refresh()
+                Button(viewModel.scanButtonTitle) {
+                    viewModel.scanForSensor()
+                }
+
+                if viewModel.isScanning {
+                    HStack {
+                        Text(LocalizedString("Scanning", comment: "MicroTech settings scanning status label"))
+                        Spacer()
+                        ProgressView()
+                    }
                 }
 
                 deleteCGMButton
@@ -41,6 +49,9 @@ struct MicroTechSettingsView: View {
         .insetGroupedListStyle()
         .navigationBarItems(trailing: doneButton)
         .navigationBarTitle(LocalizedString("MicroTech LinX", comment: "Navigation title for MicroTech settings"))
+        .onAppear {
+            viewModel.refresh()
+        }
     }
 
     private var doneButton: some View {

@@ -1,6 +1,16 @@
 import CoreBluetooth
 import Foundation
 
+protocol MicroTechBluetoothManaging: AnyObject {
+    var delegate: MicroTechBluetoothManagerDelegate? { get set }
+    var isScanning: Bool { get }
+    var isConnected: Bool { get }
+
+    func scan(remoteIdentifier: UUID?)
+    func disconnect()
+    func forgetPeripheral()
+}
+
 public protocol MicroTechBluetoothManagerDelegate: AnyObject {
     func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, shouldConnectToDeviceName deviceName: String, identifier: UUID) -> Bool
     func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didReady peripheralSession: MicroTechPeripheralSession)
@@ -188,6 +198,9 @@ public final class MicroTechBluetoothManager: NSObject {
             activePeripheralManager = nil
         }
     }
+}
+
+extension MicroTechBluetoothManager: MicroTechBluetoothManaging {
 }
 
 extension MicroTechBluetoothManager: CBCentralManagerDelegate {

@@ -88,6 +88,38 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertFalse(manager.shouldSyncToRemoteService)
     }
 
+    func testScanForSensorRequiresSensorSerial() {
+        var didCreateBluetoothManager = false
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: {
+                didCreateBluetoothManager = true
+                return FakeMicroTechBluetoothManager()
+            }
+        )
+
+        XCTAssertFalse(manager.scanForSensor())
+        XCTAssertFalse(didCreateBluetoothManager)
+    }
+
+    func testScanForSensorStartsBluetoothScanForSavedSensor() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+        XCTAssertTrue(manager.isScanning)
+    }
+
     func testSensorConnectAndCurrentReadUpdateStateAndEmitNewData() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
@@ -526,5 +558,29 @@ private final class TestCGMManagerDelegate: CGMManagerDelegate {
     }
 
     func recordRetractedAlert(_ alert: Alert, at date: Date) {
+    }
+}
+
+private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
+    weak var delegate: MicroTechBluetoothManagerDelegate?
+    var isScanning = false
+    var isConnected = false
+    private(set) var scanRemoteIdentifiers: [UUID?] = []
+    private(set) var disconnectCallCount = 0
+    private(set) var forgetPeripheralCallCount = 0
+
+    func scan(remoteIdentifier: UUID?) {
+        isScanning = true
+        scanRemoteIdentifiers.append(remoteIdentifier)
+    }
+
+    func disconnect() {
+        isScanning = false
+        isConnected = false
+        disconnectCallCount += 1
+    }
+
+    func forgetPeripheral() {
+        forgetPeripheralCallCount += 1
     }
 }

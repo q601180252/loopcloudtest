@@ -1,3 +1,4 @@
+import CoreBluetooth
 import Foundation
 import HealthKit
 import LoopKit
@@ -5,6 +6,7 @@ import LoopKit
 public final class MicroTechCGMManager: CGMManager {
     private let lockedManagerState: Locked<MicroTechCGMManagerProtectedState>
     private let delegate = WeakSynchronizedDelegate<CGMManagerDelegate>()
+    private let bluetoothManagerFactory: () -> MicroTechBluetoothManaging
 
     public static let pluginIdentifier = "MicroTechLinXCGMManager"
 
@@ -53,6 +55,18 @@ public final class MicroTechCGMManager: CGMManager {
         state.uploadReadings
     }
 
+    public var isScanning: Bool {
+        readProtectedState { state in
+            state.bluetoothManager?.isScanning == true
+        }
+    }
+
+    public var isConnected: Bool {
+        readProtectedState { state in
+            state.bluetoothManager?.isConnected == true
+        }
+    }
+
     public var glucoseDisplay: GlucoseDisplayable? {
         state.latestReading
     }
@@ -67,14 +81,20 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public init() {
+        bluetoothManagerFactory = { MicroTechBluetoothManager() }
         lockedManagerState = Locked(MicroTechCGMManagerProtectedState(state: MicroTechCGMManagerState()))
     }
 
-    init(state: MicroTechCGMManagerState) {
+    init(
+        state: MicroTechCGMManagerState,
+        bluetoothManagerFactory: @escaping () -> MicroTechBluetoothManaging = { MicroTechBluetoothManager() }
+    ) {
+        self.bluetoothManagerFactory = bluetoothManagerFactory
         lockedManagerState = Locked(MicroTechCGMManagerProtectedState(state: state))
     }
 
     public required init?(rawState: RawStateValue) {
+        bluetoothManagerFactory = { MicroTechBluetoothManager() }
         lockedManagerState = Locked(MicroTechCGMManagerProtectedState(state: MicroTechCGMManagerState(rawValue: rawState)))
     }
 
@@ -98,19 +118,67 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public func fetchNewDataIfNeeded(_ completion: @escaping (CGMReadingResult) -> Void) {
+        scanForSensor()
         completion(.noData)
+    }
+
+    @discardableResult
+    public func scanForSensor() -> Bool {
+        let currentState = state
+        guard let sensorSerial = currentState.sensorSerial, !sensorSerial.isEmpty else {
+            return false
+        }
+
+        let session = MicroTechAidexSession(
+            remoteIdentifier: currentState.remoteIdentifier ?? UUID(),
+            deviceName: currentState.deviceName ?? "LinX-\(sensorSerial)",
+            sensorSerial: sensorSerial
+        )
+        let sensor = MicroTechSensor(
+            session: session,
+            peripheralSession: MicroTechPendingPeripheralSession(session: session)
+        )
+        sensor.delegate = self
+        var bluetoothManager: MicroTechBluetoothManaging?
+
+        _ = mutateProtectedState { protectedState in
+            guard !protectedState.sensorIdentity.isDeleted else {
+                return
+            }
+
+            if let activeIdentifier = protectedState.sensorIdentity.activeIdentifier {
+                protectedState.sensorIdentity.retiredIdentifiers.insert(activeIdentifier)
+            }
+
+            let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
+            manager.delegate = sensor
+            protectedState.bluetoothManager = manager
+            protectedState.sensorIdentity.activeSensor = sensor
+            protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
+            bluetoothManager = manager
+        }
+
+        guard let bluetoothManager else {
+            return false
+        }
+
+        bluetoothManager.scan(remoteIdentifier: currentState.remoteIdentifier)
+        return true
     }
 
     public func delete(completion: @escaping () -> Void) {
         var sensorToStop: MicroTechSensor?
+        var bluetoothManagerToDisconnect: MicroTechBluetoothManaging?
         let stateChange = mutateProtectedState { protectedState in
             sensorToStop = protectedState.sensorIdentity.activeSensor
+            bluetoothManagerToDisconnect = protectedState.bluetoothManager
             if let activeIdentifier = protectedState.sensorIdentity.activeIdentifier {
                 protectedState.sensorIdentity.retiredIdentifiers.insert(activeIdentifier)
             }
             protectedState.sensorIdentity.activeSensor = nil
             protectedState.sensorIdentity.activeIdentifier = nil
             protectedState.sensorIdentity.isDeleted = true
+            protectedState.bluetoothManager = nil
 
             protectedState.state.remoteIdentifier = nil
             protectedState.state.deviceName = nil
@@ -121,6 +189,8 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.state.latestSampleNumber = nil
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+        bluetoothManagerToDisconnect?.disconnect()
+        bluetoothManagerToDisconnect?.forgetPeripheral()
         sensorToStop?.stop()
         notifyDelegateOfDeletion(completion: completion)
     }
@@ -368,6 +438,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
 private struct MicroTechCGMManagerProtectedState {
     var state: MicroTechCGMManagerState
     var sensorIdentity = MicroTechSensorIdentityState()
+    var bluetoothManager: MicroTechBluetoothManaging?
 }
 
 private struct MicroTechSensorIdentityState {
@@ -375,4 +446,33 @@ private struct MicroTechSensorIdentityState {
     var activeIdentifier: ObjectIdentifier?
     var retiredIdentifiers: Set<ObjectIdentifier> = []
     var isDeleted = false
+}
+
+private enum MicroTechPendingPeripheralSessionError: Error {
+    case notConnected
+}
+
+private final class MicroTechPendingPeripheralSession: MicroTechPeripheralSession {
+    let deviceIdentifier: UUID
+    let deviceName: String
+
+    init(session: MicroTechAidexSession) {
+        deviceIdentifier = session.remoteIdentifier
+        deviceName = session.deviceName
+    }
+
+    func subscribe(_ characteristic: CBUUID) throws {
+        throw MicroTechPendingPeripheralSessionError.notConnected
+    }
+
+    func write(_ value: Data, to characteristic: CBUUID) throws {
+        throw MicroTechPendingPeripheralSessionError.notConnected
+    }
+
+    func read(_ characteristic: CBUUID) throws -> Data {
+        throw MicroTechPendingPeripheralSessionError.notConnected
+    }
+
+    func disconnect() {
+    }
 }
