@@ -32,6 +32,18 @@
 		E7E0CA84C34EFA4A92915F8A /* MicroTechAidexParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CE6EAB21C7D5606148E4E11 /* MicroTechAidexParser.swift */; };
 		E84286A69B08F5A75F8C599B /* MicroTechGlucoseReading.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7046CD0FCE4B537A7D36A3E4 /* MicroTechGlucoseReading.swift */; };
 		F2031425A637B849C05D6E7F /* OSLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D405E617F829A03B4C5D /* OSLog.swift */; };
+		F8E200000000000000000001 /* MicroTechCGMManager+UI.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000001 /* MicroTechCGMManager+UI.swift */; };
+		F8E200000000000000000002 /* MicroTechUICoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000002 /* MicroTechUICoordinator.swift */; };
+		F8E200000000000000000003 /* MicroTechSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000003 /* MicroTechSetupView.swift */; };
+		F8E200000000000000000004 /* MicroTechSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000004 /* MicroTechSettingsView.swift */; };
+		F8E200000000000000000005 /* MicroTechSettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000005 /* MicroTechSettingsViewModel.swift */; };
+		F8E200000000000000000006 /* LocalizedString.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000006 /* LocalizedString.swift */; };
+		F8E200000000000000000007 /* Bundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000007 /* Bundle.swift */; };
+		F8E200000000000000000008 /* MicroTechCGMPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000008 /* MicroTechCGMPlugin.swift */; };
+		F8E200000000000000000009 /* MicroTechCGMPlugin.h in Headers */ = {isa = PBXBuildFile; fileRef = F8E100000000000000000009 /* MicroTechCGMPlugin.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		F8E400000000000000000001 /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
+		F8E400000000000000000002 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
+		F8E400000000000000000003 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
 		FF75473C16059C1DF2C3BDCF /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
 /* End PBXBuildFile section */
 
@@ -104,6 +116,15 @@
 		DCD5DB317E20A76353BD59AC /* MicroTechAidexProfile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexProfile.swift; sourceTree = "<group>"; };
 		E1F2A304B516C728D93A4B5C /* MicroTechCGMManagerState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechCGMManagerState.swift; sourceTree = "<group>"; };
 		ED15B7808334C0A1617E2D73 /* MicroTechAidexCrypto.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexCrypto.swift; sourceTree = "<group>"; };
+		F8E100000000000000000001 /* MicroTechCGMManager+UI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = "MicroTechCGMManager+UI.swift"; sourceTree = "<group>"; };
+		F8E100000000000000000002 /* MicroTechUICoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechUICoordinator.swift; sourceTree = "<group>"; };
+		F8E100000000000000000003 /* MicroTechSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechSetupView.swift; sourceTree = "<group>"; };
+		F8E100000000000000000004 /* MicroTechSettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechSettingsView.swift; sourceTree = "<group>"; };
+		F8E100000000000000000005 /* MicroTechSettingsViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechSettingsViewModel.swift; sourceTree = "<group>"; };
+		F8E100000000000000000006 /* LocalizedString.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalizedString.swift; sourceTree = "<group>"; };
+		F8E100000000000000000007 /* Bundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = Bundle.swift; sourceTree = "<group>"; };
+		F8E100000000000000000008 /* MicroTechCGMPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechCGMPlugin.swift; sourceTree = "<group>"; };
+		F8E100000000000000000009 /* MicroTechCGMPlugin.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = MicroTechCGMPlugin.h; sourceTree = "<group>"; };
 		F1A2B304C516D728E93A4B5C /* MicroTechCGMManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechCGMManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -122,6 +143,7 @@
 			files = (
 				E39687EDB521FE0683E66C80 /* MicroTechCGM.framework in Frameworks */,
 				0953E94BE1B9C92AD42D4A5D /* MicroTechCGMUI.framework in Frameworks */,
+				F8E400000000000000000003 /* LoopKitUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,6 +152,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB5EE567FE694DA2C1D3CB7F /* MicroTechCGM.framework in Frameworks */,
+				F8E400000000000000000001 /* LoopKit in Frameworks */,
+				F8E400000000000000000002 /* LoopKitUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -195,6 +219,8 @@
 				1B60A03D6BDA4BC50F740149 /* Frameworks */,
 				E6FCA0FD3C9173113317E1B6 /* MicroTechCGMTests */,
 				035DD85A2FF9EBC68F49DFA0 /* MicroTechCGM */,
+				F8E300000000000000000001 /* MicroTechCGMUI */,
+				F8E300000000000000000005 /* MicroTechCGMPlugin */,
 			);
 			sourceTree = "<group>";
 		};
@@ -208,6 +234,53 @@
 				D1E2F30415263748A9B5C6D7 /* MicroTechCGMManagerTests.swift */,
 			);
 			path = MicroTechCGMTests;
+			sourceTree = "<group>";
+		};
+		F8E300000000000000000001 /* MicroTechCGMUI */ = {
+			isa = PBXGroup;
+			children = (
+				F8E300000000000000000002 /* MicroTechCGMManager */,
+				F8E300000000000000000003 /* Views */,
+				F8E300000000000000000004 /* Extensions */,
+				F8E100000000000000000006 /* LocalizedString.swift */,
+			);
+			path = MicroTechCGMUI;
+			sourceTree = "<group>";
+		};
+		F8E300000000000000000002 /* MicroTechCGMManager */ = {
+			isa = PBXGroup;
+			children = (
+				F8E100000000000000000001 /* MicroTechCGMManager+UI.swift */,
+				F8E100000000000000000002 /* MicroTechUICoordinator.swift */,
+			);
+			path = MicroTechCGMManager;
+			sourceTree = "<group>";
+		};
+		F8E300000000000000000003 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				F8E100000000000000000003 /* MicroTechSetupView.swift */,
+				F8E100000000000000000004 /* MicroTechSettingsView.swift */,
+				F8E100000000000000000005 /* MicroTechSettingsViewModel.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		F8E300000000000000000004 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				F8E100000000000000000007 /* Bundle.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		F8E300000000000000000005 /* MicroTechCGMPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				F8E100000000000000000009 /* MicroTechCGMPlugin.h */,
+				F8E100000000000000000008 /* MicroTechCGMPlugin.swift */,
+			);
+			path = MicroTechCGMPlugin;
 			sourceTree = "<group>";
 		};
 		FD9AD9EE1EF2F73F21041FEA /* Products */ = {
@@ -228,6 +301,7 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8E200000000000000000009 /* MicroTechCGMPlugin.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,6 +337,10 @@
 				67F37C1B903C94E9884084F1 /* PBXTargetDependency */,
 			);
 			name = MicroTechCGMUI;
+			packageProductDependencies = (
+				31473D2C42F39109727AC0BD /* LoopKit */,
+				F8E500000000000000000001 /* LoopKitUI */,
+			);
 			productName = MicroTechCGMUI;
 			productReference = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */;
 			productType = "com.apple.product-type.framework";
@@ -305,6 +383,9 @@
 				1189C4FD7E097C0F1CFE135A /* PBXTargetDependency */,
 			);
 			name = MicroTechCGMPlugin;
+			packageProductDependencies = (
+				F8E500000000000000000001 /* LoopKitUI */,
+			);
 			productName = MicroTechCGMPlugin;
 			productReference = 73C5D29991B3E1921865D8DE /* MicroTechCGMPlugin.loopplugin */;
 			productType = "com.apple.product-type.framework";
@@ -398,6 +479,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8E200000000000000000006 /* LocalizedString.swift in Sources */,
+				F8E200000000000000000007 /* Bundle.swift in Sources */,
+				F8E200000000000000000001 /* MicroTechCGMManager+UI.swift in Sources */,
+				F8E200000000000000000002 /* MicroTechUICoordinator.swift in Sources */,
+				F8E200000000000000000003 /* MicroTechSetupView.swift in Sources */,
+				F8E200000000000000000004 /* MicroTechSettingsView.swift in Sources */,
+				F8E200000000000000000005 /* MicroTechSettingsViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -405,6 +493,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F8E200000000000000000008 /* MicroTechCGMPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -643,7 +732,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
+				DEFINES_MODULE = NO;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -720,7 +809,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEFINES_MODULE = YES;
+				DEFINES_MODULE = NO;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -832,6 +921,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = AF37E56DC768C0BA52DF2ACF /* XCLocalSwiftPackageReference "LoopKit" */;
 			productName = LoopKit;
+		};
+		F8E500000000000000000001 /* LoopKitUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AF37E56DC768C0BA52DF2ACF /* XCLocalSwiftPackageReference "LoopKit" */;
+			productName = LoopKitUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
