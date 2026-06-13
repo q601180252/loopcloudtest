@@ -297,6 +297,49 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["XYZ789-43"])
     }
 
+    func testNewSensorConnectionClearsPreviousReadingTrackingBeforeAcceptingNewSamples() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let sessionA = makeSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            sensorSerial: "ABC123"
+        )
+        let sessionB = makeSession(
+            remoteIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000456")!,
+            deviceName: "LinX-XYZ789",
+            sensorSerial: "XYZ789"
+        )
+        let sensorA = makeSensor(session: sessionA)
+        let sensorB = makeSensor(session: sessionB)
+        let readingA = makeReading(
+            sampleNumber: 100,
+            glucoseMgdl: 123,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            sensorSerial: "ABC123"
+        )
+        let readingB = makeReading(
+            sampleNumber: 1,
+            glucoseMgdl: 124,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_300),
+            sensorSerial: "XYZ789"
+        )
+
+        manager.microTechSensorDidConnect(sensorA, session: sessionA)
+        manager.microTechSensor(sensorA, didRead: readingA)
+        manager.microTechSensorDidConnect(sensorB, session: sessionB)
+        manager.microTechSensor(sensorB, didRead: readingB)
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-100", "XYZ789-1"])
+        XCTAssertEqual(manager.state.sensorSerial, "XYZ789")
+        XCTAssertEqual(manager.state.deviceName, "LinX-XYZ789")
+        XCTAssertEqual(manager.state.latestSampleNumber, 1)
+        XCTAssertEqual(manager.state.latestReading, readingB)
+    }
+
     func testConnectFromPreviousSensorIsIgnoredAfterNewSensorConnects() throws {
         let manager = MicroTechCGMManager()
         let sessionA = makeSession(

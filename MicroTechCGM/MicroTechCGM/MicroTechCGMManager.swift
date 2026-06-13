@@ -205,6 +205,13 @@ public final class MicroTechCGMManager: CGMManager {
             state.sensorIdentity.retiredIdentifiers.insert(activeIdentifier)
         }
 
+        if let sensorSerial = state.state.sensorSerial, sensorSerial != session.sensorSerial {
+            state.state.activationTime = nil
+            state.state.lastReadingDate = nil
+            state.state.latestReading = nil
+            state.state.latestSampleNumber = nil
+        }
+
         state.sensorIdentity.activeSensor = sensor
         state.sensorIdentity.activeIdentifier = identifier
         state.state.remoteIdentifier = session.remoteIdentifier
