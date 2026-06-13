@@ -129,40 +129,46 @@ public final class MicroTechCGMManager: CGMManager {
             return false
         }
 
-        let session = MicroTechAidexSession(
-            remoteIdentifier: currentState.remoteIdentifier ?? UUID(),
-            deviceName: currentState.deviceName ?? "LinX-\(sensorSerial)",
-            sensorSerial: sensorSerial
-        )
-        let sensor = MicroTechSensor(
-            session: session,
-            peripheralSession: MicroTechPendingPeripheralSession(session: session)
-        )
-        sensor.delegate = self
         var bluetoothManager: MicroTechBluetoothManaging?
+        var shouldStartScan = false
 
         _ = mutateProtectedState { protectedState in
             guard !protectedState.sensorIdentity.isDeleted else {
                 return
             }
 
-            if let activeIdentifier = protectedState.sensorIdentity.activeIdentifier {
-                protectedState.sensorIdentity.retiredIdentifiers.insert(activeIdentifier)
+            let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
+            protectedState.bluetoothManager = manager
+
+            if let activeSensor = protectedState.sensorIdentity.activeSensor {
+                manager.delegate = activeSensor
+            } else {
+                let session = MicroTechAidexSession(
+                    remoteIdentifier: currentState.remoteIdentifier ?? UUID(),
+                    deviceName: currentState.deviceName ?? "LinX-\(sensorSerial)",
+                    sensorSerial: sensorSerial
+                )
+                let sensor = MicroTechSensor(
+                    session: session,
+                    peripheralSession: MicroTechPendingPeripheralSession(session: session)
+                )
+                sensor.delegate = self
+                manager.delegate = sensor
+                protectedState.sensorIdentity.activeSensor = sensor
+                protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
             }
 
-            let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
-            manager.delegate = sensor
-            protectedState.bluetoothManager = manager
-            protectedState.sensorIdentity.activeSensor = sensor
-            protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
             bluetoothManager = manager
+            shouldStartScan = !(manager.isScanning || manager.isConnected)
         }
 
         guard let bluetoothManager else {
             return false
         }
 
-        bluetoothManager.scan(remoteIdentifier: currentState.remoteIdentifier)
+        if shouldStartScan {
+            bluetoothManager.scan(remoteIdentifier: currentState.remoteIdentifier)
+        }
         return true
     }
 

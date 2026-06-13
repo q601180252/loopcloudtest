@@ -120,6 +120,50 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(manager.isScanning)
     }
 
+    func testRepeatedScanAndFetchKeepActiveSensorAcceptingReadings() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let firstSensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+
+        XCTAssertTrue(manager.scanForSensor())
+        manager.fetchNewDataIfNeeded { result in
+            if case .noData = result {
+                return
+            }
+            XCTFail("Expected fetch to report no data")
+        }
+
+        XCTAssertTrue((bluetoothManager.delegate as AnyObject?) === firstSensor)
+        manager.microTechSensorDidConnect(firstSensor, session: makeSession())
+        manager.microTechSensor(
+            firstSensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
+        XCTAssertEqual(manager.state.latestSampleNumber, 42)
+    }
+
     func testSensorConnectAndCurrentReadUpdateStateAndEmitNewData() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
