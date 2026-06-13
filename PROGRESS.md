@@ -26,7 +26,7 @@
   - `xcodebuild -workspace LoopWorkspace.xcworkspace -list` 已显示 `Shared (MicroTechCGM project)`。
   - `xcodebuild build -workspace LoopWorkspace.xcworkspace -scheme LoopWorkspace -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO` 在构建前停止，原因是本机缺少 `watchOS 26.5`，未进入 MicroTech 编译阶段。
 - **commit hash**：`a954bd5`（LoopWorkspace 集成），`75984e5`（Task 8 测试补齐）；完整实现见 `microtech-linx-cgm` 分支提交历史。
-- **push 状态**：待推送到 `origin/microtech-linx-cgm`。
+- **push 状态**：已推送到 `origin/microtech-linx-cgm`。
 
 ### 2026-06-12 003 - 编写微泰 LinX CGM 实现计划
 
