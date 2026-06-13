@@ -50,12 +50,8 @@ final class MicroTechSettingsViewModel: ObservableObject {
     }
 
     func scanForSensor() {
-        if !cgmManager.scanForSensor() {
-            refresh()
-            return
-        }
-
-        isScanning = true
+        cgmManager.scanForSensor()
+        refresh()
     }
 
     private static func glucoseString(from reading: MicroTechGlucoseReading?, displayGlucosePreference: DisplayGlucosePreference) -> String {

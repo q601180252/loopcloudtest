@@ -45,6 +45,8 @@
 		F8E400000000000000000002 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
 		F8E400000000000000000003 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
 		F8E400000000000000000004 /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
+		F8E400000000000000000005 /* MicroTechCGMUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */; };
+		F8E400000000000000000006 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
 		FF75473C16059C1DF2C3BDCF /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
 /* End PBXBuildFile section */
 
@@ -57,6 +59,13 @@
 			remoteInfo = MicroTechCGM;
 		};
 		9DF9ABEF77F0DEB24B44F821 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C4135A6277575E32F5194964 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2EE0D006931C291D847DD7BA;
+			remoteInfo = MicroTechCGMUI;
+		};
+		B8E700000000000000000001 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = C4135A6277575E32F5194964 /* Project object */;
 			proxyType = 1;
@@ -135,7 +144,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				060675AB09A568DB99454B9B /* MicroTechCGM.framework in Frameworks */,
+				F8E400000000000000000005 /* MicroTechCGMUI.framework in Frameworks */,
 				F8E400000000000000000004 /* LoopKit in Frameworks */,
+				F8E400000000000000000006 /* LoopKitUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,10 +415,12 @@
 			);
 			dependencies = (
 				7E1B1E651326F00FB67F113A /* PBXTargetDependency */,
+				B8E700000000000000000002 /* PBXTargetDependency */,
 			);
 			name = MicroTechCGMTests;
 			packageProductDependencies = (
 				31473D2C42F39109727AC0BD /* LoopKit */,
+				F8E500000000000000000001 /* LoopKitUI */,
 			);
 			productName = MicroTechCGMTests;
 			productReference = 9EE8B38E25EACA952AE1DF14 /* MicroTechCGMTests.xctest */;
@@ -555,6 +568,12 @@
 			name = MicroTechCGM;
 			target = 78D722C8BDD5FF1D4744E091 /* MicroTechCGM */;
 			targetProxy = C605273AE834F2A7101E2B2D /* PBXContainerItemProxy */;
+		};
+		B8E700000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = MicroTechCGMUI;
+			target = 2EE0D006931C291D847DD7BA /* MicroTechCGMUI */;
+			targetProxy = B8E700000000000000000001 /* PBXContainerItemProxy */;
 		};
 		F0E9EAA1568DED7C44BDFB5B /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;

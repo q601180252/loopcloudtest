@@ -38,7 +38,11 @@ extension MicroTechCGMManager: CGMManagerUI {
             return nil
         }
 
-        if state.lastReadingDate.map({ Date().timeIntervalSince($0) <= 15 * 60 }) != true {
+        guard let lastReadingDate = state.lastReadingDate else {
+            return nil
+        }
+
+        if Date().timeIntervalSince(lastReadingDate) > 15 * 60 {
             return MicroTechDeviceStatusHighlight(
                 localizedMessage: LocalizedString("Signal\nLoss", comment: "MicroTech status highlight text for signal loss"),
                 imageName: "exclamationmark.circle.fill",

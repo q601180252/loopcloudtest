@@ -1,7 +1,9 @@
 import HealthKit
 import LoopKit
+import LoopKitUI
 import XCTest
 @testable import MicroTechCGM
+@testable import MicroTechCGMUI
 
 final class MicroTechCGMManagerTests: XCTestCase {
     func testMakeSampleConvertsReadingForLoop() {
@@ -88,6 +90,23 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertFalse(manager.shouldSyncToRemoteService)
     }
 
+    func testStatusHighlightOnlyShowsSignalLossForExpiredReading() {
+        XCTAssertNil(MicroTechCGMManager().cgmStatusHighlight)
+
+        var state = MicroTechCGMManagerState()
+        state.sensorSerial = "ABC123"
+        XCTAssertNil(MicroTechCGMManager(state: state).cgmStatusHighlight)
+
+        state.lastReadingDate = Date().addingTimeInterval(-14 * 60)
+        XCTAssertNil(MicroTechCGMManager(state: state).cgmStatusHighlight)
+
+        state.lastReadingDate = Date().addingTimeInterval(-16 * 60)
+        let highlight = MicroTechCGMManager(state: state).cgmStatusHighlight as? MicroTechDeviceStatusHighlight
+        XCTAssertEqual(highlight?.localizedMessage, "Signal\nLoss")
+        XCTAssertEqual(highlight?.imageName, "exclamationmark.circle.fill")
+        XCTAssertEqual(highlight?.state, .warning)
+    }
+
     func testScanForSensorRequiresSensorSerial() {
         var didCreateBluetoothManager = false
         let manager = MicroTechCGMManager(
@@ -162,6 +181,29 @@ final class MicroTechCGMManagerTests: XCTestCase {
         wait(for: [delegate.readingResultsExpectation], timeout: 1)
         XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
         XCTAssertEqual(manager.state.latestSampleNumber, 42)
+    }
+
+    func testSettingsViewModelScanUsesActualManagerScanningStateWhenConnected() {
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        bluetoothManager.isConnected = true
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let viewModel = MicroTechSettingsViewModel(
+            cgmManager: manager,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
+        )
+
+        viewModel.scanForSensor()
+
+        XCTAssertFalse(viewModel.isScanning)
+        XCTAssertTrue(manager.isConnected)
+        XCTAssertTrue(bluetoothManager.scanRemoteIdentifiers.isEmpty)
     }
 
     func testSensorConnectAndCurrentReadUpdateStateAndEmitNewData() throws {
