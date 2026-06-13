@@ -44,6 +44,7 @@
 		F8E400000000000000000001 /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
 		F8E400000000000000000002 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
 		F8E400000000000000000003 /* LoopKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = F8E500000000000000000001 /* LoopKitUI */; };
+		F8E400000000000000000004 /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
 		FF75473C16059C1DF2C3BDCF /* LoopKit in Frameworks */ = {isa = PBXBuildFile; productRef = 31473D2C42F39109727AC0BD /* LoopKit */; };
 /* End PBXBuildFile section */
 
@@ -134,6 +135,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				060675AB09A568DB99454B9B /* MicroTechCGM.framework in Frameworks */,
+				F8E400000000000000000004 /* LoopKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -404,6 +406,9 @@
 				7E1B1E651326F00FB67F113A /* PBXTargetDependency */,
 			);
 			name = MicroTechCGMTests;
+			packageProductDependencies = (
+				31473D2C42F39109727AC0BD /* LoopKit */,
+			);
 			productName = MicroTechCGMTests;
 			productReference = 9EE8B38E25EACA952AE1DF14 /* MicroTechCGMTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
