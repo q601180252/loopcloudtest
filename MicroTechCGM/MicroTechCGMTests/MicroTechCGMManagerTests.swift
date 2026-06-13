@@ -6,6 +6,31 @@ import XCTest
 @testable import MicroTechCGMUI
 
 final class MicroTechCGMManagerTests: XCTestCase {
+    func testPluginReturnsMicroTechCGMManagerType() {
+        let pluginBundle = microTechPluginBundle()
+        do {
+            try pluginBundle.loadAndReturnError()
+        } catch {
+            return XCTFail(String(describing: error))
+        }
+        guard let pluginClass = pluginBundle.principalClass as? NSObject.Type else {
+            return XCTFail("Expected MicroTechCGMPlugin principal class")
+        }
+        guard let plugin = pluginClass.init() as? CGMManagerUIPlugin else {
+            return XCTFail("Expected MicroTechCGMPlugin to conform to CGMManagerUIPlugin")
+        }
+
+        XCTAssertTrue(plugin.cgmManagerType == MicroTechCGMManager.self)
+    }
+
+    func testPluginInfoPlistContainsLoopMetadata() {
+        let pluginBundle = microTechPluginBundle()
+
+        XCTAssertEqual(pluginBundle.infoDictionary?["NSPrincipalClass"] as? String, "MicroTechCGMPlugin")
+        XCTAssertEqual(pluginBundle.infoDictionary?["com.loopkit.Loop.CGMManagerDisplayName"] as? String, "MicroTech LinX")
+        XCTAssertEqual(pluginBundle.infoDictionary?["com.loopkit.Loop.CGMManagerIdentifier"] as? String, "MicroTechLinXCGMManager")
+    }
+
     func testMakeSampleConvertsReadingForLoop() {
         let manager = MicroTechCGMManager()
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -204,6 +229,49 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertFalse(viewModel.isScanning)
         XCTAssertTrue(manager.isConnected)
         XCTAssertTrue(bluetoothManager.scanRemoteIdentifiers.isEmpty)
+    }
+
+    func testSettingsViewModelRefreshDisplaysManagerStateAndWritesUploadPreference() {
+        let noSensorViewModel = MicroTechSettingsViewModel(
+            cgmManager: MicroTechCGMManager(),
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
+        )
+        XCTAssertEqual(noSensorViewModel.scanButtonTitle, "Refresh")
+
+        let readingDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let reading = makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: readingDate)
+        var state = MicroTechCGMManagerState()
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        state.lastReadingDate = readingDate
+        state.latestReading = reading
+        state.latestSampleNumber = 42
+        state.uploadReadings = true
+        let manager = MicroTechCGMManager(state: state)
+        let displayGlucosePreference = DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
+        let viewModel = MicroTechSettingsViewModel(
+            cgmManager: manager,
+            displayGlucosePreference: displayGlucosePreference
+        )
+
+        XCTAssertEqual(viewModel.deviceName, "LinX-ABC123")
+        XCTAssertEqual(viewModel.sensorSerial, "ABC123")
+        XCTAssertEqual(viewModel.lastReadingDate, readingDate)
+        XCTAssertEqual(viewModel.lastGlucoseString, displayGlucosePreference.formatter.string(from: reading.glucoseQuantity!))
+        XCTAssertTrue(viewModel.uploadReadings)
+        XCTAssertEqual(viewModel.scanButtonTitle, "Scan for Sensor")
+
+        viewModel.uploadReadings = false
+        XCTAssertFalse(manager.state.uploadReadings)
+
+        let refreshedDate = Date(timeIntervalSince1970: 1_700_000_300)
+        let refreshedReading = makeReading(sampleNumber: 43, glucoseMgdl: 124, receivedAt: refreshedDate)
+        _ = manager.accept(refreshedReading)
+        viewModel.refresh()
+
+        XCTAssertEqual(viewModel.lastReadingDate, refreshedDate)
+        XCTAssertEqual(viewModel.lastGlucoseString, displayGlucosePreference.formatter.string(from: refreshedReading.glucoseQuantity!))
+        XCTAssertFalse(viewModel.uploadReadings)
     }
 
     func testSensorConnectAndCurrentReadUpdateStateAndEmitNewData() throws {
@@ -549,6 +617,21 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
     private func encryptedChallenge(for material: MicroTechAidexKeyMaterial) throws -> Data {
         try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: material.key)
+    }
+
+    private func microTechPluginBundle(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> Bundle {
+        let bundleURL = Bundle(for: type(of: self))
+            .bundleURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("MicroTechCGMPlugin.loopplugin")
+        guard let bundle = Bundle(url: bundleURL) else {
+            XCTFail("Expected MicroTechCGMPlugin.loopplugin at \(bundleURL.path)", file: file, line: line)
+            return Bundle(for: type(of: self))
+        }
+        return bundle
     }
 
     private static let mgdlUnit = HKUnit
