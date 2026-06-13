@@ -7,7 +7,13 @@ final class MicroTechSettingsViewModel: ObservableObject {
     @Published private(set) var sensorSerial: String?
     @Published private(set) var lastReadingDate: Date?
     @Published private(set) var lastGlucoseString: String
-    @Published var uploadReadings: Bool
+    @Published var uploadReadings: Bool {
+        didSet {
+            if cgmManager.uploadReadings != uploadReadings {
+                cgmManager.uploadReadings = uploadReadings
+            }
+        }
+    }
 
     let dateFormatter: DateFormatter
 

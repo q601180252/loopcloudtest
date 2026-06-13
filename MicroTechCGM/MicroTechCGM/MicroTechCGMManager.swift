@@ -38,6 +38,17 @@ public final class MicroTechCGMManager: CGMManager {
         TimeInterval(3 * 60 * 60)
     }
 
+    public var uploadReadings: Bool {
+        get {
+            state.uploadReadings
+        }
+        set {
+            mutateState { state in
+                state.uploadReadings = newValue
+            }
+        }
+    }
+
     public var shouldSyncToRemoteService: Bool {
         state.uploadReadings
     }

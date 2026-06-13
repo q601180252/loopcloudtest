@@ -74,6 +74,20 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertNil(manager.state.latestSampleNumber)
     }
 
+    func testUploadReadingsSetterUpdatesStateAndRemoteSyncPreference() {
+        let manager = MicroTechCGMManager()
+
+        manager.uploadReadings = true
+
+        XCTAssertTrue(manager.state.uploadReadings)
+        XCTAssertTrue(manager.shouldSyncToRemoteService)
+
+        manager.uploadReadings = false
+
+        XCTAssertFalse(manager.state.uploadReadings)
+        XCTAssertFalse(manager.shouldSyncToRemoteService)
+    }
+
     func testSensorConnectAndCurrentReadUpdateStateAndEmitNewData() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
