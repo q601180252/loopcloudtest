@@ -9,6 +9,25 @@
 
 ## 进展日志
 
+### 2026-06-13 004 - 接入微泰 LinX CGM
+
+- **任务**：把微泰 LinX CGM 作为新的 CGM 来源接入 Loop。
+- **核心交付**：
+  1. `MicroTechCGM/`：新增 MicroTech 核心框架、UI 框架、`.loopplugin` 插件和测试。
+  2. LinX/Aidex BLE 连接链路：服务与特征常量、CRC、AES-CFB、key 派生、命令生成、握手、通知解析、实时读数转换。
+  3. `MicroTechCGMManager`：状态保存、读数去重、Loop glucose sample 输出、上传开关、删除和重连扫描入口。
+  4. MicroTech 设置界面与插件入口：`MicroTech LinX` 显示名、插件 metadata、setup/settings/status highlight。
+  5. `LoopWorkspace.xcworkspace`：加入 `MicroTechCGM.xcodeproj`，主 `LoopWorkspace` scheme 加入 `MicroTechCGMPlugin.loopplugin`。
+- **验证结果**：
+  - `git diff --check` 已通过。
+  - `xcodebuild test -project MicroTechCGM/MicroTechCGM.xcodeproj -scheme Shared -destination 'platform=iOS Simulator,name=iPhone 17'` 已通过，42 个测试 0 失败。
+  - `xcodebuild build -project MicroTechCGM/MicroTechCGM.xcodeproj -scheme Shared -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO` 已通过。
+  - `xmllint --noout LoopWorkspace.xcworkspace/contents.xcworkspacedata LoopWorkspace.xcworkspace/xcshareddata/xcschemes/LoopWorkspace.xcscheme` 已通过。
+  - `xcodebuild -workspace LoopWorkspace.xcworkspace -list` 已显示 `Shared (MicroTechCGM project)`。
+  - `xcodebuild build -workspace LoopWorkspace.xcworkspace -scheme LoopWorkspace -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO` 在构建前停止，原因是本机缺少 `watchOS 26.5`，未进入 MicroTech 编译阶段。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
+
 ### 2026-06-12 003 - 编写微泰 LinX CGM 实现计划
 
 - **任务**：在设计文档确认后，编写微泰 LinX CGM 接入的可执行实现计划。
