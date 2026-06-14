@@ -15,7 +15,7 @@ public struct MicroTechDeviceStatusHighlight: DeviceStatusHighlight, Equatable {
     }
 }
 
-extension MicroTechCGMManager: CGMManagerUI {
+extension MicroTechCGMManager: @retroactive CGMManagerUI {
     public static var onboardingImage: UIImage? {
         nil
     }

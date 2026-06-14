@@ -6,8 +6,20 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 46 个通过；LinX 添加流程真机 UI 测试 1 个通过。
 
 ## 进展日志
+
+### 2026-06-14 004 - 复验 LinX 接入完成状态
+
+- **任务**：按当前代码和当前设备状态复验 LinX 设备接入是否完成，并确认自动化测试覆盖关键路径。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGMUI/MicroTechCGMManager/MicroTechCGMManager+UI.swift`：为 LinX UI 扩展添加明确的 `@retroactive` 协议适配标记，消除本次新增代码触发的 Swift warning。
+  2. `docs/工具与踩坑.md`：记录 LinX 单元测试应使用 iOS Simulator，添加流程测试使用真机 `LoopUITests`。
+- **验证结果**：`xcodebuild test -quiet -project MicroTechCGM/MicroTechCGM.xcodeproj -scheme Shared -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /Users/liyang/Library/Developer/Xcode/DerivedData/LoopWorkspace-exnvvofyspxgrgfhgxypmjkymqtl -disableAutomaticPackageResolution` 已通过，结果包 `Test-Shared-2026.06.14_08-59-12-+0800.xcresult` 显示 `status=succeeded`、`testsCount=46`；`xcodebuild test -quiet -workspace LoopWorkspace.xcworkspace -scheme LoopUITests -configuration Debug -destination 'id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F' -allowProvisioningUpdates -allowProvisioningDeviceRegistration -disableAutomaticPackageResolution -only-testing:LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过，结果包 `Test-LoopUITests-2026.06.14_08-55-34-+0800.xcresult` 显示 `status=succeeded`、`testsCount=1`。
+- **关键发现**：`MicroTechCGMTests` 不能直接跑在真机上，真机会提示 tool-hosted testing unavailable；该测试目标应使用 iOS Simulator。LinX 添加流程 UI 测试已在 iPhone XR 真机上通过。
+- **commit hash**：未提交
+- **push 状态**：未推送。
 
 ### 2026-06-14 003 - 新增 LinX 添加流程真机自动化测试
 
