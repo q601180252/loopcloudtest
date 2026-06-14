@@ -18,8 +18,8 @@
   2. `docs/工具与踩坑.md`：记录 LinX 单元测试应使用 iOS Simulator，添加流程测试使用真机 `LoopUITests`。
 - **验证结果**：`xcodebuild test -quiet -project MicroTechCGM/MicroTechCGM.xcodeproj -scheme Shared -configuration Debug -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5' -derivedDataPath /Users/liyang/Library/Developer/Xcode/DerivedData/LoopWorkspace-exnvvofyspxgrgfhgxypmjkymqtl -disableAutomaticPackageResolution` 已通过，结果包 `Test-Shared-2026.06.14_08-59-12-+0800.xcresult` 显示 `status=succeeded`、`testsCount=46`；`xcodebuild test -quiet -workspace LoopWorkspace.xcworkspace -scheme LoopUITests -configuration Debug -destination 'id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F' -allowProvisioningUpdates -allowProvisioningDeviceRegistration -disableAutomaticPackageResolution -only-testing:LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过，结果包 `Test-LoopUITests-2026.06.14_08-55-34-+0800.xcresult` 显示 `status=succeeded`、`testsCount=1`。
 - **关键发现**：`MicroTechCGMTests` 不能直接跑在真机上，真机会提示 tool-hosted testing unavailable；该测试目标应使用 iOS Simulator。LinX 添加流程 UI 测试已在 iPhone XR 真机上通过。
-- **commit hash**：未提交
-- **push 状态**：未推送。
+- **commit hash**：`131308c`
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-06-14 003 - 新增 LinX 添加流程真机自动化测试
 
