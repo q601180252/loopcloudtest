@@ -355,12 +355,14 @@ extension SettingsView {
                         imageView: deviceImage(uiImage: viewModel.cgmManagerSettingsViewModel.image()),
                         label: viewModel.cgmManagerSettingsViewModel.name(),
                         descriptiveText: NSLocalizedString("Continuous Glucose Monitor", comment: "Descriptive text for Continuous Glucose Monitor"))
+                .accessibilityIdentifier("settings.cgm.current")
         } else {
             LargeButton(action: { actionSheet = .cgmPicker },
                         includeArrow: false,
                         imageView: plusImage,
                         label: NSLocalizedString("Add CGM", comment: "Title text for button to add CGM device"),
                         descriptiveText: NSLocalizedString("Tap here to set up a CGM", comment: "Descriptive text for button to add CGM device"))
+                .accessibilityIdentifier("settings.cgm.add")
         }
     }
     

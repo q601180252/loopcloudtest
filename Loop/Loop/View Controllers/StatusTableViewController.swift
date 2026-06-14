@@ -304,6 +304,7 @@ final class StatusTableViewController: LoopChartsTableViewController {
         toolbarItems![4].isEnabled = isPumpOnboarded
         toolbarItems![4].tintColor = UIColor.insulinTintColor
         toolbarItems![8].accessibilityLabel = NSLocalizedString("Settings", comment: "The label of the settings button")
+        toolbarItems![8].accessibilityIdentifier = "status.settings"
         toolbarItems![8].tintColor = UIColor.secondaryLabel
         
         toolbarItems![2] = createPreMealButtonItem(selected: preMealMode == true && preMealModeAllowed, isEnabled: preMealModeAllowed)
@@ -1656,7 +1657,7 @@ final class StatusTableViewController: LoopChartsTableViewController {
         }
         settingsViewController.pumpManagerOnboardingDelegate = deviceManager
         settingsViewController.completionDelegate = self
-        show(settingsViewController, sender: self)
+        presentAfterDismissingPresentedViewController(settingsViewController)
     }
 
     private func onCGMTapped() {
@@ -1668,7 +1669,7 @@ final class StatusTableViewController: LoopChartsTableViewController {
         var settings = cgmManager.settingsViewController(bluetoothProvider: deviceManager.bluetoothProvider, displayGlucosePreference: deviceManager.displayGlucosePreference, colorPalette: .default, allowDebugFeatures: FeatureFlags.allowDebugFeatures)
         settings.cgmManagerOnboardingDelegate = deviceManager
         settings.completionDelegate = self
-        show(settings, sender: self)
+        presentAfterDismissingPresentedViewController(settings)
     }
 
     private func automaticDosingStatusChanged(_ automaticDosingEnabled: Bool) {
@@ -2159,12 +2160,19 @@ extension StatusTableViewController {
         switch deviceManager.setupCGMManager(withIdentifier: identifier) {
         case .failure(let error):
             log.error("Failure to setup CGM manager with identifier '%{public}@': %{public}@", identifier, String(describing: error))
+            let alert = UIAlertController(
+                title: NSLocalizedString("Unable to Open CGM", comment: "Alert title shown when a CGM setup screen cannot be opened"),
+                message: String(format: NSLocalizedString("Loop could not open %@. Error: %@", comment: "Alert message shown when a CGM setup screen cannot be opened. (1: CGM identifier) (2: error description)"), identifier, String(describing: error)),
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: NSLocalizedString("OK", comment: "Button title to dismiss an alert"), style: .default))
+            presentAfterDismissingPresentedViewController(alert)
         case .success(let success):
             switch success {
             case .userInteractionRequired(var setupViewController):
                 setupViewController.cgmManagerOnboardingDelegate = deviceManager
                 setupViewController.completionDelegate = self
-                show(setupViewController, sender: self)
+                presentAfterDismissingPresentedViewController(setupViewController)
             case .createdAndOnboarded:
                 log.default("CGM manager with identifier '%{public}@' created and onboarded", identifier)
             }

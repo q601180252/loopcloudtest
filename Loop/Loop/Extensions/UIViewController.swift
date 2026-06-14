@@ -20,6 +20,28 @@ extension UIViewController {
         return presentedViewController?.topmostViewController ?? self
     }
 
+    func presentAfterDismissingPresentedViewController(_ viewController: UIViewController) {
+        guard let presentingController = firstAncestorWithPresentedViewController else {
+            present(viewController, animated: true)
+            return
+        }
+
+        presentingController.dismiss(animated: true) { [weak self] in
+            self?.present(viewController, animated: true)
+        }
+    }
+
+    private var firstAncestorWithPresentedViewController: UIViewController? {
+        var viewController: UIViewController? = self
+        while let currentViewController = viewController {
+            if currentViewController.presentedViewController != nil {
+                return currentViewController
+            }
+            viewController = currentViewController.parent
+        }
+        return nil
+    }
+
     /// Argumentless wrapper around `dismiss(animated:)` in order to pass as a selector
     @objc func dismissWithAnimation() {
         dismiss(animated: true)

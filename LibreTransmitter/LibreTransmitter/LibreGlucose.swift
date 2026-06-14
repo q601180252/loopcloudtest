@@ -104,6 +104,10 @@ extension LibreGlucose {
 }
 
 extension LibreGlucose {
+    private static func isInSensorGlucoseRange(_ value: Double) -> Bool {
+        value > 0 && value <= 500
+    }
+
     static func fromHistoryMeasurements(_ measurements: [Measurement], nativeCalibrationData: SensorData.CalibrationInfo) -> [LibreGlucose] {
         var arr = [LibreGlucose]()
 
@@ -117,7 +121,7 @@ extension LibreGlucose {
                 error: historical.error,
                 timestamp: historical.date)
 
-            if glucose.glucoseDouble > 0 {
+            if isInSensorGlucoseRange(glucose.glucoseDouble) {
                 arr.append(glucose)
             }
         }
@@ -141,7 +145,7 @@ extension LibreGlucose {
                 timestamp: trend.date)
             // if sensor is ripped off body while transmitter is attached, values below 1 might be created
             // libre manual: glucose readings are gathered in the system range of 40-500 mg/dL
-            if glucose.unsmoothedGlucose > 0 && glucose.unsmoothedGlucose <= 500 {
+            if isInSensorGlucoseRange(glucose.unsmoothedGlucose) {
                 arr.append(glucose)
             }
 

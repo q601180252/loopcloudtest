@@ -10,7 +10,68 @@ import XCTest
 
 @testable import Loop
 
-class LoopTests: XCTestCase {}
+class LoopTests: XCTestCase {
+    func testPresentAfterDismissingPresentedViewControllerDismissesBeforePresenting() {
+        let root = MockPresentationViewController()
+        let presented = UIViewController()
+        let destination = UIViewController()
+        root.fakePresentedViewController = presented
+
+        root.presentAfterDismissingPresentedViewController(destination)
+
+        XCTAssertTrue(root.didDismissPresentedViewController)
+        XCTAssertTrue(root.presentedDestinationViewController === destination)
+    }
+
+    func testPresentAfterDismissingPresentedViewControllerDismissesAncestorPresentationBeforePresenting() {
+        let root = MockPresentationViewController()
+        let navigationController = MockNavigationController(rootViewController: root)
+        let presented = UIViewController()
+        let destination = UIViewController()
+        navigationController.fakePresentedViewController = presented
+
+        root.presentAfterDismissingPresentedViewController(destination)
+
+        XCTAssertTrue(navigationController.didDismissPresentedViewController)
+        XCTAssertTrue(root.presentedDestinationViewController === destination)
+    }
+}
+
+private final class MockPresentationViewController: UIViewController {
+    var fakePresentedViewController: UIViewController?
+    var didDismissPresentedViewController = false
+    var presentedDestinationViewController: UIViewController?
+
+    override var presentedViewController: UIViewController? {
+        fakePresentedViewController
+    }
+
+    override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+        didDismissPresentedViewController = true
+        fakePresentedViewController = nil
+        completion?()
+    }
+
+    override func present(_ viewControllerToPresent: UIViewController, animated flag: Bool, completion: (() -> Void)? = nil) {
+        presentedDestinationViewController = viewControllerToPresent
+        completion?()
+    }
+}
+
+private final class MockNavigationController: UINavigationController {
+    var fakePresentedViewController: UIViewController?
+    var didDismissPresentedViewController = false
+
+    override var presentedViewController: UIViewController? {
+        fakePresentedViewController
+    }
+
+    override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
+        didDismissPresentedViewController = true
+        fakePresentedViewController = nil
+        completion?()
+    }
+}
 
 extension XCTestCase {
     

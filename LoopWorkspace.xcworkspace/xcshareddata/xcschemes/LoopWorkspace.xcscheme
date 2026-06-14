@@ -294,6 +294,20 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "8975864F148A6AEC6B3C766A"
+               BuildableName = "MicroTechCGMPlugin.loopplugin"
+               BlueprintName = "MicroTechCGMPlugin"
+               ReferencedContainer = "container:MicroTechCGM/MicroTechCGM.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "B40BF25D23ABD47400A43CEE"
                BuildableName = "LibreTransmitterPlugin.loopplugin"
                BlueprintName = "LibreTransmitterPlugin"
