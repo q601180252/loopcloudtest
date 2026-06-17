@@ -439,6 +439,44 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
         XCTAssertEqual(fake.calls.last, .write(expectedCmd31, MicroTechAidexProfile.f002UUID.uuidString))
     }
 
+    func testHistoryRequestIsScheduledOutsideNotificationCallback() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        var commandBlocks: [() -> Void] = []
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake,
+            pairingKeyTimeout: 0,
+            commandScheduler: { commandBlocks.append($0) }
+        )
+
+        try sensor.start()
+        let callCountBeforeHistoryRequest = fake.calls.count
+
+        try sensor.requestHistory(index: 60)
+
+        XCTAssertEqual(fake.calls.count, callCountBeforeHistoryRequest)
+        XCTAssertEqual(commandBlocks.count, 1)
+        guard commandBlocks.count == 1 else {
+            return
+        }
+
+        commandBlocks[0]()
+
+        let expectedHistoryCommand = try MicroTechAidexCommandBuilder(keyMaterial: material)
+            .cmd23(index: 60)
+            .microTechHexadecimalString
+        XCTAssertEqual(fake.calls.last, .write(expectedHistoryCommand, MicroTechAidexProfile.f002UUID.uuidString))
+    }
+
     func testStopOnlyNotifiesDisconnectOnce() throws {
         let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
         let fake = FakeMicroTechPeripheralSession(

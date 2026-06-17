@@ -246,8 +246,13 @@ public final class MicroTechSensor {
             throw MicroTechSensorError.inactiveSession
         }
         let command = try commandBuilder.cmd23(index: index)
-        try peripheralSession.write(command, to: MicroTechAidexProfile.f002UUID)
-        logSensor("sent history request index=\(index) len=\(command.count)", type: .send)
+        scheduleProtocolCommand("history request index=\(index)") { sensor in
+            guard sensor.commandBuilder != nil else {
+                throw MicroTechSensorError.inactiveSession
+            }
+            try sensor.peripheralSession.write(command, to: MicroTechAidexProfile.f002UUID)
+            sensor.logSensor("sent history request index=\(index) len=\(command.count)", type: .send)
+        }
     }
 
     public func stop() {
