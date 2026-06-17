@@ -22,8 +22,8 @@
 - **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-044120.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在，进程号为 `1033`。
 - **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 针对最新包重试 2 次，均未进入页面断言，失败点为 iPhone 自动化模式启用超时：`Timed out while enabling automation mode`；结果包为 `build/test-results/LinxUI-20260618-044120.xcresult` 和 `build/test-results/LinxUI-20260618-044120-retry.xcresult`。
 - **关键发现**：代码层历史补包同步写入风险已修复；当前 iPhone 可安装启动，但最新包的真机 UI 自动化受手机自动化模式阻断；成熟长连标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑 Loop Report 证明。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`926a815`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-06-18 019 - 补齐 LinX 入库日志标识并重新安装
 
