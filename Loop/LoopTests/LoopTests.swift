@@ -7,6 +7,8 @@
 //
 
 import XCTest
+import HealthKit
+import LoopKit
 
 @testable import Loop
 
@@ -24,6 +26,42 @@ class LoopTests: XCTestCase {
         )
 
         XCTAssertEqual(events, ["heartbeat", "refreshCGM"])
+    }
+
+    func testDeviceDataManagerCGMStoreLogMessageIncludesManagerIdentifierAndSampleIds() {
+        let sampleDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let sample = NewGlucoseSample(
+            date: sampleDate,
+            quantity: HKQuantity(unit: .milligramsPerDeciliter, doubleValue: 95),
+            condition: nil,
+            trend: nil,
+            trendRate: nil,
+            isDisplayOnly: false,
+            wasUserEntered: false,
+            syncIdentifier: "ABC123-21600",
+            device: HKDevice(
+                name: nil,
+                manufacturer: "MicroTech Medical",
+                model: "LinX",
+                hardwareVersion: nil,
+                firmwareVersion: nil,
+                softwareVersion: nil,
+                localIdentifier: nil,
+                udiDeviceIdentifier: nil
+            )
+        )
+
+        let message = DeviceDataManager.cgmGlucoseStoreCompletedLogMessage(
+            managerIdentifier: "MicroTechLinXCGMManager",
+            requestedSamples: [sample],
+            storedCount: 1
+        )
+
+        XCTAssertTrue(message.contains("manager=MicroTechLinXCGMManager"))
+        XCTAssertTrue(message.contains("requested=1"))
+        XCTAssertTrue(message.contains("stored=1"))
+        XCTAssertTrue(message.contains("ids=[ABC123-21600]"))
+        XCTAssertTrue(message.contains("valuesMgdl=[95]"))
     }
 
     func testPresentAfterDismissingPresentedViewControllerDismissesBeforePresenting() {

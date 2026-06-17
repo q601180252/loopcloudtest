@@ -6,10 +6,24 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 102 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；LinX 设置入口真机 UI 测试已通过。
-- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-034500.ipa`，SHA256 `62d36a2e82ae4b9d81bbaeeab3c5d6a178869562e896fa894ca0b5111fd6fd37`。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 102 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；LinX 设置入口真机 UI 测试已通过；Loop 入库日志已补上 CGM manager 标识、样本数量、样本 ID 和血糖值。
+- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-041121.ipa`，SHA256 `4c56ff225bfa0b8aede7ee541804e907f5ed2871a5f7210f3a91849c7f4acc10`。
 
 ## 进展日志
+
+### 2026-06-18 019 - 补齐 LinX 入库日志标识并重新安装
+
+- **任务**：确认 LinX 长连链路当前证据是否足够，并补齐后续 Loop Report 快速判断 LinX 是否把血糖写入 Loop 的日志。
+- **核心交付**：
+  1. `Loop/Loop/Managers/DeviceDataManager.swift`：CGM 血糖写入成功或失败时，日志会记录 `manager=MicroTechLinXCGMManager`、请求样本数、实际写入数、样本 ID 和血糖值。
+  2. `Loop/LoopTests/LoopTests.swift`：新增 CGM 入库日志字段测试，锁定 manager 标识、样本数、样本 ID 和血糖值不会丢。
+  3. `build/ipa/Loop-3.9.1-57-20260618-041121.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`LoopTests` 单条新增测试尝试 3 次，均被当前环境的 Watch target 构建问题拦住，未执行到断言；`git diff --check` 通过；`LoopWorkspace` Debug 真机通用构建成功；`MicroTechCGM` 全量测试 102 个通过、0 失败；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`；IPA SHA256 为 `4c56ff225bfa0b8aede7ee541804e907f5ed2871a5f7210f3a91849c7f4acc10`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-041121.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；结果包为 `build/test-results/LinxUI-20260618-041121.xcresult`，1 个测试通过、0 失败；当前手机已有 CGM 配置，测试点开当前 CGM 后成功进入 `MicroTech LinX` 页面，未出现 `Unable to Open CGM`。
+- **关键发现**：后续 Loop Report 可以直接通过入库日志判断 LinX 是否写入血糖；成熟长连产品标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑日志证明。
+- **commit hash**：待提交。
+- **push 状态**：未推送。
 
 ### 2026-06-18 018 - 补齐 LinX 后台恢复后首笔血糖日志并重新安装
 

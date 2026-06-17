@@ -569,7 +569,6 @@ final class DeviceDataManager {
     private func processCGMReadingResult(_ manager: CGMManager, readingResult: CGMReadingResult, completion: @escaping () -> Void) {
         switch readingResult {
         case .newData(let values):
-            let sampleSummary = glucoseSampleLogSummary(values)
             loopManager.addGlucoseSamples(values) { result in
                 switch result {
                 case .success(let storedValues):
@@ -577,7 +576,11 @@ final class DeviceDataManager {
                         manager,
                         logEventForDeviceIdentifier: nil,
                         type: .receive,
-                        message: "CGM glucose store completed requested=\(values.count) stored=\(storedValues.count) \(sampleSummary)",
+                        message: Self.cgmGlucoseStoreCompletedLogMessage(
+                            managerIdentifier: manager.pluginIdentifier,
+                            requestedSamples: values,
+                            storedCount: storedValues.count
+                        ),
                         completion: nil
                     )
                 case .failure(let error):
@@ -585,7 +588,11 @@ final class DeviceDataManager {
                         manager,
                         logEventForDeviceIdentifier: nil,
                         type: .error,
-                        message: "CGM glucose store failed requested=\(values.count) \(sampleSummary) error=\(String(describing: error))",
+                        message: Self.cgmGlucoseStoreFailedLogMessage(
+                            managerIdentifier: manager.pluginIdentifier,
+                            requestedSamples: values,
+                            error: error
+                        ),
                         completion: nil
                     )
                     self.setLastError(error: error)
@@ -630,7 +637,23 @@ final class DeviceDataManager {
         updatePumpManagerBLEHeartbeatPreference()
     }
 
-    private func glucoseSampleLogSummary(_ samples: [NewGlucoseSample]) -> String {
+    static func cgmGlucoseStoreCompletedLogMessage(
+        managerIdentifier: String,
+        requestedSamples: [NewGlucoseSample],
+        storedCount: Int
+    ) -> String {
+        "CGM glucose store completed manager=\(managerIdentifier) requested=\(requestedSamples.count) stored=\(storedCount) \(glucoseSampleLogSummary(requestedSamples))"
+    }
+
+    static func cgmGlucoseStoreFailedLogMessage(
+        managerIdentifier: String,
+        requestedSamples: [NewGlucoseSample],
+        error: Error
+    ) -> String {
+        "CGM glucose store failed manager=\(managerIdentifier) requested=\(requestedSamples.count) \(glucoseSampleLogSummary(requestedSamples)) error=\(String(describing: error))"
+    }
+
+    private static func glucoseSampleLogSummary(_ samples: [NewGlucoseSample]) -> String {
         guard !samples.isEmpty else {
             return "samples=[]"
         }
