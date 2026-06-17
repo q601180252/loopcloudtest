@@ -6,10 +6,24 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 103 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；历史补包请求已改为调度到命令队列，避免在蓝牙通知路径里同步写入；Loop 入库日志已补上 CGM manager 标识、样本数量、样本 ID 和血糖值。
-- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-044120.ipa`，SHA256 `7cc63b1d98b6c7f6a77f9119127c2797d798575bd48fb5d662a862821f00e518`。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 104 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；历史补包请求已改为调度到命令队列，避免在蓝牙通知路径里同步写入；Loop 入库日志已补上 CGM manager 标识、样本数量、样本 ID 和血糖值；后台恢复的保存设备日志已能区分 `CoreBluetooth restore` 和 `retrievePeripherals`。
+- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-051045.ipa`，SHA256 `a471e145c3b3d33422986d316eabf68968df7c926754d60a75ba0f585ce3ca35`。
 
 ## 进展日志
+
+### 2026-06-18 021 - 补齐 LinX 后台恢复来源日志并重新安装
+
+- **任务**：继续检查 LinX 长连 CGM 证据，补齐保存设备恢复连接的日志来源，方便后续 Loop Report 判断是真正的系统后台恢复，还是普通保存设备取回。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：保存设备恢复日志现在会明确写出来源，分别为 `CoreBluetooth restore` 和 `retrievePeripherals`。
+  2. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增 `testSavedPeripheralLogMessageIdentifiesCoreBluetoothRestoreSource`，锁定后台恢复来源日志不能丢。
+  3. `build/ipa/Loop-3.9.1-57-20260618-051045.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增测试先因缺少恢复来源日志接口失败；修复后该测试通过；`MicroTechCGM` 全量测试 104 个通过、0 失败；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`；IPA SHA256 为 `a471e145c3b3d33422986d316eabf68968df7c926754d60a75ba0f585ce3ca35`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-051045.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在，进程号为 `1051`。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 针对最新包执行 2 次，均没有返回页面断言；第一次 11 分钟未结束后手动终止，第二次带 120/180 秒超时仍未由 Xcode 返回，手动终止；两次期间 iPhone 上 `Loop` 主进程一直存在，卡住的是 UI 测试 Runner。结果包为 `build/test-results/LinxUI-20260618-051045.xcresult` 和 `build/test-results/LinxUI-20260618-051045-timeout.xcresult`。
+- **关键发现**：当前包已能安装启动，日志可以区分后台恢复来源；真机 UI 自动化本轮卡在测试 Runner，不是 `Unable to Open CGM` 或 App 启动崩溃。成熟长连标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑 Loop Report 证明。
+- **commit hash**：`e8159f9`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-06-18 020 - 修复 LinX 历史补包同步写入并重新安装
 
