@@ -6,10 +6,25 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 104 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；历史补包请求已改为调度到命令队列，避免在蓝牙通知路径里同步写入；Loop 入库日志已补上 CGM manager 标识、样本数量、样本 ID 和血糖值；后台恢复的保存设备日志已能区分 `CoreBluetooth restore` 和 `retrievePeripherals`。
-- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-051045.ipa`，SHA256 `a471e145c3b3d33422986d316eabf68968df7c926754d60a75ba0f585ce3ca35`。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 107 个通过；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；配置阶段已增加超时保护和明确日志；真机当前仍没有新血糖，最新日志显示 LinX 卡在连接超时和扫描超时，状态仍停留在 2026-06-18 04:32 的 91 mg/dL。
+- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-060210.ipa`，SHA256 `7c1967945ad8390f502ebd26d6e40eea82ade030dc302c49123c4bb2dfafcffa`。
 
 ## 进展日志
+
+### 2026-06-18 022 - 修复 LinX 配置阶段静默卡住保护并重新安装
+
+- **任务**：真机已可用后，继续确认 LinX 长连 CGM 状态，修复 `didConnect` 后配置阶段可能静默卡住的问题，并重新打包安装验证。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：配置阶段新增独立超时保护；重复进入配置会写出明确日志；配置超时会断开当前设备、上报错误并重新扫描；旧连接的迟到失败回调不再覆盖当前连接状态。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：配置超时会计入保存蓝牙标识失败，连续失败后回退为按传感器序列号搜索附近设备。
+  3. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增配置超时时长、配置进度日志、配置超时回退附近设备搜索等回归测试。
+  4. `build/ipa/Loop-3.9.1-57-20260618-060210.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增测试先因缺少 `configureTimeout`、配置超时时长和配置日志接口失败；修复后目标测试 4 个通过；`MicroTechCGM` 全量测试 107 个通过、0 失败；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`；IPA SHA256 为 `7c1967945ad8390f502ebd26d6e40eea82ade030dc302c49123c4bb2dfafcffa`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-060210.ipa`；已启动 `com.libre.loopkit3.Loop`；20 秒后主进程仍存在，进程号为 `1101`。
+- **真机 LinX 日志**：当前配置仍是 `MicroTechLinXCGMManager`，设备为 `AiDEX X-22222DKCZE`，传感器序列号 `22222DKCZE`；安装前已存在一笔 91 mg/dL，时间为 2026-06-18 04:32，本次安装后没有新血糖；06:55 到 06:57 的新日志显示已恢复保存设备并扫描，但最终是 `connect timed out` 和 `scan timed out`，最近发现设备的 RSSI 约为 `-94`。
+- **关键发现**：配置阶段静默卡住保护已补齐，当前包能安装启动且不会启动即崩溃；真机仍未证明 LinX 已达到成熟长连标准，因为本轮没有产生新血糖，最新阻断点是蓝牙连接/扫描超时。
+- **commit hash**：`0e76b5c`。
+- **push 状态**：待推送。
 
 ### 2026-06-18 021 - 补齐 LinX 后台恢复来源日志并重新安装
 
