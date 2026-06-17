@@ -651,6 +651,72 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(bluetoothManager.isScanning)
     }
 
+    func testRestoredSavedSensorHandshakeEmitsRecoveredCurrentReadingAfterDelegateQueueResume() throws {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let receivedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let currentPacket = try Data(microTechHexadecimalString: "030100FE60545F80B303800C4500004D5B")
+        let encryptedCurrentPacket = try MicroTechAidexCrypto.encryptCfb128(
+            key: material.key,
+            iv: material.iv,
+            plain: currentPacket
+        )
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            resumeScanWhenDelegateQueueConfigured: true
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+
+        manager.cgmManagerDelegate = delegate
+        manager.delegateQueue = .main
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected restored scan to use a MicroTechSensor delegate")
+        }
+        let restoredPeripheral = FakeMicroTechPeripheralSession(
+            deviceIdentifier: remoteIdentifier,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        restoredPeripheral.onWrite = { value, characteristic in
+            guard characteristic == MicroTechAidexProfile.f001UUID, value == material.key else {
+                return
+            }
+            sensor.handleNotification(characteristic: MicroTechAidexProfile.f001UUID, value: material.key)
+        }
+
+        sensor.handleReadyPeripheralSession(restoredPeripheral)
+        let deadline = Date(timeIntervalSinceNow: 1)
+        while Date() < deadline,
+              !restoredPeripheral.calls.contains(.subscribe(MicroTechAidexProfile.f003UUID.uuidString)) {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        sensor.handleNotification(
+            characteristic: MicroTechAidexProfile.f003UUID,
+            value: encryptedCurrentPacket,
+            receivedAt: receivedAt
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-21600"])
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .connection &&
+                event.message.contains("resume scan after delegate queue configured")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive &&
+                event.message.contains("current accepted serial=ABC123 sample=21600") &&
+                event.message.contains("recoveredAfterReconnect reason=delegate queue configured")
+        })
+    }
+
     func testSettingsViewModelScanUsesActualManagerScanningStateWhenConnected() {
         var state = MicroTechCGMManagerState()
         state.remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!

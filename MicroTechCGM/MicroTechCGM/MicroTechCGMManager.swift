@@ -239,6 +239,7 @@ public final class MicroTechCGMManager: CGMManager {
 
             if clearingConnectionError {
                 protectedState.state.lastConnectionErrorDescription = nil
+                protectedState.sensorIdentity.pendingReconnectRecoveryReason = nil
             }
 
             let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
@@ -593,11 +594,18 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     private func resumeSavedSensorScanIfNeeded(reason: String) {
-        let shouldScan = readProtectedState { state in
-            !state.sensorIdentity.isDeleted &&
-                state.state.sensorSerial?.isEmpty == false &&
-                state.bluetoothManager?.isScanning != true &&
-                state.bluetoothManager?.isConnected != true
+        var shouldScan = false
+        lockedManagerState.mutate { state in
+            guard !state.sensorIdentity.isDeleted,
+                  state.state.sensorSerial?.isEmpty == false,
+                  state.bluetoothManager?.isScanning != true,
+                  state.bluetoothManager?.isConnected != true
+            else {
+                return
+            }
+
+            state.sensorIdentity.pendingReconnectRecoveryReason = reason
+            shouldScan = true
         }
 
         guard shouldScan else {
