@@ -672,10 +672,13 @@ public final class MicroTechCGMManager: CGMManager {
         }
     }
 
-    private func clearConnectedSensorWatchdogState() {
+    private func clearConnectedSensorWatchdogState(recoveryReason: String? = nil) {
         lockedManagerState.mutate { state in
             state.sensorIdentity.activeSensorConnectedAt = nil
             state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+            if let recoveryReason {
+                state.sensorIdentity.pendingReconnectRecoveryReason = recoveryReason
+            }
         }
     }
 
@@ -714,7 +717,7 @@ public final class MicroTechCGMManager: CGMManager {
         }
 
         logDeviceCommunication("MicroTech LinX disconnecting stale connection to restart Bluetooth scan reason=\(disconnectReason)", type: .connection)
-        clearConnectedSensorWatchdogState()
+        clearConnectedSensorWatchdogState(recoveryReason: disconnectReason)
         bluetoothManager.disconnect()
         scanForSensor(clearingConnectionError: false)
         return true
@@ -1029,6 +1032,7 @@ public final class MicroTechCGMManager: CGMManager {
                 protectedState.state.latestSampleNumber = nil
                 protectedState.state.hasConnectedSensorSession = false
                 protectedState.state.lastConnectionErrorDescription = nil
+                protectedState.sensorIdentity.pendingReconnectRecoveryReason = nil
                 protectedState.sensorIdentity.resetHistoryTracking()
             }
 
@@ -1179,12 +1183,18 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             state.state.latestSampleNumber = reading.sampleNumber
             state.state.lastConnectionErrorDescription = nil
             state.sensorIdentity.consecutiveSensorErrorCount = 0
+            let recoveryReason = state.sensorIdentity.pendingReconnectRecoveryReason
+            state.sensorIdentity.pendingReconnectRecoveryReason = nil
             sample = makeSample(from: reading, state: state.state)
             historyRequest = scheduleHistoryBackfillIfNeeded(
                 currentIndex: reading.sampleNumber,
                 in: &state.sensorIdentity
             )
-            logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawPrefix=\(Self.hexPrefix(reading.rawBytes)) at=\(reading.receivedAt)"
+            if let recoveryReason {
+                logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawPrefix=\(Self.hexPrefix(reading.rawBytes)) recoveredAfterReconnect reason=\(recoveryReason) at=\(reading.receivedAt)"
+            } else {
+                logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawPrefix=\(Self.hexPrefix(reading.rawBytes)) at=\(reading.receivedAt)"
+            }
         }
 
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
@@ -1479,6 +1489,7 @@ private struct MicroTechSensorIdentityState {
     var staleConnectionWatchdogIdentifier = UUID()
     var consecutiveSensorErrorCount = 0
     var savedIdentifierFailureCount = 0
+    var pendingReconnectRecoveryReason: String?
     var isDeleted = false
 
     mutating func resetHistoryTracking() {

@@ -6,10 +6,23 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 100 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；LinX 设置入口真机 UI 测试已通过。
-- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-024014.ipa`，SHA256 `b45e9eb50ca1daefe63da990403927af93544b0b2e01e39f772f9a1ffa0673eb`。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 101 个通过；最新 IPA 已安装到 iPhone XR 并启动，测试后进程仍存在；LinX 设置入口真机 UI 测试已通过。
+- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-032000.ipa`，SHA256 `376fb4fd35a111f6ec53feb40275f49d0e5f8c50fb95de1f89ccd355ab5f5bb3`。
 
 ## 进展日志
+
+### 2026-06-18 017 - 补齐 LinX stale 重连恢复日志并重新安装
+
+- **任务**：补齐 LinX stale watchdog 触发重连后，第一笔恢复血糖的可追踪日志，并重新打包安装到 iPhone。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：stale connection 被断开并重新搜索后，下一笔当前血糖日志会带上 `recoveredAfterReconnect reason=...`，可以直接判断重连后是否真的恢复出血糖。
+  2. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增 `testStaleWatchdogReconnectsAndLogsRecoveredCurrentReading`，覆盖旧连接断开、重新搜索、重新连接、恢复当前血糖和恢复日志。
+  3. `build/ipa/Loop-3.9.1-57-20260618-032000.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增 LinX stale 重连恢复测试先失败后通过；`MicroTechCGM` 全量测试最终 101 个通过、0 失败；中间一次全量测试暴露 `testDuplicateReadyCallbacksDoNotStartHandshakeTwiceAfterFailure` 偶发失败，单独重跑通过，全量重跑也通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`；IPA SHA256 为 `376fb4fd35a111f6ec53feb40275f49d0e5f8c50fb95de1f89ccd355ab5f5bb3`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-032000.ipa`；已启动 `com.libre.loopkit3.Loop`；测试后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；结果包为 `build/test-results/LinxUI-20260618-032000.xcresult`，结果为 `Passed`，1 个测试通过、0 失败。
+- **关键发现**：代码层面的 stale 重连恢复链路和日志已补齐；成熟长连产品标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
 
 ### 2026-06-18 016 - 补齐 LinX 当前血糖全链路日志并安装到 iPhone
 
