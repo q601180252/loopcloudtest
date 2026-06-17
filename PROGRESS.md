@@ -22,7 +22,8 @@
 - **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-032000.ipa`；已启动 `com.libre.loopkit3.Loop`；测试后进程仍存在。
 - **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；结果包为 `build/test-results/LinxUI-20260618-032000.xcresult`，结果为 `Passed`，1 个测试通过、0 失败。
 - **关键发现**：代码层面的 stale 重连恢复链路和日志已补齐；成熟长连产品标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑日志证明。
-- **push 状态**：未推送。
+- **commit hash**：`6b0fa07`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-06-18 016 - 补齐 LinX 当前血糖全链路日志并安装到 iPhone
 
