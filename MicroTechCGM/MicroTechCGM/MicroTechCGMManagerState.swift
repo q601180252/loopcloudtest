@@ -11,9 +11,12 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
     public var lastReadingDate: Date?
     public var latestReading: MicroTechGlucoseReading?
     public var latestSampleNumber: Int?
+    public var hasConnectedSensorSession: Bool
     public var uploadReadings: Bool
+    public var lastConnectionErrorDescription: String?
 
     public init() {
+        hasConnectedSensorSession = false
         uploadReadings = false
     }
 
@@ -29,7 +32,10 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
         activationTime = rawValue["activationTime"] as? Date
         lastReadingDate = rawValue["lastReadingDate"] as? Date
         latestSampleNumber = rawValue["latestSampleNumber"] as? Int
+        latestReading = Self.restoreLatestReading(from: rawValue["latestReading"])
+        hasConnectedSensorSession = rawValue["hasConnectedSensorSession"] as? Bool ?? (sensorSerial?.isEmpty == false)
         uploadReadings = rawValue["uploadReadings"] as? Bool ?? false
+        lastConnectionErrorDescription = rawValue["lastConnectionErrorDescription"] as? String
     }
 
     public var rawValue: RawValue {
@@ -40,7 +46,49 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
         rawValue["activationTime"] = activationTime
         rawValue["lastReadingDate"] = lastReadingDate
         rawValue["latestSampleNumber"] = latestSampleNumber
+        rawValue["latestReading"] = latestReading.map(Self.rawValue(for:))
+        rawValue["hasConnectedSensorSession"] = hasConnectedSensorSession
         rawValue["uploadReadings"] = uploadReadings
+        rawValue["lastConnectionErrorDescription"] = lastConnectionErrorDescription
         return rawValue
+    }
+
+    private static func rawValue(for reading: MicroTechGlucoseReading) -> RawValue {
+        [
+            "sensorSerial": reading.sensorSerial,
+            "sampleNumber": reading.sampleNumber,
+            "glucoseMgdl": reading.glucoseMgdl,
+            "trend": reading.trend,
+            "receivedAt": reading.receivedAt,
+            "status": reading.status,
+            "quality": reading.quality,
+            "rawBytes": reading.rawBytes,
+        ]
+    }
+
+    private static func restoreLatestReading(from value: Any?) -> MicroTechGlucoseReading? {
+        guard let rawValue = value as? RawValue,
+              let sensorSerial = rawValue["sensorSerial"] as? String,
+              let sampleNumber = rawValue["sampleNumber"] as? Int,
+              let glucoseMgdl = rawValue["glucoseMgdl"] as? Int,
+              let trend = rawValue["trend"] as? Int,
+              let receivedAt = rawValue["receivedAt"] as? Date,
+              let status = rawValue["status"] as? Int,
+              let quality = rawValue["quality"] as? Int,
+              let rawBytes = rawValue["rawBytes"] as? Data else
+        {
+            return nil
+        }
+
+        return MicroTechGlucoseReading(
+            sensorSerial: sensorSerial,
+            sampleNumber: sampleNumber,
+            glucoseMgdl: glucoseMgdl,
+            trend: trend,
+            receivedAt: receivedAt,
+            status: status,
+            quality: quality,
+            rawBytes: rawBytes
+        )
     }
 }

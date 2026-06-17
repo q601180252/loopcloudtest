@@ -1,4 +1,5 @@
 import UIKit
+import LoopKit
 import LoopKitUI
 import MicroTechCGM
 
@@ -8,15 +9,19 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, Comp
     var cgmManager: MicroTechCGMManager?
     var displayGlucosePreference: DisplayGlucosePreference
     var colorPalette: LoopUIColorPalette
+    private let makeCGMManager: () -> MicroTechCGMManager
+    private var didFinishOnboarding = false
 
     init(cgmManager: MicroTechCGMManager? = nil,
          colorPalette: LoopUIColorPalette,
          displayGlucosePreference: DisplayGlucosePreference,
-         allowDebugFeatures: Bool)
+         allowDebugFeatures: Bool,
+         makeCGMManager: @escaping () -> MicroTechCGMManager = { MicroTechCGMManager() })
     {
         self.cgmManager = cgmManager
         self.colorPalette = colorPalette
         self.displayGlucosePreference = displayGlucosePreference
+        self.makeCGMManager = makeCGMManager
         super.init(navigationBarClass: UINavigationBar.self, toolbarClass: UIToolbar.self)
     }
 
@@ -49,8 +54,8 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, Comp
             return DismissibleHostingController(content: view, colorPalette: colorPalette)
         } else {
             let view = MicroTechSetupView(
-                didContinue: { [weak self] deviceNameOrSerial in
-                    self?.completeSetup(deviceNameOrSerial: deviceNameOrSerial)
+                didContinue: { [weak self] in
+                    self?.completeSetup()
                 },
                 didCancel: { [weak self] in
                     guard let self = self else {
@@ -68,16 +73,26 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, Comp
         }
     }
 
-    private func completeSetup(deviceNameOrSerial: String) {
-        let manager = MicroTechCGMManager()
-        guard manager.configureSensor(deviceNameOrSerial: deviceNameOrSerial) else {
+    func completeSetup() {
+        let manager = makeCGMManager()
+        cgmManager = manager
+        manager.addStatusObserver(self, queue: .main)
+        manager.scanForSensor()
+        finishOnboardingIfReady()
+        setViewControllers([initialView()], animated: true)
+    }
+
+    private func finishOnboardingIfReady() {
+        guard !didFinishOnboarding,
+              let manager = cgmManager,
+              manager.cgmManagerStatus.hasValidSensorSession else {
             return
         }
-        cgmManager = manager
+
+        didFinishOnboarding = true
+        manager.removeStatusObserver(self)
         cgmManagerOnboardingDelegate?.cgmManagerOnboarding(didCreateCGMManager: manager)
         cgmManagerOnboardingDelegate?.cgmManagerOnboarding(didOnboardCGMManager: manager)
-        manager.scanForSensor()
-        setViewControllers([initialView()], animated: true)
     }
 
     private func deleteCGM() {
@@ -90,5 +105,17 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, Comp
                 self.dismiss(animated: true)
             }
         }
+    }
+}
+
+extension MicroTechUICoordinator: CGMManagerStatusObserver {
+    func cgmManager(_ manager: CGMManager, didUpdate status: CGMManagerStatus) {
+        guard status.hasValidSensorSession,
+              let microTechManager = manager as? MicroTechCGMManager,
+              microTechManager === cgmManager else {
+            return
+        }
+
+        finishOnboardingIfReady()
     }
 }

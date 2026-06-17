@@ -12,15 +12,37 @@ public struct MicroTechGlucoseReading: Equatable, GlucoseDisplayable {
     public let quality: Int
     public let rawBytes: Data
 
-    public init(current: MicroTechAidexCurrentPacket, sensorSerial: String, receivedAt: Date) {
+    public init(
+        sensorSerial: String,
+        sampleNumber: Int,
+        glucoseMgdl: Int,
+        trend: Int,
+        receivedAt: Date,
+        status: Int,
+        quality: Int,
+        rawBytes: Data
+    ) {
         self.sensorSerial = sensorSerial
-        self.sampleNumber = current.timeOffset
-        self.glucoseMgdl = current.glucose
-        self.trend = current.trend
+        self.sampleNumber = sampleNumber
+        self.glucoseMgdl = glucoseMgdl
+        self.trend = trend
         self.receivedAt = receivedAt
-        self.status = current.status
-        self.quality = current.quality
-        self.rawBytes = current.rawBytes
+        self.status = status
+        self.quality = quality
+        self.rawBytes = rawBytes
+    }
+
+    public init(current: MicroTechAidexCurrentPacket, sensorSerial: String, receivedAt: Date) {
+        self.init(
+            sensorSerial: sensorSerial,
+            sampleNumber: current.timeOffset,
+            glucoseMgdl: current.glucose,
+            trend: current.trend,
+            receivedAt: receivedAt,
+            status: current.status,
+            quality: current.quality,
+            rawBytes: current.rawBytes
+        )
     }
 
     public var syncIdentifier: String {
@@ -28,7 +50,7 @@ public struct MicroTechGlucoseReading: Equatable, GlucoseDisplayable {
     }
 
     public var isValidForTherapy: Bool {
-        sampleNumber > 0 && glucoseMgdl >= 40 && glucoseMgdl <= 400 && quality == 0
+        sampleNumber >= 0 && glucoseMgdl >= 40 && glucoseMgdl <= 400 && quality == 0
     }
 
     public var glucoseQuantity: HKQuantity? {

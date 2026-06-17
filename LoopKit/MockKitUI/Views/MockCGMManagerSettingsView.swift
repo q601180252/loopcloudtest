@@ -13,6 +13,7 @@ import MockKit
 
 struct MockCGMManagerSettingsView: View {
     fileprivate enum PresentedAlert {
+        case deleteCGM
         case resumeInsulinDeliveryError(Error)
         case suspendInsulinDeliveryError(Error)
     }
@@ -45,6 +46,8 @@ struct MockCGMManagerSettingsView: View {
             
             lastReadingSection
             
+            deleteCGMSection
+
             supportSection
         }
         .insetGroupedListStyle()
@@ -235,12 +238,35 @@ struct MockCGMManagerSettingsView: View {
         }
     }
     
+    private var deleteCGMSection: some View {
+        Section {
+            Button(action: { presentedAlert = .deleteCGM }) {
+                Text("Delete CGM")
+                    .foregroundColor(guidanceColors.critical)
+            }
+        }
+    }
+
     private var doneButton: some View {
         Button(LocalizedString("Done", comment: "Settings done button label"), action: dismiss)
     }
     
+    private func deleteCGM() {
+        viewModel.cgmManager.delete {
+            DispatchQueue.main.async {
+                dismiss()
+            }
+        }
+    }
+
     private func alert(for presentedAlert: PresentedAlert) -> SwiftUI.Alert {
         switch presentedAlert {
+        case .deleteCGM:
+            return Alert(
+                title: Text("Are you sure you want to delete this CGM?"),
+                primaryButton: .cancel(Text("Cancel")),
+                secondaryButton: .destructive(Text("Delete CGM"), action: deleteCGM)
+            )
         case .suspendInsulinDeliveryError(let error):
             return Alert(
                 title: Text("Failed to Suspend Insulin Delivery"),
@@ -258,10 +284,12 @@ struct MockCGMManagerSettingsView: View {
 extension MockCGMManagerSettingsView.PresentedAlert: Identifiable {
     var id: Int {
         switch self {
-        case .resumeInsulinDeliveryError:
+        case .deleteCGM:
             return 0
-        case .suspendInsulinDeliveryError:
+        case .resumeInsulinDeliveryError:
             return 1
+        case .suspendInsulinDeliveryError:
+            return 2
         }
     }
 }
@@ -271,4 +299,3 @@ struct MockCGMManagerSettingsView_Previews: PreviewProvider {
         MockCGMManagerSettingsView(cgmManager: MockCGMManager(), displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: .milligramsPerDeciliter), appName: "Loop", allowDebugFeatures: false)
     }
 }
-

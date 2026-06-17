@@ -6,9 +6,219 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 46 个通过；LinX 添加流程真机 UI 测试 1 个通过。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 100 个通过；最新 IPA 已安装到 iPhone XR 并启动，5 秒后进程仍存在；LinX 设置入口真机 UI 测试已通过。
+- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-024014.ipa`，SHA256 `b45e9eb50ca1daefe63da990403927af93544b0b2e01e39f772f9a1ffa0673eb`。
 
 ## 进展日志
+
+### 2026-06-18 016 - 补齐 LinX 当前血糖全链路日志并安装到 iPhone
+
+- **任务**：确认 LinX 当前血糖解析链路和日志是否足够定位问题，并在可用 iPhone 上重新安装验证。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechSensor.swift`：当前血糖解析日志增加包类型和原始数据前缀，后续能直接确认解析的是哪类 LinX 通知。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：当前血糖入库前日志增加包类型和原始数据前缀，后续能把解密、解析、接收三段日志串起来。
+  3. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增真实 LinX 0x03 当前血糖通知全链路测试，覆盖加密通知、解密、解析、接收和 `.newData` 输出。
+  4. `build/ipa/Loop-3.9.1-57-20260618-024014.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增 LinX 0x03 当前血糖全链路测试先失败后通过；`MicroTechCGM` 测试 100 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `b45e9eb50ca1daefe63da990403927af93544b0b2e01e39f772f9a1ffa0673eb`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-024014.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；结果包为 `build/test-results/LinxUI-20260618-024014.xcresult`，1 个测试通过、0 失败。
+- **关键发现**：代码层面的当前血糖链路和日志已补齐；成熟长连产品标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-18 015 - 修复 LinX 自恢复检查导致的真机崩溃并重新安装
+
+- **任务**：iPhone 可用后复测最新包，修复 `LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 中出现的 MicroTech 崩溃。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：蓝牙管理器在自己的蓝牙回调队列里读取连接状态时不再同步等待自己，避免系统触发 `dispatch_sync called on queue already owned by current thread` 后终止 App。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：LinX 自恢复检查登记时不再同步读取蓝牙连接状态，改为根据已连接传感器状态登记；陈旧连接断开和传感器断开时会清掉对应检查状态。
+  3. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增当前血糖刷新自恢复检查时不读取蓝牙连接状态的回归测试，并保留 15 分钟无数据自动重连测试。
+  4. `build/ipa/Loop-3.9.1-57-20260618-021516.ipa`：已导出的开发签名 IPA。
+- **验证结果**：针对性 LinX 自恢复测试 3 个通过；`MicroTechCGM` 测试 99 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `09ae6bd3f7ccc9a6335b6acf7e53b7853bdcd9b3b28e580023fddce319913872`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-021516.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；结果包为 `build/test-results/LinxUI-20260618-022417.xcresult`，结果为 `Passed`，1 个测试通过、0 失败。
+- **关键发现**：上一轮 Add CGM 失败不是入口缺失，而是 MicroTech 在蓝牙回调队列里同步读取连接状态导致真机崩溃；本轮已修复并在同一台 iPhone 上通过 UI 测试。成熟长连产品标准仍需要真实 LinX 设备的锁屏后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-18 014 - 补齐 LinX 失败回退和历史拒收日志并安装到 iPhone
+
+- **任务**：在可用 iPhone 上重新验证当前 LinX 包，并补齐后续排查无血糖所需日志。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：历史血糖被拒收时，日志会写出无效值、重复值、过新值和时间过滤的具体样本，后续 Loop Report 可以直接定位为什么没有入库。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：蓝牙连接失败会带上失败设备标识，保存过的蓝牙标识连续失败后会回退为附近设备搜索。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：外设处于断开中或未知状态时也会安排连接超时，避免长时间卡住。
+  4. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：补充历史拒收明细、连接失败回退、断开中超时的回归测试。
+  5. `build/ipa/Loop-3.9.1-57-20260618-003635.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 96 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `2d2129601c1f82981f8181800d9a3af416e3db828b8ab5359818a7d1124e90f5`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-003635.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；结果包为 `build/test-results/LinxUI-20260618-011220.xcresult`。
+- **关键发现**：代码层面的失败回退、卡住超时和日志明细已补齐并验证；是否达到成熟长连产品标准，仍需要真实 LinX 设备的连接、锁屏后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 013 - 补齐 LinX 已配置 UI 测试和长连边界复验
+
+- **任务**：在 iPhone 可用后重新验证当前 LinX 包，并补齐保存过的蓝牙标识失效后的重连边界。
+- **核心交付**：
+  1. `Loop/LoopUITests/LoopCGMSetupUITests.swift`：真机已配置 MicroTech LinX 时，不再要求看到 Add CGM，而是直接验证当前 LinX 设置页可打开。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：保存的蓝牙标识连续扫描或连接失败后，会清掉旧标识，改为按传感器序列号扫描附近设备，避免一直卡在失效的蓝牙 ID。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechSensor.swift`：前台/后台恢复后拿到已连接外设时，会重新订阅并重走握手，避免连接看似存在但通知没有恢复。
+  4. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`、`MicroTechCGM/MicroTechCGMTests/MicroTechSensorHandshakeTests.swift`：补充保存蓝牙标识扫描失败、连接失败、已连接刷新重新握手的回归测试。
+  5. `build/ipa/Loop-3.9.1-57-20260617-232929.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增连接超时用例通过；`MicroTechCGM` 测试 93 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `0a000f0fdb8f856c17c693c126f71ff7373d66f6bb71250022ef9c392d7330e3`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260617-232929.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 已通过；执行方式为 `build-for-testing` 后 `test-without-building`，复用已安装 App，未再触发未签名 Debug App 安装问题。
+- **关键发现**：代码层面的已配置 UI、失效蓝牙标识回退、已连接刷新重新握手已修复并验证；是否达到成熟长连产品标准，仍需要真实 LinX 设备的连接、锁屏后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 012 - 修复 LinX 蓝牙回调卡住风险并安装到 iPhone
+
+- **任务**：继续检查 LinX 作为长连 CGM 的连接、重连和后台恢复风险，在可用 iPhone 上重新安装验证。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：传感器断开、连续异常、扫描超时后的重新搜索改为延后执行，避免在蓝牙回调里同步触发搜索造成卡住。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：扫描超时通过传感器错误返回时，会进入蓝牙失败重试路径，不再被当作普通传感器异常后停住。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechSensor.swift`：激活握手后续写命令改为排队执行，避免在通知回调里直接写蓝牙命令。
+  4. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`、`MicroTechCGM/MicroTechCGMTests/MicroTechSensorHandshakeTests.swift`：补充断开后延后重搜、扫描超时重试、连续异常重启、通知回调外写命令的回归测试。
+  5. `build/ipa/Loop-3.9.1-57-20260617-205837.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 90 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `29b28850e232e81384361bba5bc2ef60b2c89a430038520125f4503133062ae6`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260617-205837.ipa`；已启动 `com.libre.loopkit3.Loop`；5 秒后进程仍存在。
+- **UI 测试状态**：`LoopUITests/LoopCGMSetupUITests/testMicroTechLinXSetupOpensFromSettings` 未跑到页面断言；Xcode 尝试安装 `DerivedData/.../Build/Products/Debug-iphoneos/Loop.app`，iPhone 返回 `No code signature found`，不是已安装 IPA 的启动崩溃。
+- **关键发现**：代码层面的蓝牙回调卡住风险、扫描超时重试和激活命令排队已修复；是否达到成熟长连产品标准，仍需要真实 LinX 设备的连接、锁屏后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 011 - 修复 LinX 搜索超时后卡住风险并重新打包 IPA
+
+- **任务**：继续检查 LinX 作为长连 CGM 的连接、重连和后台恢复风险，修复搜索超时后可能卡住的路径。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：保存过的 LinX 搜索超时后，会在安全时机重新搜索，不再直接卡在蓝牙回调里。
+  2. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：补充搜索超时重试不能立刻同步触发的回归测试，防止真实蓝牙队列被卡住。
+  3. `build/ipa/Loop-3.9.1-57-20260617-201451.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增测试先失败后修复；`MicroTechCGM` 测试 88 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `6823398e4479b89523ff6e9481029b49af670d262de37828c7cef6d2abb32947`。
+- **真机状态**：当前可见 iPhone 全部是 `unavailable`，未执行安装和长时间后台验证。
+- **关键发现**：代码层面的搜索超时、重试、后台恢复识别和日志路径已继续补强；是否达到成熟长连产品标准，仍需要真实 iPhone 上锁屏、后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 010 - 修复 LinX 搜索超时重试和后台恢复识别风险并重新打包 IPA
+
+- **任务**：继续检查 LinX 是否满足长连 CGM 的连接、重连和后台恢复要求，修复会导致长连卡住的代码路径。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：保存过的 LinX 搜索超时后会保留错误提示并继续重新搜索，不再一次超时后停住。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：恢复连接时可按已保存的蓝牙标识接受设备，即使恢复出来的设备名为空；同时避免已保存设备场景误接其他 LinX。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：后台恢复出来的外设会缓存，后续按保存的蓝牙标识重新连接，不依赖设备名。
+  4. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增搜索超时自动重试、保存设备无名字恢复识别的回归测试。
+  5. `build/ipa/Loop-3.9.1-57-20260617-195232.ipa`：已导出的开发签名 IPA。
+- **验证结果**：新增 2 个测试先失败后修复；`MicroTechCGM` 测试 88 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `8ee2f6282d6339ce6f142383a0b0ee7d2779f1d79d474862d0e98f8602bce37b`。
+- **真机状态**：`devicectl` 当前列出的 iPhone 全部是 `unavailable`，未执行安装和长时间后台验证。
+- **关键发现**：代码层面的搜索超时重试和后台恢复识别风险已补齐；是否达到成熟长连产品标准，仍需要真实 iPhone 上锁屏、后台、离线重连和过夜长跑日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 009 - 重新打包 IPA
+
+- **任务**：按当前代码重新导出可安装 IPA。
+- **核心交付**：
+  1. `build/ipa/Loop-3.9.1-57-20260617-193118.ipa`：已导出的开发签名 IPA。
+  2. `build/archive/Loop-20260617-193118.xcarchive`：对应归档。
+  3. `build/export/Loop-20260617-193118`：对应导出目录。
+- **验证结果**：`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；IPA SHA256 为 `1d592d0b478a9d43db82d5305aabfb24906f2be32eca7e71da191d6b8833c1d3`。
+- **真机状态**：本次仅打包和包体验证，未执行安装验证。
+- **push 状态**：未推送。
+
+### 2026-06-17 008 - 修复 LinX 错误提示保留并重新打包 IPA
+
+- **任务**：修复 LinX 自动重连时失败原因被清掉的问题，并重新导出可安装 IPA。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：自动重连、后台恢复扫描、无首条血糖重连不再清掉最后一次失败原因；用户主动重新搜索、连接成功、读到数据后才清除旧错误。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：Bluetooth 不可用和搜索超时会返回可见错误，避免设置页只显示一直扫描。
+  3. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：补充连续 `invalidCRC` 后自动重连仍保留错误、主动重新搜索清除旧错误、Bluetooth 错误文本可读的回归测试。
+  4. `build/ipa/Loop-3.9.1-57-20260617-191657.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 86 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；后台模式包含 `bluetooth-central`；IPA SHA256 为 `2aa9de62a90bba07cb5125f50aded40418dd466670855697e47e9107473ca41b`。
+- **真机状态**：`devicectl` 当前列出的 iPhone 全部是 `unavailable`，未执行安装验证。
+- **关键发现**：代码层面的失败原因展示、自动重连错误保留、Bluetooth 不可用提示、搜索超时提示已补齐；后台长时间保活、系统蓝牙恢复和离线重连仍需要真实 iPhone 长时间日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 007 - 重新打包 IPA 并完成包体验证
+
+- **任务**：按当前工作区重新导出可安装 IPA。
+- **核心交付**：
+  1. `build/ipa/Loop-3.9.1-57-20260617-184959.ipa`：已导出的开发签名 IPA。
+  2. `build/archive/Loop-20260617-184959.xcarchive`：对应归档。
+  3. `build/export/Loop-20260617-184959`：对应导出目录。
+- **验证结果**：`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`、`LibreTransmitter.framework`；后台模式包含 `bluetooth-central`。
+- **真机状态**：`devicectl` 当前列出的 iPhone 全部是 `unavailable`，未执行安装验证。
+- **push 状态**：未推送。
+
+### 2026-06-17 006 - 补齐 LinX 已连接刷新和断开后立即重搜并重新打包 IPA
+
+- **任务**：继续修复 LinX 长连和重连风险，并重新导出可安装 IPA。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：蓝牙已处于连接状态时，会重新绑定并刷新当前连接，避免后台恢复或重复进入时停在“已连接但无后续动作”。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：主动断开陈旧连接、首条血糖超时、连续异常重启后，会马上重新搜索保存过的 LinX 设备。
+  3. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：补充已连接刷新和断开后立即重搜的回归测试。
+  4. `build/ipa/Loop-3.9.1-57-20260617-152026.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 83 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`。
+- **关键发现**：代码层面的已连接刷新和断开后重搜已补齐；后台长时间保活、系统蓝牙恢复和离线重连仍需要真实 iPhone 长时间日志证明。
+- **push 状态**：未推送。
+
+### 2026-06-17 005 - 补齐 LinX 无首条读数重连、连续异常重连与后台恢复日志并重新打包 IPA
+
+- **任务**：继续检查 LinX 长连、重连和后台恢复代码路径，补齐连接后一直没有首条血糖、连续解析异常、后台恢复日志不足这三个风险点，并重新导出可安装 IPA。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：连接后超过 15 分钟仍没有任何血糖时会主动断开并重新搜索，避免表面已连接但一直无数据。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：连续 3 次传感器异常后会主动重启连接，避免解析失败后长期停住。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：后台蓝牙恢复日志会记录是否恢复到设备、恢复数量和设备标识，便于真机日志快速定位。
+  4. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：补充无首条血糖重连、连续异常重连、后台恢复标识稳定性和不关闭泵蓝牙心跳的回归测试。
+  5. `build/ipa/Loop-3.9.1-57-20260617-140545.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 82 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`。
+- **关键发现**：代码层面的长连、异常重连和后台恢复日志已补齐；后台长时间保活、系统蓝牙恢复和离线重连仍需要真实 iPhone 长时间日志证明，当前不能只凭代码判断为成熟产品完成。
+- **push 状态**：未推送。
+
+### 2026-06-17 004 - 补齐前台返回刷新 CGM 并重新打包 IPA
+
+- **任务**：确认 LinX 长连、重连和后台恢复相关代码路径，补齐 App 回到前台后 CGM 不主动刷新的缺口，并重新导出可安装 IPA。
+- **核心交付**：
+  1. `Loop/Loop/Managers/DeviceDataManager.swift`：App 回到前台时会同时刷新 CGM，避免只更新泵蓝牙偏好而不触发 LinX 恢复。
+  2. `Loop/LoopTests/LoopTests.swift`：新增前台返回刷新 CGM 的回归测试。
+  3. `build/ipa/Loop-3.9.1-57-20260617-130045.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 78 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`。
+- **关键发现**：`LoopTests` 单条新增测试仍被当前环境的 watchOS/simulator 构建问题拦住，未执行到断言；这不是 LinX 代码导致。后台长时间保活、系统蓝牙恢复和离线重连仍需要真实 iPhone 日志证明，当前不能只凭代码判断为成熟产品完成。
+- **push 状态**：未推送。
+
+### 2026-06-17 003 - 修复 LinX 选择无反馈、序号 0 过滤与陈旧连接重连并重新打包 IPA
+
+- **任务**：修复 LinX 选择后界面无反馈、序号回绕后 0 号血糖被过滤、已连接但长时间无新血糖时无法自动恢复的问题，并重新导出可安装 IPA。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：扫描到 LinX/AiDEX 后立即保存设备名称、序列号和蓝牙标识；真正握手成功后才允许完成 CGM 添加。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechGlucoseReading.swift`：当前血糖允许 0 号序列，避免 65535 回绕到 0 时被误判为无效。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：历史血糖同样允许 0 号序列，并在已连接但 15 分钟无新血糖时主动断开以触发重连。
+  4. `MicroTechCGM/MicroTechCGM/MicroTechCGMManagerState.swift`：新增“已连接确认”状态，防止只发现设备就被当成添加完成。
+  5. `build/ipa/Loop-3.9.1-57-20260617-123519.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 78 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`。
+- **关键发现**：后台恢复和长时间真机保活仍需要真实 iPhone 日志证明；当前完成的是代码路径修复、自动化测试和 IPA 打包。
+- **push 状态**：未推送。
+
+### 2026-06-17 002 - 修复 LinX 添加空设备与历史回绕并重新打包 IPA
+
+- **任务**：修复选择 LinX 后未连接真实设备就完成添加的问题，补齐历史包序号回绕处理，并重新导出可安装 IPA。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGMUI/MicroTechCGMManager/MicroTechUICoordinator.swift`：选择 LinX 后只进入附近设备搜索；必须等真实 LinX/AiDEX 设备连接成功后，才完成 CGM 添加。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechAidexParser.swift`：历史数据包在 65535 后正确回到 0，避免跨边界历史值被错误排序或过滤。
+  3. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：补齐状态观察通知，保证连接到有效探头后 UI 添加流程能收到状态变化。
+  4. `LoopWorkspace.xcworkspace/xcshareddata/xcschemes/LoopWorkspace.xcscheme`：主 workspace 测试列表包含 `MicroTechCGMTests`。
+  5. `build/ipa/Loop-3.9.1-57-20260617-113839.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 73 个全部通过；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`。
+- **关键发现**：主 workspace 已能识别 `MicroTechCGMTests`，但主 workspace 测试命令仍被当前环境的 watchOS `LoopKit.framework` 缺失问题拦住；这不是 LinX 代码导致。
+- **push 状态**：未推送。
+
+### 2026-06-17 001 - 修复 LinX 数据过滤与连接超时并打包 IPA
+
+- **任务**：修复 LinX 无血糖数据风险点，补充连接失败退出路径和日志，并打包可安装 IPA。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechCGMManager.swift`：当前值和历史值使用相同过滤口径，并支持 16 位序号回绕，避免跨周期数据被误过滤。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：连接卡住时会超时退出并恢复搜索，避免长时间停在无反应状态。
+  3. `Loop/Loop/Managers/DeviceDataManager.swift`：补充 CGM 血糖写入日志，能区分成功、失败、无数据和不可靠数据。
+  4. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`：新增当前值过滤、历史值回绕和连接超时回归测试。
+  5. `build/ipa/Loop-3.9.1-57-20260617-084214.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`MicroTechCGM` 测试 69 个通过；主 App 通用 iOS 构建通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；签名校验通过；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`。
+- **关键发现**：`Loop` scheme 的 archive 会在当前环境报 `LoopKit` 依赖解析失败；可用的打包入口是 `LoopWorkspace` scheme。Release archive 同样卡在该依赖解析点，本次 IPA 使用现有开发签名 Debug 导出路径。
+- **push 状态**：未推送。
 
 ### 2026-06-14 004 - 复验 LinX 接入完成状态
 

@@ -11,6 +11,21 @@ import XCTest
 @testable import Loop
 
 class LoopTests: XCTestCase {
+    func testDeviceDataManagerDidBecomeActiveRefreshesCGM() {
+        var events: [String] = []
+
+        DeviceDataManager.handleDidBecomeActive(
+            updatePumpManagerBLEHeartbeatPreference: {
+                events.append("heartbeat")
+            },
+            refreshCGM: {
+                events.append("refreshCGM")
+            }
+        )
+
+        XCTAssertEqual(events, ["heartbeat", "refreshCGM"])
+    }
+
     func testPresentAfterDismissingPresentedViewControllerDismissesBeforePresenting() {
         let root = MockPresentationViewController()
         let presented = UIViewController()

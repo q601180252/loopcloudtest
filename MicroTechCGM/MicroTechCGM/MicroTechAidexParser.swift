@@ -11,7 +11,7 @@ public enum MicroTechAidexParser {
         }
 
         switch packetType {
-        case 0x01:
+        case 0x01, 0x03:
             return .current(try parseCurrent(packet))
         case 0x21:
             return .startTime(parseStartTime(packet))
@@ -30,7 +30,7 @@ public enum MicroTechAidexParser {
         let glucoseRaw = Int(data.microTechUInt16(at: 6))
         return MicroTechAidexCurrentPacket(
             rawBytes: data,
-            packetType: 0x01,
+            packetType: data[data.startIndex],
             trend: Int(data.microTechInt8(at: 3)),
             timeOffset: Int(data.microTechUInt16(at: 4)),
             glucoseRaw: glucoseRaw,
@@ -66,7 +66,7 @@ public enum MicroTechAidexParser {
 
             records.append(
                 MicroTechAidexHistoryRecord(
-                    timeOffset: startTimeOffset + records.count,
+                    timeOffset: (startTimeOffset + records.count) & 0xFFFF,
                     glucose: rawValue & 0x03FF,
                     rawValue: rawValue
                 )

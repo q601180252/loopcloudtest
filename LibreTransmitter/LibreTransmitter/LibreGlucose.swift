@@ -13,6 +13,7 @@ private var logger = Logger(forType: "LibreGlucose")
 public struct LibreGlucose: Codable, Hashable {
     public let unsmoothedGlucose: Double
     public var glucoseDouble: Double
+    public var rateOfChange: Double?
     public var error = [MeasurementError.OK]
     public var glucose: UInt16 {
         UInt16(glucoseDouble.rounded())
@@ -20,9 +21,10 @@ public struct LibreGlucose: Codable, Hashable {
 
     public var timestamp: Date
 
-    public init(unsmoothedGlucose: Double, glucoseDouble: Double, error: [MeasurementError] = [MeasurementError.OK], timestamp: Date) {
+    public init(unsmoothedGlucose: Double, glucoseDouble: Double, rateOfChange: Double? = nil, error: [MeasurementError] = [MeasurementError.OK], timestamp: Date) {
         self.unsmoothedGlucose = unsmoothedGlucose
         self.glucoseDouble = glucoseDouble
+        self.rateOfChange = rateOfChange
         self.timestamp = timestamp
     }
 
@@ -98,6 +100,31 @@ extension LibreGlucose {
 
         default:
 
+            return .flat
+        }
+    }
+
+    static func GetGlucoseTrend(rateOfChange: Double?) -> GlucoseTrend? {
+        guard let rateOfChange else {
+            return nil
+        }
+
+        switch rateOfChange {
+        case _ where rateOfChange <= (-3.5):
+            return .downDownDown
+        case _ where rateOfChange <= (-2):
+            return .downDown
+        case _ where rateOfChange <= (-1):
+            return .down
+        case _ where rateOfChange <= (1):
+            return .flat
+        case _ where rateOfChange <= (2):
+            return .up
+        case _ where rateOfChange <= (3.5):
+            return .upUp
+        case _ where rateOfChange <= (40):
+            return .flat
+        default:
             return .flat
         }
     }

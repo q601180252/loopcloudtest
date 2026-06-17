@@ -623,6 +623,16 @@
                ReferencedContainer = "container:RileyLinkKit/RileyLinkKit.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "AF2008C48127C37DBDB2B1A7"
+               BuildableName = "MicroTechCGMTests.xctest"
+               BlueprintName = "MicroTechCGMTests"
+               ReferencedContainer = "container:MicroTechCGM/MicroTechCGM.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

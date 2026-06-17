@@ -18,6 +18,11 @@ final class LoopCGMSetupUITests: XCTestCase {
         tap(app.buttons["status.settings"], named: "Settings", in: app)
         assertSettingsScreenIsVisible(in: app)
 
+        if openExistingMicroTechLinXIfConfigured(in: app) {
+            assertMicroTechSettingsScreenIsVisible(in: app)
+            return
+        }
+
         tapAddCGM(in: app)
         tap(app.buttons["MicroTech LinX"], named: "MicroTech LinX", in: app)
 
@@ -33,11 +38,53 @@ final class LoopCGMSetupUITests: XCTestCase {
             "MicroTech LinX setup screen did not open."
         )
 
-        let setupInput = app.textFields["microtech.setup.deviceNameOrSerial"]
-        let localizedSetupInput = app.textFields["AiDEX-222227HAUZ or sensor serial"]
+        let searchButton = app.buttons["microtech.setup.continue"]
+        let localizedSearchButton = app.buttons["Search Nearby Devices"]
         XCTAssertTrue(
-            setupInput.waitForExistence(timeout: 3) || localizedSetupInput.waitForExistence(timeout: 5),
-            "MicroTech LinX setup input was not visible."
+            searchButton.waitForExistence(timeout: 3) || localizedSearchButton.waitForExistence(timeout: 5),
+            "MicroTech LinX nearby search button was not visible."
+        )
+    }
+
+    private func openExistingMicroTechLinXIfConfigured(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> Bool {
+        let currentCGM = app.buttons["settings.cgm.current"]
+        guard currentCGM.waitForExistence(timeout: 2) else {
+            return false
+        }
+
+        XCTAssertTrue(
+            currentCGM.label.contains("MicroTech LinX"),
+            "Current CGM is \(currentCGM.label), not MicroTech LinX.",
+            file: file,
+            line: line
+        )
+        currentCGM.tap()
+        return true
+    }
+
+    private func assertMicroTechSettingsScreenIsVisible(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertFalse(
+            app.alerts["Unable to Open CGM"].waitForExistence(timeout: 2),
+            "Opening configured MicroTech LinX must not show Unable to Open CGM.",
+            file: file,
+            line: line
+        )
+
+        let title = app.navigationBars["MicroTech LinX"]
+        let deleteButton = app.buttons["Delete CGM"]
+        XCTAssertTrue(
+            title.waitForExistence(timeout: 5) || deleteButton.waitForExistence(timeout: 5),
+            "Configured MicroTech LinX settings screen did not open.",
+            file: file,
+            line: line
         )
     }
 

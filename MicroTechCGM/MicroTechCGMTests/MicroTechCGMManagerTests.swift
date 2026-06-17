@@ -1,11 +1,19 @@
+import CoreBluetooth
 import HealthKit
 import LoopKit
 import LoopKitUI
+import SwiftUI
 import XCTest
 @testable import MicroTechCGM
 @testable import MicroTechCGMUI
 
 final class MicroTechCGMManagerTests: XCTestCase {
+    func testMicroTechDoesNotDisablePumpBLEHeartbeat() {
+        let manager = MicroTechCGMManager()
+
+        XCTAssertFalse(manager.providesBLEHeartbeat)
+    }
+
     func testPluginReturnsMicroTechCGMManagerType() {
         let pluginBundle = microTechPluginBundle()
         do {
@@ -90,6 +98,44 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.glucoseDisplay as? MicroTechGlucoseReading, latestReading)
     }
 
+    func testAcceptAllowsSampleNumberRolloverForSameSensorSerial() {
+        let manager = MicroTechCGMManager()
+        let lastBeforeRollover = makeReading(
+            sampleNumber: 65535,
+            glucoseMgdl: 123,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let firstAfterRollover = makeReading(
+            sampleNumber: 1,
+            glucoseMgdl: 124,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_120)
+        )
+
+        XCTAssertEqual(manager.accept(lastBeforeRollover)?.syncIdentifier, "ABC123-65535")
+        XCTAssertEqual(manager.accept(firstAfterRollover)?.syncIdentifier, "ABC123-1")
+        XCTAssertEqual(manager.state.latestSampleNumber, 1)
+        XCTAssertEqual(manager.state.latestReading, firstAfterRollover)
+    }
+
+    func testAcceptAllowsSampleZeroAfterRolloverForSameSensorSerial() {
+        let manager = MicroTechCGMManager()
+        let lastBeforeRollover = makeReading(
+            sampleNumber: 65535,
+            glucoseMgdl: 123,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let zeroAfterRollover = makeReading(
+            sampleNumber: 0,
+            glucoseMgdl: 124,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_060)
+        )
+
+        XCTAssertEqual(manager.accept(lastBeforeRollover)?.syncIdentifier, "ABC123-65535")
+        XCTAssertEqual(manager.accept(zeroAfterRollover)?.syncIdentifier, "ABC123-0")
+        XCTAssertEqual(manager.state.latestSampleNumber, 0)
+        XCTAssertEqual(manager.state.latestReading, zeroAfterRollover)
+    }
+
     func testAcceptRejectsInvalidTherapyReadings() {
         let manager = MicroTechCGMManager()
         let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -132,18 +178,93 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(highlight?.state, .warning)
     }
 
-    func testScanForSensorRequiresSensorSerial() {
-        var didCreateBluetoothManager = false
+    func testScanForSensorWithoutConfiguredSensorStartsNearbyBluetoothScan() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
         let manager = MicroTechCGMManager(
             state: MicroTechCGMManagerState(),
-            bluetoothManagerFactory: {
-                didCreateBluetoothManager = true
-                return FakeMicroTechBluetoothManager()
-            }
+            bluetoothManagerFactory: { bluetoothManager }
         )
 
-        XCTAssertFalse(manager.scanForSensor())
-        XCTAssertFalse(didCreateBluetoothManager)
+        XCTAssertTrue(manager.scanForSensor())
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [nil])
+        XCTAssertTrue(manager.isScanning)
+    }
+
+    func testBluetoothScanLogsAreForwardedToDeviceLog() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        let logQueue = DispatchQueue(label: "MicroTechCGMManagerTests.bluetoothLogs")
+        manager.delegateQueue = logQueue
+        manager.cgmManagerDelegate = delegate
+
+        XCTAssertTrue(manager.scanForSensor())
+        bluetoothManager.logHandler?("didDiscover peripheral TEST, advertisedName Optional(\"LinX-NEARBY123\")", .connection)
+        bluetoothManager.logHandler?("peripheral configure failed TEST, name LinX-NEARBY123, error timeout", .error)
+        logQueue.sync {}
+
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .connection && event.message.contains("didDiscover peripheral TEST")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .error && event.message.contains("peripheral configure failed TEST")
+        })
+    }
+
+    func testNearbyScanConnectsDiscoveredLinxAndSavesSensor() throws {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000321")!
+        let material = MicroTechAidexKeyMaterial.derive(serial: "NEARBY123")
+        let peripheralSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: remoteIdentifier,
+            deviceName: "LinX-NEARBY123",
+            f002Challenge: try encryptedChallenge(for: material),
+            failurePoint: .read,
+            subscriptionFailures: [MicroTechAidexProfile.f001UUID]
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        manager.connectDiscoveredSensor(peripheralSession: peripheralSession)
+
+        XCTAssertEqual(manager.state.remoteIdentifier, remoteIdentifier)
+        XCTAssertEqual(manager.state.deviceName, "LinX-NEARBY123")
+        XCTAssertEqual(manager.state.sensorSerial, "NEARBY123")
+        XCTAssertFalse(manager.cgmManagerStatus.hasValidSensorSession)
+        XCTAssertTrue((bluetoothManager.delegate as AnyObject?) is MicroTechSensor)
+    }
+
+    func testNearbyScanConnectsDiscoveredAidexAndSavesSensor() throws {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000654")!
+        let material = MicroTechAidexKeyMaterial.derive(serial: "AIDEX123")
+        let peripheralSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: remoteIdentifier,
+            deviceName: "AiDEX-AIDEX123",
+            f002Challenge: try encryptedChallenge(for: material),
+            failurePoint: .read,
+            subscriptionFailures: [MicroTechAidexProfile.f001UUID]
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        manager.connectDiscoveredSensor(peripheralSession: peripheralSession)
+
+        XCTAssertEqual(manager.state.remoteIdentifier, remoteIdentifier)
+        XCTAssertEqual(manager.state.deviceName, "AiDEX-AIDEX123")
+        XCTAssertEqual(manager.state.sensorSerial, "AIDEX123")
+        XCTAssertFalse(manager.cgmManagerStatus.hasValidSensorSession)
+        XCTAssertTrue((bluetoothManager.delegate as AnyObject?) is MicroTechSensor)
     }
 
     func testConfigureSensorFromDeviceNameSavesSerialAndStartsScan() {
@@ -231,6 +352,241 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.latestSampleNumber, 42)
     }
 
+    func testActiveSensorDisconnectRestartsScanForSavedPeripheral() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+        bluetoothManager.isScanning = false
+        bluetoothManager.isConnected = false
+
+        manager.microTechSensorDidDisconnect(sensor)
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+        XCTAssertEqual(retryBlocks.count, 1)
+        guard retryBlocks.count == 1 else {
+            return
+        }
+
+        retryBlocks[0]()
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+        XCTAssertTrue(bluetoothManager.isScanning)
+    }
+
+    func testFetchDisconnectsStaleConnectedSensorSoBluetoothCanReconnect() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        state.lastReadingDate = Date(timeIntervalSinceNow: -16 * 60)
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        bluetoothManager.isConnected = true
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let fetchCompleted = expectation(description: "fetch completed")
+
+        XCTAssertTrue(manager.scanForSensor())
+        manager.fetchNewDataIfNeeded { result in
+            if case .noData = result {
+                fetchCompleted.fulfill()
+            } else {
+                XCTFail("Expected stale reconnect fetch to report no data")
+            }
+        }
+
+        wait(for: [fetchCompleted], timeout: 1)
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+    }
+
+    func testFetchDisconnectsConnectedSensorWhenNoReadingArrivesAfterConnectTimeout() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var now = Date(timeIntervalSince1970: 1_700_000_000)
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            dateProvider: { now }
+        )
+        let fetchCompleted = expectation(description: "fetch completed")
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+        bluetoothManager.isConnected = true
+        now = now.addingTimeInterval(16 * 60)
+
+        manager.fetchNewDataIfNeeded { result in
+            if case .noData = result {
+                fetchCompleted.fulfill()
+            } else {
+                XCTFail("Expected no-reading reconnect fetch to report no data")
+            }
+        }
+
+        wait(for: [fetchCompleted], timeout: 1)
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+    }
+
+    func testConnectedSensorWatchdogReconnectsWithoutFetchWhenNoReadingArrives() throws {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var now = Date(timeIntervalSince1970: 1_700_000_000)
+        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            staleConnectionScheduler: { delay, watchdog in
+                scheduledWatchdogs.append((delay, watchdog))
+            },
+            dateProvider: { now }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        bluetoothManager.isConnected = true
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+
+        XCTAssertEqual(scheduledWatchdogs.count, 1)
+        XCTAssertEqual(try XCTUnwrap(scheduledWatchdogs.first?.0), 15 * 60, accuracy: 0.001)
+
+        now = now.addingTimeInterval(16 * 60)
+        scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+    }
+
+    func testCurrentReadingRefreshesConnectedSensorWatchdog() throws {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var now = Date(timeIntervalSince1970: 1_700_000_000)
+        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            staleConnectionScheduler: { delay, watchdog in
+                scheduledWatchdogs.append((delay, watchdog))
+            },
+            dateProvider: { now }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        bluetoothManager.isConnected = true
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+        now = now.addingTimeInterval(60)
+        manager.microTechSensor(sensor, didRead: makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: now))
+
+        XCTAssertEqual(scheduledWatchdogs.count, 2)
+        now = Date(timeIntervalSince1970: 1_700_000_000 + 16 * 60)
+        scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 0)
+
+        now = now.addingTimeInterval(60)
+        scheduledWatchdogs[1].1()
+
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+    }
+
+    func testCurrentReadingWatchdogSchedulingDoesNotReadBluetoothConnectionState() throws {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            staleConnectionScheduler: { delay, watchdog in
+                scheduledWatchdogs.append((delay, watchdog))
+            }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        bluetoothManager.isConnected = true
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+        scheduledWatchdogs.removeAll()
+        bluetoothManager.isConnectedReadCount = 0
+
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+
+        XCTAssertEqual(scheduledWatchdogs.count, 1)
+        XCTAssertEqual(bluetoothManager.isConnectedReadCount, 0)
+    }
+
+    func testRestoredSavedSensorStartsScanWhenDelegateQueueIsConfigured() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            resumeScanWhenDelegateQueueConfigured: true
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+
+        manager.cgmManagerDelegate = delegate
+        manager.delegateQueue = .main
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+        XCTAssertTrue(bluetoothManager.isScanning)
+    }
+
     func testSettingsViewModelScanUsesActualManagerScanningStateWhenConnected() {
         var state = MicroTechCGMManagerState()
         state.remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
@@ -254,7 +610,27 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(bluetoothManager.scanRemoteIdentifiers.isEmpty)
     }
 
-    func testSettingsViewModelSavesConfiguredSensorAndStartsScan() {
+    func testScanForSavedSensorRefreshesAlreadyConnectedBluetoothSession() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        bluetoothManager.isConnected = true
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [])
+        XCTAssertEqual(bluetoothManager.refreshConnectedPeripheralCallCount, 1)
+        XCTAssertTrue((bluetoothManager.delegate as AnyObject?) is MicroTechSensor)
+    }
+
+    func testSettingsViewModelStartsNearbyScanWithoutManualInput() {
         let bluetoothManager = FakeMicroTechBluetoothManager()
         let manager = MicroTechCGMManager(
             state: MicroTechCGMManagerState(),
@@ -265,13 +641,279 @@ final class MicroTechCGMManagerTests: XCTestCase {
             displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
         )
 
-        viewModel.deviceNameOrSerialInput = "AiDEX-222227HAUZ"
+        viewModel.scanForSensor()
 
-        XCTAssertTrue(viewModel.saveSensorAndScan())
-        XCTAssertEqual(viewModel.deviceName, "AiDEX-222227HAUZ")
-        XCTAssertEqual(viewModel.sensorSerial, "222227HAUZ")
+        XCTAssertNil(viewModel.deviceName)
+        XCTAssertNil(viewModel.sensorSerial)
         XCTAssertEqual(viewModel.scanButtonTitle, "Scan for Sensor")
         XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [nil])
+        XCTAssertTrue(viewModel.isScanning)
+    }
+
+    func testBluetoothFailureStoresVisibleConnectionErrorAndRefreshesSettingsViewModel() {
+        let manager = MicroTechCGMManager()
+        let viewModel = MicroTechSettingsViewModel(
+            cgmManager: manager,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
+        )
+        let refreshed = expectation(description: "settings view model refreshed")
+
+        manager.recordBluetoothFailure(MicroTechCGMManagerTestError.poweredOff)
+
+        DispatchQueue.main.async {
+            XCTAssertEqual(manager.state.lastConnectionErrorDescription, "Bluetooth failed: poweredOff")
+            XCTAssertEqual(viewModel.connectionErrorDescription, "Bluetooth failed: poweredOff")
+            refreshed.fulfill()
+        }
+        wait(for: [refreshed], timeout: 1)
+    }
+
+    func testScanTimeoutRetriesSavedSensorWithoutClearingVisibleConnectionError() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        bluetoothManager.isScanning = false
+
+        manager.recordBluetoothFailure(MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier))
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+        XCTAssertEqual(retryBlocks.count, 1)
+        XCTAssertEqual(
+            manager.state.lastConnectionErrorDescription,
+            "Bluetooth failed: scan timed out for \(remoteIdentifier)"
+        )
+        guard retryBlocks.count == 1 else {
+            return
+        }
+
+        retryBlocks[0]()
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+        XCTAssertTrue(bluetoothManager.isScanning)
+    }
+
+    func testSensorScanTimeoutRetriesSavedSensorWithoutSynchronousScan() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        bluetoothManager.isScanning = false
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier))
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+        XCTAssertEqual(retryBlocks.count, 1)
+        XCTAssertEqual(
+            manager.state.lastConnectionErrorDescription,
+            "Bluetooth failed: scan timed out for \(remoteIdentifier)"
+        )
+
+        retryBlocks[0]()
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+        XCTAssertTrue(bluetoothManager.isScanning)
+    }
+
+    func testRepeatedSavedIdentifierTimeoutsFallBackToNearbySerialScan() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        bluetoothManager.isScanning = false
+        manager.recordBluetoothFailure(MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier))
+        retryBlocks.removeFirst()()
+        bluetoothManager.isScanning = false
+
+        manager.recordBluetoothFailure(MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier))
+
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertEqual(retryBlocks.count, 1)
+        retryBlocks.removeFirst()()
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier, nil])
+        XCTAssertTrue(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-ABC123", identifier: UUID()))
+        XCTAssertFalse(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-OTHER", identifier: UUID()))
+    }
+
+    func testRepeatedSavedIdentifierConnectionTimeoutsFallBackToNearbySerialScan() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.connectTimeout(remoteIdentifier))
+        XCTAssertEqual(retryBlocks.count, 0)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.connectTimeout(remoteIdentifier))
+
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(retryBlocks.count, 1)
+        retryBlocks.removeFirst()()
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, nil])
+        XCTAssertTrue(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-ABC123", identifier: UUID()))
+        XCTAssertFalse(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-OTHER", identifier: UUID()))
+    }
+
+    func testRepeatedSavedIdentifierConnectionFailuresFallBackToNearbySerialScan() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.connectFailed(remoteIdentifier, "peripheral disconnected"))
+        XCTAssertEqual(retryBlocks.count, 0)
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.connectFailed(remoteIdentifier, "peripheral disconnected"))
+
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(retryBlocks.count, 1)
+        retryBlocks.removeFirst()()
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, nil])
+    }
+
+    func testSettingsViewModelScanClearsPreviousConnectionError() {
+        var state = MicroTechCGMManagerState()
+        state.lastConnectionErrorDescription = "Bluetooth failed: poweredOff"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let viewModel = MicroTechSettingsViewModel(
+            cgmManager: manager,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
+        )
+
+        XCTAssertEqual(viewModel.connectionErrorDescription, "Bluetooth failed: poweredOff")
+
+        viewModel.scanForSensor()
+
+        XCTAssertNil(manager.state.lastConnectionErrorDescription)
+        XCTAssertNil(viewModel.connectionErrorDescription)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [nil])
+    }
+
+    func testSetupOnboardsOnlyAfterNearbySensorConnection() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let onboardingDelegate = TestCGMOnboardingDelegate(expectedCreateCount: 1, expectedOnboardCount: 1)
+        let coordinator = MicroTechUICoordinator(
+            colorPalette: EnvironmentValues().colorPalette,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit),
+            allowDebugFeatures: false,
+            makeCGMManager: { manager }
+        )
+        coordinator.cgmManagerOnboardingDelegate = onboardingDelegate
+
+        coordinator.completeSetup()
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [nil])
+        XCTAssertTrue(onboardingDelegate.createdManagers.isEmpty)
+        XCTAssertTrue(onboardingDelegate.onboardedManagers.isEmpty)
+
+        let session = makeSession()
+        manager.microTechSensorDidConnect(makeSensor(session: session), session: session)
+
+        wait(for: [onboardingDelegate.createdExpectation, onboardingDelegate.onboardedExpectation], timeout: 1)
+        XCTAssertTrue(onboardingDelegate.createdManagers.first === manager)
+        XCTAssertTrue(onboardingDelegate.onboardedManagers.first === manager)
+    }
+
+    func testSetupDoesNotOnboardWhenNearbyDeviceIsSavedBeforeHandshake() throws {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let onboardingDelegate = TestCGMOnboardingDelegate(expectedCreateCount: 0, expectedOnboardCount: 0)
+        let coordinator = MicroTechUICoordinator(
+            colorPalette: EnvironmentValues().colorPalette,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit),
+            allowDebugFeatures: false,
+            makeCGMManager: { manager }
+        )
+        coordinator.cgmManagerOnboardingDelegate = onboardingDelegate
+        let material = MicroTechAidexKeyMaterial.derive(serial: "NEARBY123")
+        let peripheralSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000321")!,
+            deviceName: "LinX-NEARBY123",
+            f002Challenge: try encryptedChallenge(for: material),
+            failurePoint: .read,
+            subscriptionFailures: [MicroTechAidexProfile.f001UUID]
+        )
+
+        coordinator.completeSetup()
+        manager.connectDiscoveredSensor(peripheralSession: peripheralSession)
+
+        wait(for: [onboardingDelegate.createdExpectation, onboardingDelegate.onboardedExpectation], timeout: 0.2)
+        XCTAssertEqual(manager.state.sensorSerial, "NEARBY123")
+        XCTAssertFalse(manager.cgmManagerStatus.hasValidSensorSession)
+        XCTAssertTrue(onboardingDelegate.createdManagers.isEmpty)
+        XCTAssertTrue(onboardingDelegate.onboardedManagers.isEmpty)
     }
 
     func testSettingsViewModelRefreshDisplaysManagerStateAndWritesUploadPreference() {
@@ -279,7 +921,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
             cgmManager: MicroTechCGMManager(),
             displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
         )
-        XCTAssertEqual(noSensorViewModel.scanButtonTitle, "Refresh")
+        XCTAssertEqual(noSensorViewModel.scanButtonTitle, "Scan for Sensor")
 
         let readingDate = Date(timeIntervalSince1970: 1_700_000_000)
         let reading = makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: readingDate)
@@ -336,7 +978,254 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
     }
 
-    func testSensorHistoryReadDoesNotChangeLatestSampleNumberOrEmitNewGlucoseSample() throws {
+    func testLinxF003CurrentNotificationFromDeviceLogEmitsNewDataAndDiagnosticLogs() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let plain = try Data(microTechHexadecimalString: "030100FE60545F80B303800C4500004D5B")
+        let encrypted = try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: plain)
+        let receivedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: remoteIdentifier,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: remoteIdentifier,
+                deviceName: "LinX-ABC123",
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake,
+            pairingKeyTimeout: 0
+        )
+        sensor.delegate = manager
+
+        try sensor.start()
+        sensor.handleNotification(
+            characteristic: MicroTechAidexProfile.f003UUID,
+            value: encrypted,
+            receivedAt: receivedAt
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-21600"])
+        XCTAssertEqual(delegate.newDataSamples.map { Int($0.quantity.doubleValue(for: Self.mgdlUnit)) }, [95])
+        XCTAssertEqual(manager.state.latestSampleNumber, 21600)
+        XCTAssertEqual(manager.state.latestReading?.trend, -2)
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive &&
+                event.message.contains("notification F003 decrypted type=0x03") &&
+                event.message.contains("rawPrefix=030100FE60545F80B303800C4500004D5B")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive &&
+                event.message.contains("parsed current packetType=0x03") &&
+                event.message.contains("sample=21600") &&
+                event.message.contains("rawPrefix=030100FE60545F80B303800C4500004D5B")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive &&
+                event.message.contains("current accepted serial=ABC123 sample=21600") &&
+                event.message.contains("packetType=0x03") &&
+                event.message.contains("rawPrefix=030100FE60545F80B303800C4500004D5B")
+        })
+    }
+
+    func testStatusObserverReceivesSensorSessionAndReadingUpdates() throws {
+        let manager = MicroTechCGMManager()
+        let observer = TestCGMStatusObserver(expectedStatusCount: 2)
+        let statusQueue = DispatchQueue(label: "MicroTechCGMManagerTests.statusObserver")
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+
+        manager.addStatusObserver(observer, queue: statusQueue)
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+
+        wait(for: [observer.statusExpectation], timeout: 1)
+        statusQueue.sync {}
+        XCTAssertEqual(observer.statuses.map(\.hasValidSensorSession), [true, true])
+        XCTAssertEqual(observer.statuses.last?.lastCommunicationDate, Date(timeIntervalSince1970: 1_700_000_000))
+    }
+
+    func testRemovingStatusObserverStopsMicroTechStatusUpdates() throws {
+        let manager = MicroTechCGMManager()
+        let observer = TestCGMStatusObserver(expectedStatusCount: 0)
+        let statusQueue = DispatchQueue(label: "MicroTechCGMManagerTests.removedStatusObserver")
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+
+        manager.addStatusObserver(observer, queue: statusQueue)
+        manager.removeStatusObserver(observer)
+        manager.microTechSensorDidConnect(sensor, session: session)
+
+        wait(for: [observer.statusExpectation], timeout: 0.2)
+        statusQueue.sync {}
+        XCTAssertTrue(observer.statuses.isEmpty)
+    }
+
+    func testSensorCurrentReadUsesDelegateStartDateFilter() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        let delegateQueue = DispatchQueue(label: "MicroTechCGMManagerTests.startDateFilter")
+        let readingDate = Date(timeIntervalSince1970: 1_700_000_000)
+        delegate.startDateForFiltering = readingDate.addingTimeInterval(60)
+        manager.delegateQueue = delegateQueue
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(sensor, didRead: makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: readingDate))
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.noDataCount, 1)
+        XCTAssertNil(manager.state.latestSampleNumber)
+        XCTAssertNil(manager.state.latestReading)
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("reason=beforeStartDate")
+        })
+    }
+
+    func testSensorErrorsAreLoggedWithReadableNames() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(sensor, didError: MicroTechAidexParserError.unsupportedPacket(0x04))
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .error && event.message.contains("unsupportedPacket(4)")
+        })
+        XCTAssertFalse(delegate.loggedEvents.contains { event in
+            event.message.contains("ParserError error")
+        })
+    }
+
+    func testRepeatedSensorErrorsDisconnectToRestartBluetooth() throws {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        bluetoothManager.isConnected = true
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 3)
+        let viewModel = MicroTechSettingsViewModel(
+            cgmManager: manager,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit)
+        )
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+
+        manager.microTechSensor(sensor, didError: MicroTechAidexParserError.invalidCRC)
+        manager.microTechSensor(sensor, didError: MicroTechAidexParserError.invalidCRC)
+        manager.microTechSensor(sensor, didError: MicroTechAidexParserError.invalidCRC)
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [])
+        XCTAssertEqual(retryBlocks.count, 1)
+        XCTAssertEqual(manager.state.lastConnectionErrorDescription, "Sensor error: invalidCRC")
+        XCTAssertEqual(viewModel.connectionErrorDescription, "Sensor error: invalidCRC")
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .connection &&
+                event.message.contains("restarting connection after 3 consecutive sensor errors")
+        })
+        guard retryBlocks.count == 1 else {
+            return
+        }
+
+        retryBlocks[0]()
+
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+    }
+
+    func testBluetoothManagerErrorsHaveReadableDescriptions() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            String(describing: MicroTechBluetoothManagerError.connectTimeout(remoteIdentifier)),
+            "connection timed out for \(remoteIdentifier)"
+        )
+        XCTAssertEqual(
+            String(describing: MicroTechBluetoothManagerError.connectFailed(remoteIdentifier, "peripheral disconnected")),
+            "connection failed for \(remoteIdentifier): peripheral disconnected"
+        )
+        XCTAssertEqual(
+            String(describing: MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier)),
+            "scan timed out for \(remoteIdentifier)"
+        )
+        XCTAssertEqual(
+            String(describing: MicroTechBluetoothManagerError.bluetoothUnavailable(4)),
+            "Bluetooth unavailable state=4"
+        )
+    }
+
+    func testCurrentReadRequestsHistoryBackfillFromWarmupIndex() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let material = MicroTechAidexKeyMaterial.derive(serial: session.sensorSerial)
+        let peripheralSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: session.remoteIdentifier,
+            deviceName: session.deviceName,
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let sensor = MicroTechSensor(session: session, peripheralSession: peripheralSession, pairingKeyTimeout: 0)
+        sensor.delegate = manager
+        try sensor.start()
+
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 65,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        let expectedHistoryCommand = try MicroTechAidexCommandBuilder(keyMaterial: material)
+            .cmd23(index: 60)
+            .microTechHexadecimalString
+        XCTAssertTrue(peripheralSession.calls.contains(.write(expectedHistoryCommand, MicroTechAidexProfile.f002UUID.uuidString)))
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .send && event.message.contains("history backfill requested from=60 current=65")
+        })
+    }
+
+    func testSensorHistoryReadEmitsNewGlucoseSamplesWithoutChangingLatestSampleNumber() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
         manager.delegateQueue = .main
@@ -370,8 +1259,245 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
         wait(for: [delegate.readingResultsExpectation], timeout: 1)
         XCTAssertEqual(manager.state.latestSampleNumber, 42)
-        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
-        XCTAssertEqual(delegate.noDataCount, 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42", "ABC123-41"])
+        XCTAssertEqual(delegate.newDataSamples.map { Int($0.quantity.doubleValue(for: Self.mgdlUnit)) }, [123, 122])
+        XCTAssertEqual(delegate.noDataCount, 0)
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("current accepted serial=ABC123 sample=42")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("history processed serial=ABC123 records=1 accepted=1")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("anchor=current")
+        })
+    }
+
+    func testSensorHistoryReadHandlesSampleNumberRollover() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let currentDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 2,
+                glucoseMgdl: 123,
+                receivedAt: currentDate
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 65535,
+                records: [
+                    MicroTechAidexHistoryRecord(timeOffset: 65535, glucose: 120, rawValue: 120),
+                    MicroTechAidexHistoryRecord(timeOffset: 1, glucose: 122, rawValue: 122),
+                    MicroTechAidexHistoryRecord(timeOffset: 3, glucose: 124, rawValue: 124),
+                ]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-2", "ABC123-65535", "ABC123-1"])
+        XCTAssertEqual(delegate.newDataSamples.map(\.date), [
+            currentDate,
+            currentDate.addingTimeInterval(-3 * 60),
+            currentDate.addingTimeInterval(-1 * 60),
+        ])
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("accepted=2") && event.message.contains("tooNew=1")
+        })
+    }
+
+    func testSensorHistoryReadAcceptsSampleZeroAcrossRollover() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let currentDate = Date(timeIntervalSince1970: 1_700_000_120)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 1,
+                glucoseMgdl: 124,
+                receivedAt: currentDate
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 65535,
+                records: [
+                    MicroTechAidexHistoryRecord(timeOffset: 65535, glucose: 120, rawValue: 120),
+                    MicroTechAidexHistoryRecord(timeOffset: 0, glucose: 122, rawValue: 122),
+                ]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-1", "ABC123-65535", "ABC123-0"])
+        XCTAssertEqual(delegate.newDataSamples.map(\.date), [
+            currentDate,
+            currentDate.addingTimeInterval(-2 * 60),
+            currentDate.addingTimeInterval(-1 * 60),
+        ])
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("accepted=2")
+        })
+    }
+
+    func testSensorHistoryReadLogsRejectedSampleDetails() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 3)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let currentDate = Date(timeIntervalSince1970: 1_700_000_000)
+        delegate.startDateForFiltering = currentDate.addingTimeInterval(-2 * 60)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: currentDate
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 41,
+                records: [
+                    MicroTechAidexHistoryRecord(timeOffset: 41, glucose: 122, rawValue: 122),
+                ]
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 39,
+                records: [
+                    MicroTechAidexHistoryRecord(timeOffset: 39, glucose: 121, rawValue: 121),
+                    MicroTechAidexHistoryRecord(timeOffset: 40, glucose: 450, rawValue: 450),
+                    MicroTechAidexHistoryRecord(timeOffset: 41, glucose: 122, rawValue: 122),
+                    MicroTechAidexHistoryRecord(timeOffset: 43, glucose: 124, rawValue: 124),
+                ]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        guard let historyLog = delegate.loggedEvents.last(where: { event in
+            event.type == .receive &&
+                event.message.contains("history processed serial=ABC123 records=4 accepted=0 invalid=1 duplicate=1 tooNew=1 filtered=1")
+        })?.message else {
+            return XCTFail("Expected detailed history rejection log")
+        }
+        XCTAssertTrue(historyLog.contains("invalid=[sample=40 value=450 quality=0 raw=450]"))
+        XCTAssertTrue(historyLog.contains("duplicate=[sample=41]"))
+        XCTAssertTrue(historyLog.contains("tooNew=[sample=43 latest=42]"))
+        XCTAssertTrue(historyLog.contains("filtered=[sample=39"))
+    }
+
+    func testHistoryReadRequestsNextPacketUntilCurrentSampleIsReached() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let material = MicroTechAidexKeyMaterial.derive(serial: session.sensorSerial)
+        let peripheralSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: session.remoteIdentifier,
+            deviceName: session.deviceName,
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let sensor = MicroTechSensor(session: session, peripheralSession: peripheralSession, pairingKeyTimeout: 0)
+        sensor.delegate = manager
+        try sensor.start()
+
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 70,
+                glucoseMgdl: 123,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 60,
+                records: [
+                    MicroTechAidexHistoryRecord(timeOffset: 60, glucose: 110, rawValue: 110),
+                    MicroTechAidexHistoryRecord(timeOffset: 61, glucose: 111, rawValue: 111),
+                    MicroTechAidexHistoryRecord(timeOffset: 62, glucose: 112, rawValue: 112),
+                ]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        let builder = MicroTechAidexCommandBuilder(keyMaterial: material)
+        let firstHistoryCommand = try builder.cmd23(index: 60).microTechHexadecimalString
+        let nextHistoryCommand = try builder.cmd23(index: 63).microTechHexadecimalString
+        XCTAssertTrue(peripheralSession.calls.contains(.write(firstHistoryCommand, MicroTechAidexProfile.f002UUID.uuidString)))
+        XCTAssertTrue(peripheralSession.calls.contains(.write(nextHistoryCommand, MicroTechAidexProfile.f002UUID.uuidString)))
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .send && event.message.contains("history continuation requested from=63 current=70")
+        })
+    }
+
+    func testSensorHistoryReadUsesActivationTimeWhenCurrentReadingIsMissing() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let activationTime = Date(timeIntervalSince1970: 1_700_000_000)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(sensor, didActivateAt: activationTime)
+        manager.microTechSensor(
+            sensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 41,
+                records: [
+                    MicroTechAidexHistoryRecord(
+                        timeOffset: 41,
+                        glucose: 122,
+                        rawValue: 122
+                    ),
+                ]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-41"])
+        XCTAssertEqual(delegate.newDataSamples.single?.date, activationTime.addingTimeInterval(41 * 60))
+        XCTAssertEqual(delegate.noDataCount, 0)
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("history processed serial=ABC123 records=1 accepted=1")
+        })
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("anchor=activationTime")
+        })
     }
 
     func testDeleteClearsSensorStatePreservesUploadReadingsAndStopsActiveSensor() throws {
@@ -399,7 +1525,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
             deviceName: session.deviceName,
             f002Challenge: try encryptedChallenge(for: material)
         )
-        let sensor = MicroTechSensor(session: session, peripheralSession: peripheralSession)
+        let sensor = MicroTechSensor(session: session, peripheralSession: peripheralSession, pairingKeyTimeout: 0)
         sensor.delegate = manager
         try sensor.start()
         let deletionExpectation = expectation(description: "manager deletion")
@@ -607,6 +1733,51 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.deviceName, "LinX-XYZ789")
     }
 
+    func testConnectionTimeoutControllerFiresAndCanCancel() {
+        let queue = DispatchQueue(label: "MicroTechCGMManagerTests.connectionTimeout")
+        let controller = MicroTechConnectionTimeoutController(timeout: 0.01, queue: queue)
+        let fired = expectation(description: "connection timeout fired")
+        let cancelled = expectation(description: "cancelled timeout did not fire")
+        cancelled.isInverted = true
+        let firedIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000111")!
+        let cancelledIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000222")!
+
+        controller.schedule(identifier: firedIdentifier) { identifier in
+            XCTAssertEqual(identifier, firedIdentifier)
+            fired.fulfill()
+        }
+        controller.schedule(identifier: cancelledIdentifier) { _ in
+            cancelled.fulfill()
+        }
+        controller.cancel(identifier: cancelledIdentifier)
+
+        wait(for: [fired, cancelled], timeout: 0.2)
+    }
+
+    func testPeripheralDisconnectingStateSchedulesConnectionTimeout() {
+        XCTAssertFalse(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .connected))
+        XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnected))
+        XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .connecting))
+        XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnecting))
+    }
+
+    func testBluetoothRestoreIdentifierIsStableForBackgroundRecovery() {
+        XCTAssertEqual(MicroTechBluetoothManager.restoreIdentifier, "com.loopkit.MicroTechCGM")
+    }
+
+    func testSavedSensorAcceptsRestoredPeripheralIdentifierWithoutDeviceName() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let manager = MicroTechCGMManager(state: state)
+
+        XCTAssertTrue(manager.shouldConnectToMicroTechDevice(deviceName: "", identifier: remoteIdentifier))
+        XCTAssertTrue(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-ABC123", identifier: UUID()))
+        XCTAssertFalse(manager.shouldConnectToMicroTechDevice(deviceName: "", identifier: UUID()))
+    }
+
     private func makeReading(
         sampleNumber: Int,
         glucoseMgdl: Int,
@@ -654,7 +1825,8 @@ final class MicroTechCGMManagerTests: XCTestCase {
                 deviceIdentifier: session.remoteIdentifier,
                 deviceName: session.deviceName,
                 f002Challenge: Data()
-            )
+            ),
+            pairingKeyTimeout: 0
         )
     }
 
@@ -684,7 +1856,9 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
 private final class TestCGMManagerDelegate: CGMManagerDelegate {
     let readingResultsExpectation: XCTestExpectation
+    var startDateForFiltering: Date?
     private(set) var readingResults: [CGMReadingResult] = []
+    private(set) var loggedEvents: [(deviceIdentifier: String?, type: DeviceLogEntryType, message: String)] = []
 
     init(expectedReadingResultCount: Int) {
         readingResultsExpectation = XCTestExpectation(description: "reading results")
@@ -693,9 +1867,13 @@ private final class TestCGMManagerDelegate: CGMManagerDelegate {
     }
 
     var newDataSampleSyncIdentifiers: [String] {
-        readingResults.flatMap { result -> [String] in
+        newDataSamples.map(\.syncIdentifier)
+    }
+
+    var newDataSamples: [NewGlucoseSample] {
+        readingResults.flatMap { result -> [NewGlucoseSample] in
             if case .newData(let samples) = result {
-                return samples.map(\.syncIdentifier)
+                return samples
             }
             return []
         }
@@ -711,7 +1889,7 @@ private final class TestCGMManagerDelegate: CGMManagerDelegate {
     }
 
     func startDateToFilterNewData(for manager: CGMManager) -> Date? {
-        nil
+        startDateForFiltering
     }
 
     func cgmManager(_ manager: CGMManager, hasNew readingResult: CGMReadingResult) {
@@ -742,16 +1920,17 @@ private final class TestCGMManagerDelegate: CGMManagerDelegate {
         message: String,
         completion: ((Error?) -> Void)?
     ) {
+        loggedEvents.append((deviceIdentifier: deviceIdentifier, type: type, message: message))
         completion?(nil)
     }
 
-    func issueAlert(_ alert: Alert) {
+    func issueAlert(_ alert: LoopKit.Alert) {
     }
 
-    func retractAlert(identifier: Alert.Identifier) {
+    func retractAlert(identifier: LoopKit.Alert.Identifier) {
     }
 
-    func doesIssuedAlertExist(identifier: Alert.Identifier, completion: @escaping (Result<Bool, Error>) -> Void) {
+    func doesIssuedAlertExist(identifier: LoopKit.Alert.Identifier, completion: @escaping (Result<Bool, Error>) -> Void) {
         completion(.success(false))
     }
 
@@ -769,21 +1948,79 @@ private final class TestCGMManagerDelegate: CGMManagerDelegate {
         completion(.success([]))
     }
 
-    func recordRetractedAlert(_ alert: Alert, at date: Date) {
+    func recordRetractedAlert(_ alert: LoopKit.Alert, at date: Date) {
+    }
+}
+
+private final class TestCGMStatusObserver: CGMManagerStatusObserver {
+    let statusExpectation: XCTestExpectation
+    private(set) var statuses: [CGMManagerStatus] = []
+
+    init(expectedStatusCount: Int) {
+        statusExpectation = XCTestExpectation(description: "cgm status updates")
+        statusExpectation.expectedFulfillmentCount = max(expectedStatusCount, 1)
+        statusExpectation.isInverted = expectedStatusCount == 0
+    }
+
+    func cgmManager(_ manager: CGMManager, didUpdate status: CGMManagerStatus) {
+        statuses.append(status)
+        statusExpectation.fulfill()
+    }
+}
+
+private final class TestCGMOnboardingDelegate: CGMManagerOnboardingDelegate {
+    let createdExpectation: XCTestExpectation
+    let onboardedExpectation: XCTestExpectation
+    private(set) var createdManagers: [CGMManagerUI] = []
+    private(set) var onboardedManagers: [CGMManagerUI] = []
+
+    init(expectedCreateCount: Int, expectedOnboardCount: Int) {
+        createdExpectation = XCTestExpectation(description: "created cgm managers")
+        createdExpectation.expectedFulfillmentCount = max(expectedCreateCount, 1)
+        createdExpectation.isInverted = expectedCreateCount == 0
+        onboardedExpectation = XCTestExpectation(description: "onboarded cgm managers")
+        onboardedExpectation.expectedFulfillmentCount = max(expectedOnboardCount, 1)
+        onboardedExpectation.isInverted = expectedOnboardCount == 0
+    }
+
+    func cgmManagerOnboarding(didCreateCGMManager cgmManager: CGMManagerUI) {
+        createdManagers.append(cgmManager)
+        createdExpectation.fulfill()
+    }
+
+    func cgmManagerOnboarding(didOnboardCGMManager cgmManager: CGMManagerUI) {
+        onboardedManagers.append(cgmManager)
+        onboardedExpectation.fulfill()
     }
 }
 
 private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     weak var delegate: MicroTechBluetoothManagerDelegate?
+    var logHandler: ((String, MicroTechBluetoothLogType) -> Void)?
     var isScanning = false
-    var isConnected = false
+    var isConnectedReadCount = 0
+    private var storedIsConnected = false
+    var isConnected: Bool {
+        get {
+            isConnectedReadCount += 1
+            return storedIsConnected
+        }
+        set {
+            storedIsConnected = newValue
+        }
+    }
     private(set) var scanRemoteIdentifiers: [UUID?] = []
+    private(set) var refreshConnectedPeripheralCallCount = 0
     private(set) var disconnectCallCount = 0
     private(set) var forgetPeripheralCallCount = 0
 
     func scan(remoteIdentifier: UUID?) {
         isScanning = true
         scanRemoteIdentifiers.append(remoteIdentifier)
+    }
+
+    func refreshConnectedPeripheral() {
+        refreshConnectedPeripheralCallCount += 1
     }
 
     func disconnect() {
@@ -795,4 +2032,8 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     func forgetPeripheral() {
         forgetPeripheralCallCount += 1
     }
+}
+
+private enum MicroTechCGMManagerTestError: Error {
+    case poweredOff
 }

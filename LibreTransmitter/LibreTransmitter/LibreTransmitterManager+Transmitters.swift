@@ -99,8 +99,13 @@ extension LibreTransmitterManagerV3 {
 
             var newGlucoses : [NewGlucoseSample] = []
             
+            let startDate = self.getStartDateForFilter()
+            let rawTrendCount = glucose.count
+            let rawHistoricalCount = glucoseArrayWithPrediction?.historical.count ?? 0
+
             // Since trends have a spacing of 1 minute between them, we use that to calculate trend arrows
-            var trends = self.glucosesToSamplesFilter(glucose, startDate: self.getStartDateForFilter())
+            var trends = self.glucosesToSamplesFilter(glucose, startDate: startDate)
+            let filteredTrendCount = trends.count
             
             // But since Loop only supports 1 glucose reading
             // every 5 minutes, we remove all readings except the newest
@@ -110,14 +115,18 @@ extension LibreTransmitterManagerV3 {
             
             // Historical readings have a spacing of 15 minutes between them,
             // trend arrow calculation doesn't make that much sense
+            var filteredHistoricalCount = 0
             if let historical = glucoseArrayWithPrediction?.historical {
-                let historical2 = self.glucosesToSamplesFilter(historical, startDate: self.getStartDateForFilter(), calculateTrends: false)
+                let historical2 = self.glucosesToSamplesFilter(historical, startDate: startDate, calculateTrends: false)
+                filteredHistoricalCount = historical2.count
                 if !historical.isEmpty {
                     newGlucoses = historical2
                 }
                 
             }
             newGlucoses += trends
+            self.logger.debug("DiaBox filter result: startDate=\(String(describing: startDate), privacy: .public), currentRaw=\(rawTrendCount, privacy: .public), currentFiltered=\(filteredTrendCount, privacy: .public), currentEmitted=\(trends.count, privacy: .public), historyRaw=\(rawHistoricalCount, privacy: .public), historyFiltered=\(filteredHistoricalCount, privacy: .public), totalEmitted=\(newGlucoses.count, privacy: .public)")
+            self.logDeviceCommunication("DiaBox filter currentRaw=\(rawTrendCount) currentFiltered=\(filteredTrendCount) currentEmitted=\(trends.count) historyRaw=\(rawHistoricalCount) historyFiltered=\(filteredHistoricalCount) totalEmitted=\(newGlucoses.count)", type: .receive)
 
             if newGlucoses.isEmpty {
                 self.countTimesWithoutData &+= 1
@@ -126,6 +135,8 @@ extension LibreTransmitterManagerV3 {
                 self.logger.debug("latestbackfill set to \(self.latestBackfill.debugDescription)")
                 self.countTimesWithoutData = 0
             }
+            self.logger.debug("DiaBox final result: totalEmitted=\(newGlucoses.count, privacy: .public), countTimesWithoutData=\(self.countTimesWithoutData, privacy: .public), willReport=\(self.countTimesWithoutData > 1 ? "noValidSensorData" : (newGlucoses.isEmpty ? "noData" : "newData"), privacy: .public)")
+            self.logDeviceCommunication("DiaBox final totalEmitted=\(newGlucoses.count) countTimesWithoutData=\(self.countTimesWithoutData) willReport=\(self.countTimesWithoutData > 1 ? "noValidSensorData" : (newGlucoses.isEmpty ? "noData" : "newData"))", type: newGlucoses.isEmpty ? .error : .receive)
 
             self.latestPrediction = prediction?.first
 
@@ -148,26 +159,18 @@ extension LibreTransmitterManagerV3 {
         }
 
     }
-    private func readingToGlucose(_ data: SensorData, calibration: SensorData.CalibrationInfo) -> GlucoseArrayWithPrediction {
-
-        var entries: [LibreGlucose] = []
-        var historical: [LibreGlucose] = []
-        var prediction: [LibreGlucose] = []
-
-        let trends = data.trendMeasurements()
-
-        if let temp = createBloodSugarPrediction(trends, calibration: calibration) {
-            prediction.append(temp)
+    private func readingToGlucose(_ data: SensorData) -> GlucoseArrayWithPrediction {
+        let result = DiaBoxLibreParser.parseWithDiagnostics(data)
+        var parsed = result.readings
+        let diagnostics = result.diagnostics
+        logger.debug("DiaBox parse result: framBytes=\(diagnostics.framByteCount, privacy: .public), didParse=\(diagnostics.didParse, privacy: .public), sensorTime=\(String(describing: diagnostics.sensorTimeInMinutes), privacy: .public), currentAccepted=\(diagnostics.currentAccepted, privacy: .public), currentRaw=\(String(describing: diagnostics.currentRawGlucose), privacy: .public), current=\(String(describing: diagnostics.currentGlucose), privacy: .public), currentRecord=\(String(describing: diagnostics.currentRecordNumber), privacy: .public), currentQuality=\(String(describing: diagnostics.currentDataQuality), privacy: .public), currentTime=\(String(describing: diagnostics.currentTimestamp), privacy: .public), rateOfChange=\(String(describing: diagnostics.currentRateOfChange), privacy: .public), history=\(diagnostics.historyCount, privacy: .public), rejectedHistoryQuality=\(diagnostics.rejectedHistoryQualityCount, privacy: .public), rejectedHistoryRange=\(diagnostics.rejectedHistoryRangeCount, privacy: .public), rejectedHistoryDate=\(diagnostics.rejectedHistoryDateCount, privacy: .public), backfillEnabled=\(UserDefaults.standard.mmBackfillFromHistory, privacy: .public)")
+        logDeviceCommunication("DiaBox parse framBytes=\(diagnostics.framByteCount) didParse=\(diagnostics.didParse) sensorTime=\(String(describing: diagnostics.sensorTimeInMinutes)) currentAccepted=\(diagnostics.currentAccepted) currentRaw=\(String(describing: diagnostics.currentRawGlucose)) current=\(String(describing: diagnostics.currentGlucose)) currentRecord=\(String(describing: diagnostics.currentRecordNumber)) currentQuality=\(String(describing: diagnostics.currentDataQuality)) currentTime=\(String(describing: diagnostics.currentTimestamp)) rateOfChange=\(String(describing: diagnostics.currentRateOfChange)) history=\(diagnostics.historyCount) rejectedHistoryQuality=\(diagnostics.rejectedHistoryQualityCount) rejectedHistoryRange=\(diagnostics.rejectedHistoryRangeCount) rejectedHistoryDate=\(diagnostics.rejectedHistoryDateCount) backfillEnabled=\(UserDefaults.standard.mmBackfillFromHistory)", type: .receive)
+        if !UserDefaults.standard.mmBackfillFromHistory {
+            logger.debug("DiaBox history disabled by mmBackfillFromHistory")
+            logDeviceCommunication("DiaBox history disabled by mmBackfillFromHistory", type: .receive)
+            parsed.historical = []
         }
-
-        entries = LibreGlucose.fromTrendMeasurements(trends, nativeCalibrationData: calibration)
-
-        if UserDefaults.standard.mmBackfillFromHistory {
-            let history = data.historyMeasurements()
-            historical += LibreGlucose.fromHistoryMeasurements(history, nativeCalibrationData: calibration)
-        }
-
-        return (trends: entries, historical: historical, prediction: prediction)
+        return parsed
     }
 
     public func handleGoodReading(data: SensorData?, _ callback: @escaping (LibreError?, GlucoseArrayWithPrediction?) -> Void) {
@@ -178,41 +181,7 @@ extension LibreTransmitterManagerV3 {
             return
         }
         
-        if let calibrationData {
-            logger.debug("calibrationdata loaded")
-
-            if calibrationData.isValidForFooterWithReverseCRCs == data.footerCrc.byteSwapped {
-                logger.debug("calibrationdata correct for this sensor, returning last values")
-
-                callback(nil, readingToGlucose(data, calibration: calibrationData))
-                return
-            } else {
-                logger.debug(
-                """
-                 calibrationdata incorrect for this sensor, calibrationdata.isValidForFooterWithReverseCRCs:
-                \(calibrationData.isValidForFooterWithReverseCRCs),
-                data.footerCrc.byteSwapped: \(data.footerCrc.byteSwapped)
-                """)
-
-            }
-        } else {
-            logger.debug("calibrationdata was nil")
-        }
-
-        calibrateSensor(sensordata: data) { [weak self] calibrationparams  in
-            do {
-                try KeychainManager.standard.setLibreNativeCalibrationData(calibrationparams)
-            } catch {
-                NotificationHelper.sendCalibrationNotification(.invalidCalibrationData)
-                callback(.invalidCalibrationData, nil)
-                return
-            }
-            // here we assume success, data is not changed,
-            // and we trust that the remote endpoint returns correct data for the sensor
-
-            NotificationHelper.sendCalibrationNotification(.success)
-            callback(nil, self?.readingToGlucose(data, calibration: calibrationparams))
-        }
+        callback(nil, readingToGlucose(data))
     }
 
     // will be called on utility queue

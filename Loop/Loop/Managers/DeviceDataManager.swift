@@ -569,7 +569,27 @@ final class DeviceDataManager {
     private func processCGMReadingResult(_ manager: CGMManager, readingResult: CGMReadingResult, completion: @escaping () -> Void) {
         switch readingResult {
         case .newData(let values):
+            let sampleSummary = glucoseSampleLogSummary(values)
             loopManager.addGlucoseSamples(values) { result in
+                switch result {
+                case .success(let storedValues):
+                    self.deviceManager(
+                        manager,
+                        logEventForDeviceIdentifier: nil,
+                        type: .receive,
+                        message: "CGM glucose store completed requested=\(values.count) stored=\(storedValues.count) \(sampleSummary)",
+                        completion: nil
+                    )
+                case .failure(let error):
+                    self.deviceManager(
+                        manager,
+                        logEventForDeviceIdentifier: nil,
+                        type: .error,
+                        message: "CGM glucose store failed requested=\(values.count) \(sampleSummary) error=\(String(describing: error))",
+                        completion: nil
+                    )
+                    self.setLastError(error: error)
+                }
                 if !values.isEmpty {
                     DispatchQueue.main.async {
                         self.cgmStalenessMonitor.cgmGlucoseSamplesAvailable(values)
@@ -578,15 +598,50 @@ final class DeviceDataManager {
                 completion()
             }
         case .unreliableData:
+            self.deviceManager(
+                manager,
+                logEventForDeviceIdentifier: nil,
+                type: .receive,
+                message: "CGM glucose unreliable data manager=\(String(describing: type(of: manager)))",
+                completion: nil
+            )
             loopManager.receivedUnreliableCGMReading()
             completion()
         case .noData:
+            self.deviceManager(
+                manager,
+                logEventForDeviceIdentifier: nil,
+                type: .receive,
+                message: "CGM glucose no data manager=\(String(describing: type(of: manager)))",
+                completion: nil
+            )
             completion()
         case .error(let error):
+            self.deviceManager(
+                manager,
+                logEventForDeviceIdentifier: nil,
+                type: .error,
+                message: "CGM glucose error manager=\(String(describing: type(of: manager))) error=\(String(describing: error))",
+                completion: nil
+            )
             self.setLastError(error: error)
             completion()
         }
         updatePumpManagerBLEHeartbeatPreference()
+    }
+
+    private func glucoseSampleLogSummary(_ samples: [NewGlucoseSample]) -> String {
+        guard !samples.isEmpty else {
+            return "samples=[]"
+        }
+
+        let sortedDates = samples.map(\.date).sorted()
+        let identifiers = samples.prefix(5).map(\.syncIdentifier).joined(separator: ",")
+        let values = samples.prefix(5).map {
+            String(Int($0.quantity.doubleValue(for: .milligramsPerDeciliter).rounded()))
+        }.joined(separator: ",")
+        let moreCount = max(0, samples.count - 5)
+        return "dateRange=\(sortedDates.first!)...\(sortedDates.last!) ids=[\(identifiers)] valuesMgdl=[\(values)] more=\(moreCount)"
     }
 
     var availableCGMManagers: [CGMManagerDescriptor] {
@@ -915,7 +970,20 @@ extension DeviceDataManager {
     }
 
     func didBecomeActive() {
+        Self.handleDidBecomeActive(
+            updatePumpManagerBLEHeartbeatPreference: updatePumpManagerBLEHeartbeatPreference,
+            refreshCGM: {
+                refreshCGM()
+            }
+        )
+    }
+
+    static func handleDidBecomeActive(
+        updatePumpManagerBLEHeartbeatPreference: () -> Void,
+        refreshCGM: () -> Void
+    ) {
         updatePumpManagerBLEHeartbeatPreference()
+        refreshCGM()
     }
 
     func updatePumpManagerBLEHeartbeatPreference() {

@@ -510,6 +510,8 @@ extension LibreTransmitterManagerV3 {
         if calculateTrends, let newest, let oldest, oldest != newest {
             trend = newest.GetGlucoseTrend(last: oldest)
             logger.debug("creating trendarrow from glucoses: newest: \(String(describing:newest)) oldest: \(String(describing: oldest)) ")
+        } else if calculateTrends, let newest {
+            trend = LibreGlucose.GetGlucoseTrend(rateOfChange: newest.rateOfChange)
         } else {
             logger.debug("Not creating trendarrow for remote uploada")
             trend = .none
@@ -524,7 +526,7 @@ extension LibreTransmitterManagerV3 {
                     quantity: $0.quantity,
                     condition: nil,
                     trend: trend,
-                    trendRate: nil,
+                    trendRate: $0.rateOfChange.map { HKQuantity(unit: HKUnit.milligramsPerDeciliter.unitDivided(by: .minute()), doubleValue: $0) },
                     isDisplayOnly: false,
                     wasUserEntered: false,
                     syncIdentifier: $0.syncId,

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0E015ED0490721BB1336EB76 /* DiaBoxGlucoseAlgorithm.h in Headers */ = {isa = PBXBuildFile; fileRef = D5956991E2F8A0895DFEA8D7 /* DiaBoxGlucoseAlgorithm.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		270C1429266047490063405B /* NotificationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 270C1428266047490063405B /* NotificationSettingsView.swift */; };
 		271A39F52975844B0005FEDA /* NotificationHelperOverride.swift in Sources */ = {isa = PBXBuildFile; fileRef = 271A39F42975844B0005FEDA /* NotificationHelperOverride.swift */; };
 		2735A6E029637DEA00D4E868 /* LibreTransmitter.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 432B0E881CDFC3C50045347B /* LibreTransmitter.framework */; };
@@ -100,6 +101,7 @@
 		27F93B2C2816B93900EE39A7 /* LibreTransmitterManager+Transmitters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27F93B2B2816B93900EE39A7 /* LibreTransmitterManager+Transmitters.swift */; };
 		27FED6CC26C275A8001BD5E4 /* ic_bubble_mini_3-2.png in Resources */ = {isa = PBXBuildFile; fileRef = 27FED6CB26C275A8001BD5E4 /* ic_bubble_mini_3-2.png */; };
 		27FED6CD26C275A8001BD5E4 /* ic_bubble_mini_3-2.png in Resources */ = {isa = PBXBuildFile; fileRef = 27FED6CB26C275A8001BD5E4 /* ic_bubble_mini_3-2.png */; };
+		280E02A832B3122B42BBC100 /* DiaBoxGlucoseAlgorithm.mm in Sources */ = {isa = PBXBuildFile; fileRef = 599FC161149FD6178955A463 /* DiaBoxGlucoseAlgorithm.mm */; };
 		3B0FD2AA2D803C6100E5E921 /* LoopKitUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3B0FD2A92D803C6100E5E921 /* LoopKitUI.framework */; };
 		432B0E8C1CDFC3C50045347B /* LibreTransmitter.h in Headers */ = {isa = PBXBuildFile; fileRef = 432B0E8B1CDFC3C50045347B /* LibreTransmitter.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		43A8EC7C210E661400A81379 /* LoopKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 43A8EC7B210E661400A81379 /* LoopKit.framework */; };
@@ -109,6 +111,7 @@
 		43A8EC91210E676500A81379 /* LibreTransmitterManager+UI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A8EC8E210E676500A81379 /* LibreTransmitterManager+UI.swift */; };
 		43A8EC95210E67B000A81379 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 43A8EC94210E67B000A81379 /* HealthKit.framework */; };
 		43A8EC9D210E68CE00A81379 /* LibreTransmitterManagerV3.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43A8EC9C210E68CE00A81379 /* LibreTransmitterManagerV3.swift */; };
+		9E9E23052C65186283532F24 /* DiaBoxLibreParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28451815C894F8FAFD6D1565 /* DiaBoxLibreParser.swift */; };
 		B40BF26623ABD4E700A43CEE /* LibreTransmitterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40BF26523ABD4E700A43CEE /* LibreTransmitterPlugin.swift */; };
 		B40BF26823ABD55200A43CEE /* OSLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40BF26723ABD55200A43CEE /* OSLog.swift */; };
 		B40BF26923ABD55200A43CEE /* OSLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40BF26723ABD55200A43CEE /* OSLog.swift */; };
@@ -134,6 +137,7 @@
 		C1C318D72A47638E00C6F29F /* MockSensorPairingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BDBAFE2A44FFD800A787D1 /* MockSensorPairingService.swift */; };
 		C1C318D92A478E0000C6F29F /* HKUnit.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C318D82A478E0000C6F29F /* HKUnit.swift */; };
 		C1D819B32AC9B60100C9416E /* LimitedQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27850BA2256724EF0020D109 /* LimitedQueue.swift */; };
+		FC46AB429061905506B165AE /* GlucoseAlgorithm.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B7E38B2801EADED3FFF4CA77 /* GlucoseAlgorithm.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -280,6 +284,7 @@
 		27F93B292816B7FF00EE39A7 /* LibreTransmitterManager+Libre2EU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibreTransmitterManager+Libre2EU.swift"; sourceTree = "<group>"; };
 		27F93B2B2816B93900EE39A7 /* LibreTransmitterManager+Transmitters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibreTransmitterManager+Transmitters.swift"; sourceTree = "<group>"; };
 		27FED6CB26C275A8001BD5E4 /* ic_bubble_mini_3-2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "ic_bubble_mini_3-2.png"; sourceTree = "<group>"; };
+		28451815C894F8FAFD6D1565 /* DiaBoxLibreParser.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiaBoxLibreParser.swift; sourceTree = "<group>"; };
 		3B0FD2A92D803C6100E5E921 /* LoopKitUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = LoopKitUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		432B0E881CDFC3C50045347B /* LibreTransmitter.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = LibreTransmitter.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		432B0E8B1CDFC3C50045347B /* LibreTransmitter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LibreTransmitter.h; sourceTree = "<group>"; };
@@ -294,6 +299,8 @@
 		43A8EC8E210E676500A81379 /* LibreTransmitterManager+UI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "LibreTransmitterManager+UI.swift"; sourceTree = "<group>"; };
 		43A8EC94210E67B000A81379 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
 		43A8EC9C210E68CE00A81379 /* LibreTransmitterManagerV3.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LibreTransmitterManagerV3.swift; sourceTree = "<group>"; };
+		4CA89F3FDC229751245C00FE /* AlgorithmDefine.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = AlgorithmDefine.h; sourceTree = "<group>"; };
+		599FC161149FD6178955A463 /* DiaBoxGlucoseAlgorithm.mm */ = {isa = PBXFileReference; includeInIndex = 1; path = DiaBoxGlucoseAlgorithm.mm; sourceTree = "<group>"; };
 		A9ED4DAE225EB9390080DEBA /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS.sdk/System/Library/Frameworks/HealthKit.framework; sourceTree = DEVELOPER_DIR; };
 		B40BF25E23ABD47400A43CEE /* LibreTransmitterPlugin.loopplugin */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LibreTransmitterPlugin.loopplugin; sourceTree = BUILT_PRODUCTS_DIR; };
 		B40BF26023ABD47400A43CEE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -302,6 +309,7 @@
 		B40BF26723ABD55200A43CEE /* OSLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSLog.swift; sourceTree = "<group>"; };
 		B66D1F702E6A813000471149 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		B66D1F722E6A813000471149 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		B7E38B2801EADED3FFF4CA77 /* GlucoseAlgorithm.cpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.cpp; path = GlucoseAlgorithm.cpp; sourceTree = "<group>"; };
 		C1AF1D112A4BC18400F46A26 /* MockSensorData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockSensorData.swift; sourceTree = "<group>"; };
 		C1AF1D142A4BC23D00F46A26 /* TimeInterval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeInterval.swift; sourceTree = "<group>"; };
 		C1AF65972A49C902008D0690 /* SelectionState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionState.swift; sourceTree = "<group>"; };
@@ -313,6 +321,9 @@
 		C1BDBAFE2A44FFD800A787D1 /* MockSensorPairingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockSensorPairingService.swift; sourceTree = "<group>"; };
 		C1C318CF2A4748A100C6F29F /* MockBluetoothSearcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockBluetoothSearcher.swift; sourceTree = "<group>"; };
 		C1C318D82A478E0000C6F29F /* HKUnit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HKUnit.swift; sourceTree = "<group>"; };
+		D5956991E2F8A0895DFEA8D7 /* DiaBoxGlucoseAlgorithm.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = DiaBoxGlucoseAlgorithm.h; sourceTree = "<group>"; };
+		F7CA4287C973156095171169 /* GlucoseAlgorithm.hpp */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.cpp.h; path = GlucoseAlgorithm.hpp; sourceTree = "<group>"; };
+		FBB8D90DD451C3C62DA4A49C /* AlgorithmLet.c */ = {isa = PBXFileReference; includeInIndex = 1; path = AlgorithmLet.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -416,6 +427,7 @@
 				27850BA0256724EF0020D109 /* LibreError.swift */,
 				27850BA2256724EF0020D109 /* LimitedQueue.swift */,
 				27850BA1256724EF0020D109 /* Calibration.swift */,
+				3D27EA37C3725C12BF23E2F8 /* DiaBoxAlgorithm */,
 			);
 			path = LibreSensor;
 			sourceTree = "<group>";
@@ -559,6 +571,21 @@
 				C1AF65972A49C902008D0690 /* SelectionState.swift */,
 			);
 			path = Observables;
+			sourceTree = "<group>";
+		};
+		3D27EA37C3725C12BF23E2F8 /* DiaBoxAlgorithm */ = {
+			isa = PBXGroup;
+			children = (
+				4CA89F3FDC229751245C00FE /* AlgorithmDefine.h */,
+				FBB8D90DD451C3C62DA4A49C /* AlgorithmLet.c */,
+				F7CA4287C973156095171169 /* GlucoseAlgorithm.hpp */,
+				B7E38B2801EADED3FFF4CA77 /* GlucoseAlgorithm.cpp */,
+				D5956991E2F8A0895DFEA8D7 /* DiaBoxGlucoseAlgorithm.h */,
+				599FC161149FD6178955A463 /* DiaBoxGlucoseAlgorithm.mm */,
+				28451815C894F8FAFD6D1565 /* DiaBoxLibreParser.swift */,
+			);
+			name = DiaBoxAlgorithm;
+			path = DiaBoxAlgorithm;
 			sourceTree = "<group>";
 		};
 		432B0E7E1CDFC3C50045347B = {
@@ -706,6 +733,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				432B0E8C1CDFC3C50045347B /* LibreTransmitter.h in Headers */,
+				0E015ED0490721BB1336EB76 /* DiaBoxGlucoseAlgorithm.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -992,6 +1020,9 @@
 				27ED67B82698EF38003E5DAB /* AlarmStatus.swift in Sources */,
 				27850CFD25672C0C0020D109 /* HKUnit.swift in Sources */,
 				27850CF925672C0C0020D109 /* UIApplication+metadata.swift in Sources */,
+				FC46AB429061905506B165AE /* GlucoseAlgorithm.cpp in Sources */,
+				280E02A832B3122B42BBC100 /* DiaBoxGlucoseAlgorithm.mm in Sources */,
+				9E9E23052C65186283532F24 /* DiaBoxLibreParser.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

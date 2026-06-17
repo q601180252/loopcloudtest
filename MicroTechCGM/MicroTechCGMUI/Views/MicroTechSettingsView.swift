@@ -27,18 +27,6 @@ struct MicroTechSettingsView: View {
             }
 
             Section(LocalizedString("Configuration", comment: "MicroTech settings configuration section title")) {
-                TextField(
-                    LocalizedString("AiDEX-222227HAUZ or sensor serial", comment: "MicroTech device name or serial placeholder"),
-                    text: $viewModel.deviceNameOrSerialInput
-                )
-                .textInputAutocapitalization(.characters)
-                .disableAutocorrection(true)
-
-                Button(LocalizedString("Save and Scan", comment: "MicroTech save sensor and scan button label")) {
-                    _ = viewModel.saveSensorAndScan()
-                }
-                .disabled(viewModel.deviceNameOrSerialInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
                 Toggle(LocalizedString("Upload Readings", comment: "MicroTech settings upload toggle label"),
                        isOn: $viewModel.uploadReadings)
             }
@@ -54,6 +42,11 @@ struct MicroTechSettingsView: View {
                         Spacer()
                         ProgressView()
                     }
+                }
+
+                if let connectionErrorDescription = viewModel.connectionErrorDescription {
+                    LabeledValueView(label: LocalizedString("Last Error", comment: "MicroTech settings last error label"),
+                                     value: connectionErrorDescription)
                 }
 
                 deleteCGMButton

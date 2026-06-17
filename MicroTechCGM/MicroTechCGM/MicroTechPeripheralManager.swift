@@ -26,6 +26,8 @@ public enum MicroTechPeripheralManagerError: Error, Equatable {
 }
 
 public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSession {
+    public static let defaultOperationTimeout: TimeInterval = 8
+
     public weak var delegate: MicroTechPeripheralManagerDelegate?
 
     public var deviceIdentifier: UUID {
@@ -33,7 +35,7 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
     }
 
     public var deviceName: String {
-        peripheral.name ?? "MicroTech LinX"
+        discoveredDeviceName ?? peripheral.name ?? "MicroTech LinX"
     }
 
     var isConnected: Bool {
@@ -41,6 +43,7 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
     }
 
     private let peripheral: CBPeripheral
+    private var discoveredDeviceName: String?
     private weak var centralManager: CBCentralManager?
     private let condition = NSCondition()
     private let timeout: TimeInterval
@@ -48,14 +51,27 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
     private var pendingCommand: Command?
     private var pendingError: Error?
 
-    public init(peripheral: CBPeripheral, centralManager: CBCentralManager, timeout: TimeInterval = 2) {
+    public init(
+        peripheral: CBPeripheral,
+        centralManager: CBCentralManager,
+        advertisedName: String? = nil,
+        timeout: TimeInterval = MicroTechPeripheralManager.defaultOperationTimeout
+    ) {
         self.peripheral = peripheral
+        self.discoveredDeviceName = advertisedName
         self.centralManager = centralManager
         self.timeout = timeout
 
         super.init()
 
         peripheral.delegate = self
+    }
+
+    func updateAdvertisedName(_ advertisedName: String?) {
+        guard let advertisedName, !advertisedName.isEmpty else {
+            return
+        }
+        discoveredDeviceName = advertisedName
     }
 
     public func configure() throws {
@@ -132,6 +148,7 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
     }
 
     func didDisconnect(error: Error?) {
+        failPendingCommand(error ?? MicroTechPeripheralManagerError.notConnected)
         delegate?.microTechPeripheralManager(self, didDisconnectWith: error)
     }
 
@@ -184,6 +201,15 @@ private extension MicroTechPeripheralManager {
     func complete(_ command: Command, error: Error?) {
         condition.lock()
         if pendingCommand == command {
+            pendingError = error
+            condition.signal()
+        }
+        condition.unlock()
+    }
+
+    func failPendingCommand(_ error: Error) {
+        condition.lock()
+        if pendingCommand != nil {
             pendingError = error
             condition.signal()
         }

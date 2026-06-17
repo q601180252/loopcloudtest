@@ -32,6 +32,16 @@ public struct MicroTechAidexHistoryRecord: Equatable {
     public let timeOffset: Int
     public let glucose: Int
     public let rawValue: Int
+
+    public init(timeOffset: Int, glucose: Int, rawValue: Int) {
+        self.timeOffset = timeOffset
+        self.glucose = glucose
+        self.rawValue = rawValue
+    }
+
+    public var quality: Int {
+        (rawValue >> 10) & 0x03
+    }
 }
 
 public struct MicroTechAidexHistoryPacket: Equatable {

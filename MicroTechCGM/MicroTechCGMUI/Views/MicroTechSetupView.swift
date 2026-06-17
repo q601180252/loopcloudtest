@@ -3,15 +3,10 @@ import SwiftUI
 import LoopKitUI
 
 struct MicroTechSetupView: View {
-    var didContinue: ((String) -> Void)?
+    var didContinue: (() -> Void)?
     var didCancel: (() -> Void)?
 
     @Environment(\.appName) private var appName
-    @State private var deviceNameOrSerial = ""
-
-    private var normalizedDeviceNameOrSerial: String {
-        deviceNameOrSerial.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 
     var body: some View {
         VStack(alignment: .center, spacing: 20) {
@@ -26,22 +21,12 @@ struct MicroTechSetupView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundColor(.secondary)
 
-            TextField(
-                LocalizedString("AiDEX-222227HAUZ or sensor serial", comment: "MicroTech setup device name or serial placeholder"),
-                text: $deviceNameOrSerial
-            )
-            .textFieldStyle(.roundedBorder)
-            .textInputAutocapitalization(.characters)
-            .disableAutocorrection(true)
-            .accessibilityIdentifier("microtech.setup.deviceNameOrSerial")
-
             Spacer()
 
-            Button(action: { didContinue?(normalizedDeviceNameOrSerial) }) {
-                Text(LocalizedString("Continue", comment: "Button title for starting setup"))
+            Button(action: { didContinue?() }) {
+                Text(LocalizedString("Search Nearby Devices", comment: "Button title for starting nearby MicroTech device search"))
                     .actionButtonStyle(.primary)
             }
-            .disabled(normalizedDeviceNameOrSerial.isEmpty)
             .accessibilityIdentifier("microtech.setup.continue")
 
             Button(action: { didCancel?() }) {

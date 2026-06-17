@@ -1,4 +1,5 @@
 import Foundation
+import LoopKit
 import LoopKitUI
 import MicroTechCGM
 
@@ -9,7 +10,7 @@ final class MicroTechSettingsViewModel: ObservableObject {
     @Published private(set) var lastGlucoseString: String
     @Published private(set) var isScanning: Bool
     @Published private(set) var scanButtonTitle: String
-    @Published var deviceNameOrSerialInput: String
+    @Published private(set) var connectionErrorDescription: String?
     @Published var uploadReadings: Bool {
         didSet {
             if cgmManager.uploadReadings != uploadReadings {
@@ -31,11 +32,15 @@ final class MicroTechSettingsViewModel: ObservableObject {
         self.dateFormatter.timeStyle = .short
         self.lastGlucoseString = LocalizedString("--", comment: "No glucose value placeholder")
         self.isScanning = cgmManager.isScanning
-        self.scanButtonTitle = LocalizedString("Refresh", comment: "MicroTech settings refresh button label")
-        self.deviceNameOrSerialInput = cgmManager.state.deviceName ?? cgmManager.state.sensorSerial ?? ""
+        self.scanButtonTitle = LocalizedString("Scan for Sensor", comment: "MicroTech settings scan button label")
         self.uploadReadings = cgmManager.state.uploadReadings
 
         refresh()
+        cgmManager.addStatusObserver(self, queue: .main)
+    }
+
+    deinit {
+        cgmManager.removeStatusObserver(self)
     }
 
     func refresh() {
@@ -45,26 +50,14 @@ final class MicroTechSettingsViewModel: ObservableObject {
         lastReadingDate = state.lastReadingDate
         uploadReadings = state.uploadReadings
         isScanning = cgmManager.isScanning
-        deviceNameOrSerialInput = state.deviceName ?? state.sensorSerial ?? deviceNameOrSerialInput
-        scanButtonTitle = state.sensorSerial == nil ?
-            LocalizedString("Refresh", comment: "MicroTech settings refresh button label") :
-            LocalizedString("Scan for Sensor", comment: "MicroTech settings scan button label")
+        scanButtonTitle = LocalizedString("Scan for Sensor", comment: "MicroTech settings scan button label")
+        connectionErrorDescription = state.lastConnectionErrorDescription
         lastGlucoseString = Self.glucoseString(from: state.latestReading, displayGlucosePreference: displayGlucosePreference)
     }
 
     func scanForSensor() {
         cgmManager.scanForSensor()
         refresh()
-    }
-
-    @discardableResult
-    func saveSensorAndScan() -> Bool {
-        guard cgmManager.configureSensor(deviceNameOrSerial: deviceNameOrSerialInput) else {
-            return false
-        }
-        let didStartScan = cgmManager.scanForSensor()
-        refresh()
-        return didStartScan
     }
 
     private static func glucoseString(from reading: MicroTechGlucoseReading?, displayGlucosePreference: DisplayGlucosePreference) -> String {
@@ -80,5 +73,11 @@ final class MicroTechSettingsViewModel: ObservableObject {
         default:
             return displayGlucosePreference.formatter.string(from: quantity) ?? LocalizedString("--", comment: "No glucose value placeholder")
         }
+    }
+}
+
+extension MicroTechSettingsViewModel: CGMManagerStatusObserver {
+    func cgmManager(_ manager: CGMManager, didUpdate status: CGMManagerStatus) {
+        refresh()
     }
 }

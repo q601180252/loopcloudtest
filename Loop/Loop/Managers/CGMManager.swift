@@ -14,13 +14,9 @@ let staticCGMManagersByIdentifier: [String: CGMManager.Type] = [
 ]
 
 var availableStaticCGMManagers: [CGMManagerDescriptor] {
-    if FeatureFlags.allowSimulators {
-        return [
-            CGMManagerDescriptor(identifier: MockCGMManager.pluginIdentifier, localizedTitle: MockCGMManager.localizedTitle)
-        ]
-    } else {
-        return []
-    }
+    // The simulator remains available to internal test flows through staticCGMManagersByIdentifier,
+    // but it should not be offered from the user-facing Add CGM list.
+    return []
 }
 
 func CGMManagerFromRawValue(_ rawValue: [String: Any]) -> CGMManager? {
