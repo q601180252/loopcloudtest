@@ -1895,6 +1895,27 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(MicroTechBluetoothManager.restoreIdentifier, "com.loopkit.MicroTechCGM")
     }
 
+    func testSavedPeripheralLogMessageIdentifiesCoreBluetoothRestoreSource() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.savedPeripheralLogMessage(
+                identifier: identifier,
+                name: "LinX-ABC123",
+                source: .coreBluetoothRestore
+            ),
+            "retrieved saved peripheral \(identifier) from CoreBluetooth restore, name Optional(\"LinX-ABC123\")"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.savedPeripheralLogMessage(
+                identifier: identifier,
+                name: nil,
+                source: .retrievePeripherals
+            ),
+            "retrieved saved peripheral \(identifier) from retrievePeripherals, name nil"
+        )
+    }
+
     func testSavedSensorAcceptsRestoredPeripheralIdentifierWithoutDeviceName() {
         let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         var state = MicroTechCGMManagerState()

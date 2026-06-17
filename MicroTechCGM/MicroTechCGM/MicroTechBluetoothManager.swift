@@ -87,6 +87,11 @@ public protocol MicroTechBluetoothManagerDelegate: AnyObject {
 }
 
 public final class MicroTechBluetoothManager: NSObject {
+    enum SavedPeripheralSource: String {
+        case coreBluetoothRestore = "CoreBluetooth restore"
+        case retrievePeripherals
+    }
+
     public weak var delegate: MicroTechBluetoothManagerDelegate?
     public var logHandler: ((String, MicroTechBluetoothLogType) -> Void)?
     public static let defaultConnectionTimeout: TimeInterval = 15
@@ -200,9 +205,17 @@ public final class MicroTechBluetoothManager: NSObject {
         }
 
         if let identifier = activeRemoteIdentifier,
-           let peripheral = restoredPeripherals[identifier] ?? centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
+           let peripheral = restoredPeripherals[identifier]
         {
-            logBluetooth("retrieved saved peripheral \(identifier), name \(String(describing: peripheral.name))")
+            logBluetooth(Self.savedPeripheralLogMessage(identifier: identifier, name: peripheral.name, source: .coreBluetoothRestore))
+            connectIfNeeded(peripheral, advertisedName: peripheral.name)
+            return
+        }
+
+        if let identifier = activeRemoteIdentifier,
+           let peripheral = centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
+        {
+            logBluetooth(Self.savedPeripheralLogMessage(identifier: identifier, name: peripheral.name, source: .retrievePeripherals))
             connectIfNeeded(peripheral, advertisedName: peripheral.name)
             return
         }
@@ -359,6 +372,10 @@ public final class MicroTechBluetoothManager: NSObject {
         @unknown default:
             return true
         }
+    }
+
+    static func savedPeripheralLogMessage(identifier: UUID, name: String?, source: SavedPeripheralSource) -> String {
+        "retrieved saved peripheral \(identifier) from \(source.rawValue), name \(String(describing: name))"
     }
 
     private func cancelConnectionTimeout(for identifier: UUID) {
