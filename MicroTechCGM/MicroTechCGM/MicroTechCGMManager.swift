@@ -973,6 +973,8 @@ public final class MicroTechCGMManager: CGMManager {
             return identifier
         case .connectFailed(let identifier, _):
             return identifier
+        case .configureTimeout(let identifier):
+            return identifier
         case .scanTimeout(let identifier):
             return identifier
         case .bluetoothUnavailable:

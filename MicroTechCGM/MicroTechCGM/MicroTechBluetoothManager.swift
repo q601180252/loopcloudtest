@@ -10,6 +10,7 @@ public enum MicroTechBluetoothLogType {
 public enum MicroTechBluetoothManagerError: Error, Equatable, CustomStringConvertible {
     case connectTimeout(UUID)
     case connectFailed(UUID, String?)
+    case configureTimeout(UUID)
     case scanTimeout(UUID?)
     case bluetoothUnavailable(Int)
 
@@ -22,6 +23,8 @@ public enum MicroTechBluetoothManagerError: Error, Equatable, CustomStringConver
                 return "connection failed for \(identifier): \(underlyingDescription)"
             }
             return "connection failed for \(identifier)"
+        case .configureTimeout(let identifier):
+            return "configuration timed out for \(identifier)"
         case .scanTimeout(let identifier):
             if let identifier {
                 return "scan timed out for \(identifier)"
@@ -95,6 +98,7 @@ public final class MicroTechBluetoothManager: NSObject {
     public weak var delegate: MicroTechBluetoothManagerDelegate?
     public var logHandler: ((String, MicroTechBluetoothLogType) -> Void)?
     public static let defaultConnectionTimeout: TimeInterval = 15
+    public static let defaultConfigurationTimeout: TimeInterval = MicroTechPeripheralManager.defaultOperationTimeout * 2 + 2
     public static let defaultScanTimeout: TimeInterval = 30
     static let restoreIdentifier = "com.loopkit.MicroTechCGM"
 
@@ -105,6 +109,10 @@ public final class MicroTechBluetoothManager: NSObject {
     private let managerQueueSpecificKey = DispatchSpecificKey<Bool>()
     private lazy var connectionTimeouts = MicroTechConnectionTimeoutController(
         timeout: Self.defaultConnectionTimeout,
+        queue: managerQueue
+    )
+    private lazy var configurationTimeouts = MicroTechConnectionTimeoutController(
+        timeout: Self.defaultConfigurationTimeout,
         queue: managerQueue
     )
     private var scanTimeoutWorkItem: DispatchWorkItem?
@@ -303,14 +311,17 @@ public final class MicroTechBluetoothManager: NSObject {
         let identifier = manager.deviceIdentifier
         cancelConnectionTimeout(for: identifier)
         guard configuringPeripheralIDs.insert(identifier).inserted else {
+            logBluetooth(Self.configurationAlreadyInProgressLogMessage(identifier: identifier, name: manager.deviceName))
             return
         }
+        scheduleConfigurationTimeout(for: manager)
 
         DispatchQueue.global(qos: .utility).async {
             do {
                 try manager.configure()
                 self.managerQueue.async {
                     self.configuringPeripheralIDs.remove(identifier)
+                    self.cancelConfigurationTimeout(for: identifier)
                     guard self.managedPeripherals[identifier] === manager else {
                         return
                     }
@@ -321,6 +332,10 @@ public final class MicroTechBluetoothManager: NSObject {
             } catch {
                 self.managerQueue.async {
                     self.configuringPeripheralIDs.remove(identifier)
+                    self.cancelConfigurationTimeout(for: identifier)
+                    guard self.managedPeripherals[identifier] === manager else {
+                        return
+                    }
                     self.logBluetooth("peripheral configure failed \(identifier), name \(manager.deviceName), error \(String(describing: error))", type: .error)
                     self.removeManager(manager, cancelConnection: true)
                     self.delegate?.microTechBluetoothManager(self, didFailWith: error)
@@ -333,6 +348,7 @@ public final class MicroTechBluetoothManager: NSObject {
     private func removeManager(_ manager: MicroTechPeripheralManager, cancelConnection: Bool) {
         let identifier = manager.deviceIdentifier
         cancelConnectionTimeout(for: identifier)
+        cancelConfigurationTimeout(for: identifier)
         if cancelConnection {
             manager.disconnect()
         }
@@ -378,8 +394,42 @@ public final class MicroTechBluetoothManager: NSObject {
         "retrieved saved peripheral \(identifier) from \(source.rawValue), name \(String(describing: name))"
     }
 
+    static func configurationAlreadyInProgressLogMessage(identifier: UUID, name: String) -> String {
+        "peripheral configure already in progress \(identifier), name \(name)"
+    }
+
+    static func configurationTimedOutLogMessage(identifier: UUID, name: String) -> String {
+        "peripheral configure timed out \(identifier), name \(name)"
+    }
+
     private func cancelConnectionTimeout(for identifier: UUID) {
         connectionTimeouts.cancel(identifier: identifier)
+    }
+
+    private func scheduleConfigurationTimeout(for manager: MicroTechPeripheralManager) {
+        let identifier = manager.deviceIdentifier
+        configurationTimeouts.schedule(identifier: identifier) { [weak self] identifier in
+            self?.handleConfigurationTimeout(identifier: identifier)
+        }
+    }
+
+    private func cancelConfigurationTimeout(for identifier: UUID) {
+        configurationTimeouts.cancel(identifier: identifier)
+    }
+
+    private func handleConfigurationTimeout(identifier: UUID) {
+        guard configuringPeripheralIDs.contains(identifier),
+              let manager = managedPeripherals[identifier],
+              activePeripheralManager === manager
+        else {
+            return
+        }
+
+        let error = MicroTechBluetoothManagerError.configureTimeout(identifier)
+        logBluetooth(Self.configurationTimedOutLogMessage(identifier: identifier, name: manager.deviceName), type: .error)
+        removeManager(manager, cancelConnection: true)
+        delegate?.microTechBluetoothManager(self, didFailWith: error)
+        scanIfReady()
     }
 
     private func handleConnectionTimeout(identifier: UUID) {

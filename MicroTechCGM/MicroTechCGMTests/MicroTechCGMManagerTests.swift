@@ -932,6 +932,40 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertFalse(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-OTHER", identifier: UUID()))
     }
 
+    func testRepeatedSavedIdentifierConfigurationTimeoutsFallBackToNearbySerialScan() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var retryBlocks: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { retryBlocks.append($0) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.configureTimeout(remoteIdentifier))
+        XCTAssertEqual(retryBlocks.count, 0)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.configureTimeout(remoteIdentifier))
+
+        XCTAssertNil(manager.state.remoteIdentifier)
+        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(retryBlocks.count, 1)
+        retryBlocks.removeFirst()()
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, nil])
+        XCTAssertTrue(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-ABC123", identifier: UUID()))
+        XCTAssertFalse(manager.shouldConnectToMicroTechDevice(deviceName: "LinX-OTHER", identifier: UUID()))
+    }
+
     func testRepeatedSavedIdentifierConnectionFailuresFallBackToNearbySerialScan() {
         let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         var state = MicroTechCGMManagerState()
@@ -1309,6 +1343,10 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(
             String(describing: MicroTechBluetoothManagerError.connectFailed(remoteIdentifier, "peripheral disconnected")),
             "connection failed for \(remoteIdentifier): peripheral disconnected"
+        )
+        XCTAssertEqual(
+            String(describing: MicroTechBluetoothManagerError.configureTimeout(remoteIdentifier)),
+            "configuration timed out for \(remoteIdentifier)"
         )
         XCTAssertEqual(
             String(describing: MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier)),
@@ -1891,8 +1929,34 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnecting))
     }
 
+    func testConfigurationTimeoutLeavesRoomForPeripheralConfigurationOperations() {
+        XCTAssertGreaterThanOrEqual(
+            MicroTechBluetoothManager.defaultConfigurationTimeout,
+            MicroTechPeripheralManager.defaultOperationTimeout * 2
+        )
+    }
+
     func testBluetoothRestoreIdentifierIsStableForBackgroundRecovery() {
         XCTAssertEqual(MicroTechBluetoothManager.restoreIdentifier, "com.loopkit.MicroTechCGM")
+    }
+
+    func testConfigurationProgressLogMessagesNamePeripheral() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.configurationAlreadyInProgressLogMessage(
+                identifier: identifier,
+                name: "LinX-ABC123"
+            ),
+            "peripheral configure already in progress \(identifier), name LinX-ABC123"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.configurationTimedOutLogMessage(
+                identifier: identifier,
+                name: "LinX-ABC123"
+            ),
+            "peripheral configure timed out \(identifier), name LinX-ABC123"
+        )
     }
 
     func testSavedPeripheralLogMessageIdentifiesCoreBluetoothRestoreSource() {
