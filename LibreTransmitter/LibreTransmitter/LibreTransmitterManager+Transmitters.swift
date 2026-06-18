@@ -47,6 +47,7 @@ extension LibreTransmitterManagerV3 {
         NotificationHelper.sendInvalidSensorNotificationIfNeeded(sensorData: sensorData)
         NotificationHelper.sendInvalidChecksumIfDeveloper(sensorData)
 
+        logDeviceCommunication("Sensor gate crc valid=\(sensorData.hasValidCRCs) header=\(sensorData.hasValidHeaderCRC) body=\(sensorData.hasValidBodyCRC) footer=\(sensorData.hasValidFooterCRC) state=\(sensorData.state.description) minutesSinceStart=\(sensorData.minutesSinceStart) sensorType=\(typeDesc)", type: sensorData.hasValidCRCs ? .receive : .error)
         guard sensorData.hasValidCRCs else {
             self.delegateQueue.async {
                 self.cgmManagerDelegate?.cgmManager(self, hasNew: .error(LibreError.checksumValidationError))
@@ -58,7 +59,9 @@ extension LibreTransmitterManagerV3 {
 
         NotificationHelper.sendSensorExpireAlertIfNeeded(sensorData: sensorData)
 
-        guard sensorData.state == .ready || sensorData.state == .starting else {
+        let isAllowedSensorState = sensorData.state == .ready || sensorData.state == .starting
+        logDeviceCommunication("Sensor gate state allowed=\(isAllowedSensorState) state=\(sensorData.state.description) minutesSinceStart=\(sensorData.minutesSinceStart) maxMinutesWearTime=\(sensorData.maxMinutesWearTime)", type: isAllowedSensorState ? .receive : .error)
+        guard isAllowedSensorState else {
             logger.debug("got sensordata with valid crcs, but sensor is either expired or failed")
             self.delegateQueue.async {
                 self.cgmManagerDelegate?.cgmManager(self, hasNew: .error(LibreError.expiredSensor))
@@ -127,6 +130,7 @@ extension LibreTransmitterManagerV3 {
             newGlucoses += trends
             self.logger.debug("DiaBox filter result: startDate=\(String(describing: startDate), privacy: .public), currentRaw=\(rawTrendCount, privacy: .public), currentFiltered=\(filteredTrendCount, privacy: .public), currentEmitted=\(trends.count, privacy: .public), historyRaw=\(rawHistoricalCount, privacy: .public), historyFiltered=\(filteredHistoricalCount, privacy: .public), totalEmitted=\(newGlucoses.count, privacy: .public)")
             self.logDeviceCommunication("DiaBox filter currentRaw=\(rawTrendCount) currentFiltered=\(filteredTrendCount) currentEmitted=\(trends.count) historyRaw=\(rawHistoricalCount) historyFiltered=\(filteredHistoricalCount) totalEmitted=\(newGlucoses.count)", type: .receive)
+            self.logDeviceCommunication("DiaBox storage candidate current=\(trends.count) history=\(filteredHistoricalCount) total=\(newGlucoses.count) startDate=\(String(describing: startDate))", type: newGlucoses.isEmpty ? .error : .receive)
 
             if newGlucoses.isEmpty {
                 self.countTimesWithoutData &+= 1
@@ -165,6 +169,23 @@ extension LibreTransmitterManagerV3 {
         let diagnostics = result.diagnostics
         logger.debug("DiaBox parse result: framBytes=\(diagnostics.framByteCount, privacy: .public), didParse=\(diagnostics.didParse, privacy: .public), sensorTime=\(String(describing: diagnostics.sensorTimeInMinutes), privacy: .public), currentAccepted=\(diagnostics.currentAccepted, privacy: .public), currentRaw=\(String(describing: diagnostics.currentRawGlucose), privacy: .public), current=\(String(describing: diagnostics.currentGlucose), privacy: .public), currentRecord=\(String(describing: diagnostics.currentRecordNumber), privacy: .public), currentQuality=\(String(describing: diagnostics.currentDataQuality), privacy: .public), currentTime=\(String(describing: diagnostics.currentTimestamp), privacy: .public), rateOfChange=\(String(describing: diagnostics.currentRateOfChange), privacy: .public), history=\(diagnostics.historyCount, privacy: .public), rejectedHistoryQuality=\(diagnostics.rejectedHistoryQualityCount, privacy: .public), rejectedHistoryRange=\(diagnostics.rejectedHistoryRangeCount, privacy: .public), rejectedHistoryDate=\(diagnostics.rejectedHistoryDateCount, privacy: .public), backfillEnabled=\(UserDefaults.standard.mmBackfillFromHistory, privacy: .public)")
         logDeviceCommunication("DiaBox parse framBytes=\(diagnostics.framByteCount) didParse=\(diagnostics.didParse) sensorTime=\(String(describing: diagnostics.sensorTimeInMinutes)) currentAccepted=\(diagnostics.currentAccepted) currentRaw=\(String(describing: diagnostics.currentRawGlucose)) current=\(String(describing: diagnostics.currentGlucose)) currentRecord=\(String(describing: diagnostics.currentRecordNumber)) currentQuality=\(String(describing: diagnostics.currentDataQuality)) currentTime=\(String(describing: diagnostics.currentTimestamp)) rateOfChange=\(String(describing: diagnostics.currentRateOfChange)) history=\(diagnostics.historyCount) rejectedHistoryQuality=\(diagnostics.rejectedHistoryQualityCount) rejectedHistoryRange=\(diagnostics.rejectedHistoryRangeCount) rejectedHistoryDate=\(diagnostics.rejectedHistoryDateCount) backfillEnabled=\(UserDefaults.standard.mmBackfillFromHistory)", type: .receive)
+        let currentRejectedReason: String
+        if diagnostics.currentAccepted {
+            currentRejectedReason = "none"
+        } else if !diagnostics.didParse {
+            currentRejectedReason = "parseFailed"
+        } else if let sensorTime = diagnostics.sensorTimeInMinutes, sensorTime < 60 {
+            currentRejectedReason = "sensorTimeBelow60"
+        } else if let currentQuality = diagnostics.currentDataQuality, currentQuality != 0 {
+            currentRejectedReason = "quality"
+        } else if let currentRaw = diagnostics.currentRawGlucose, currentRaw < 39.0 || currentRaw > 501.0 {
+            currentRejectedReason = "range"
+        } else {
+            currentRejectedReason = "missing"
+        }
+        let historyRawCount = diagnostics.historyCount + diagnostics.rejectedHistoryQualityCount + diagnostics.rejectedHistoryRangeCount + diagnostics.rejectedHistoryDateCount
+        logDeviceCommunication("DiaBox current filter accepted=\(diagnostics.currentAccepted) reason=\(currentRejectedReason) raw=\(String(describing: diagnostics.currentRawGlucose)) quality=\(String(describing: diagnostics.currentDataQuality)) range=39...501", type: diagnostics.currentAccepted ? .receive : .error)
+        logDeviceCommunication("DiaBox history filter raw=\(historyRawCount) accepted=\(diagnostics.historyCount) rejectedQuality=\(diagnostics.rejectedHistoryQualityCount) rejectedRange=\(diagnostics.rejectedHistoryRangeCount) rejectedDate=\(diagnostics.rejectedHistoryDateCount)", type: diagnostics.historyCount > 0 ? .receive : .error)
         if !UserDefaults.standard.mmBackfillFromHistory {
             logger.debug("DiaBox history disabled by mmBackfillFromHistory")
             logDeviceCommunication("DiaBox history disabled by mmBackfillFromHistory", type: .receive)

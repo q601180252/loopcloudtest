@@ -203,6 +203,9 @@ class BubbleTransmitter: MiaoMiaoTransmitter {
                          patchInfo: patchInfo, uid: self.uid)
 
         let data = rxBuffer.subdata(in: 8..<352)
+        let uidHex = self.uid.map { Data($0).hexEncodedString() } ?? "nil"
+        let patchInfoHex = patchInfo?.hexEncodedString() ?? "nil"
+        delegate?.libreDeviceLogMessage(payload: "Bubble complete packet rxBytes=\(rxBuffer.count) framBytes=\(data.count) uid=\(uidHex) patchInfo=\(patchInfoHex) battery=\(battery ?? -1) hardware=\(hardware ?? "unknown") firmware=\(firmware ?? "unknown") mac=\(mac ?? "unknown")", type: .receive)
         bLogger.debug("bubbleHandleCompleteMessage raw data: \([UInt8](self.rxBuffer))")
         sensorData = SensorData(uuid: rxBuffer.subdata(in: 0..<8), bytes: [UInt8](data), date: Date())
 
