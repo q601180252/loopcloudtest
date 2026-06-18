@@ -1282,6 +1282,27 @@ final class MicroTechCGMManagerTests: XCTestCase {
         })
     }
 
+    func testIgnoredStatusPacketIsLoggedWithoutReadingError() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(sensor, didIgnorePacketType: 0x04, length: 5, hexPrefix: "04F405FC9F")
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
+        XCTAssertTrue(delegate.loggedEvents.contains { event in
+            event.type == .receive && event.message.contains("ignored unsupported packet type 0x04")
+        })
+        XCTAssertFalse(delegate.loggedEvents.contains { event in
+            event.type == .error && event.message.contains("unsupportedPacket(4)")
+        })
+        XCTAssertNil(manager.state.lastConnectionErrorDescription)
+    }
+
     func testRepeatedSensorErrorsDisconnectToRestartBluetooth() throws {
         let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         var state = MicroTechCGMManagerState()
@@ -1922,11 +1943,24 @@ final class MicroTechCGMManagerTests: XCTestCase {
         wait(for: [fired, cancelled], timeout: 0.2)
     }
 
-    func testPeripheralDisconnectingStateSchedulesConnectionTimeout() {
+    func testPeripheralConnectionTimeoutIsOnlyScheduledForConnectableStates() {
         XCTAssertFalse(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .connected))
         XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnected))
         XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .connecting))
-        XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnecting))
+        XCTAssertFalse(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnecting))
+    }
+
+    func testDisconnectingPeripheralIsNotClaimedAsActiveConnectionAttempt() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertTrue(MicroTechBluetoothManager.shouldClaimPeripheralForConnection(state: .connected))
+        XCTAssertTrue(MicroTechBluetoothManager.shouldClaimPeripheralForConnection(state: .disconnected))
+        XCTAssertTrue(MicroTechBluetoothManager.shouldClaimPeripheralForConnection(state: .connecting))
+        XCTAssertFalse(MicroTechBluetoothManager.shouldClaimPeripheralForConnection(state: .disconnecting))
+        XCTAssertEqual(
+            MicroTechBluetoothManager.disconnectingPeripheralLogMessage(identifier: identifier, name: "AiDEX X-ABC123"),
+            "peripheral is disconnecting \(identifier), name AiDEX X-ABC123, waiting for disconnect before reconnecting"
+        )
     }
 
     func testConfigurationTimeoutLeavesRoomForPeripheralConfigurationOperations() {

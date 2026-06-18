@@ -314,7 +314,7 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
         XCTAssertEqual(observer.errors.single as? MicroTechAidexParserError, .invalidPacket)
     }
 
-    func testUnexpectedUnsupportedPacketNotificationReportsError() throws {
+    func testStatusPacketNotificationIsIgnoredWithoutError() throws {
         let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
         let plain = MicroTechAidexCrypto.appendingCRC(to: Data([0x04]))
         let encrypted = try MicroTechAidexCrypto.encryptCfb128(key: material.key, iv: material.iv, plain: plain)
@@ -340,10 +340,11 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
 
         XCTAssertTrue(observer.readings.isEmpty)
         XCTAssertTrue(observer.historyPackets.isEmpty)
-        XCTAssertTrue(observer.ignoredPackets.isEmpty)
-        XCTAssertEqual(observer.errors.single as? MicroTechAidexParserError, .unsupportedPacket(0x04))
-        XCTAssertTrue(observer.logMessages.contains { log in
-            log.type == .error && log.message.contains("unexpected unsupported packet type=0x04")
+        XCTAssertEqual(observer.ignoredPackets.single?.packetType, 0x04)
+        XCTAssertEqual(observer.ignoredPackets.single?.length, plain.count)
+        XCTAssertTrue(observer.errors.isEmpty)
+        XCTAssertFalse(observer.logMessages.contains { log in
+            log.type == .error && log.message.contains("unsupported packet type=0x04")
         })
     }
 

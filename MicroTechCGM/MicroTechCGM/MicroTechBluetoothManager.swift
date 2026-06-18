@@ -216,22 +216,23 @@ public final class MicroTechBluetoothManager: NSObject {
            let peripheral = restoredPeripherals[identifier]
         {
             logBluetooth(Self.savedPeripheralLogMessage(identifier: identifier, name: peripheral.name, source: .coreBluetoothRestore))
-            connectIfNeeded(peripheral, advertisedName: peripheral.name)
-            return
+            if connectIfNeeded(peripheral, advertisedName: peripheral.name) {
+                return
+            }
         }
 
         if let identifier = activeRemoteIdentifier,
            let peripheral = centralManager.retrievePeripherals(withIdentifiers: [identifier]).first
         {
             logBluetooth(Self.savedPeripheralLogMessage(identifier: identifier, name: peripheral.name, source: .retrievePeripherals))
-            connectIfNeeded(peripheral, advertisedName: peripheral.name)
-            return
+            if connectIfNeeded(peripheral, advertisedName: peripheral.name) {
+                return
+            }
         }
 
         for peripheral in centralManager.retrieveConnectedPeripherals(withServices: [MicroTechAidexProfile.serviceUUID]) {
             logBluetooth("found connected peripheral \(peripheral.identifier), name \(String(describing: peripheral.name))")
-            connectIfNeeded(peripheral, advertisedName: peripheral.name)
-            if activePeripheralManager != nil {
+            if connectIfNeeded(peripheral, advertisedName: peripheral.name) {
                 return
             }
         }
@@ -264,7 +265,8 @@ public final class MicroTechBluetoothManager: NSObject {
         return managerQueue.sync(execute: work)
     }
 
-    private func connectIfNeeded(_ peripheral: CBPeripheral, advertisedName: String?) {
+    @discardableResult
+    private func connectIfNeeded(_ peripheral: CBPeripheral, advertisedName: String?) -> Bool {
         let deviceName = advertisedName ?? peripheral.name ?? ""
         let shouldConnectByIdentifier = activeRemoteIdentifier == peripheral.identifier
 
@@ -272,7 +274,13 @@ public final class MicroTechBluetoothManager: NSObject {
            delegate?.microTechBluetoothManager(self, shouldConnectToDeviceName: deviceName, identifier: peripheral.identifier) != true
         {
             logBluetooth("delegate rejected peripheral \(peripheral.identifier), advertisedName \(deviceName)")
-            return
+            return false
+        }
+
+        guard Self.shouldClaimPeripheralForConnection(state: peripheral.state) else {
+            logBluetooth(Self.disconnectingPeripheralLogMessage(identifier: peripheral.identifier, name: deviceName))
+            centralManager.cancelPeripheralConnection(peripheral)
+            return false
         }
 
         let manager = managedPeripherals[peripheral.identifier] ?? MicroTechPeripheralManager(
@@ -299,12 +307,14 @@ public final class MicroTechBluetoothManager: NSObject {
             logBluetooth("peripheral already connecting \(peripheral.identifier), name \(manager.deviceName)")
             scheduleConnectionTimeoutIfNeeded(for: manager, state: peripheral.state)
         case .disconnecting:
-            logBluetooth("peripheral is disconnecting \(peripheral.identifier), name \(manager.deviceName)")
-            scheduleConnectionTimeoutIfNeeded(for: manager, state: peripheral.state)
+            logBluetooth(Self.disconnectingPeripheralLogMessage(identifier: peripheral.identifier, name: manager.deviceName))
+            centralManager.cancelPeripheralConnection(peripheral)
+            return false
         @unknown default:
             logBluetooth("peripheral unknown state \(peripheral.identifier), name \(manager.deviceName)")
             scheduleConnectionTimeout(for: manager)
         }
+        return true
     }
 
     private func configureAndNotifyReady(_ manager: MicroTechPeripheralManager) {
@@ -383,8 +393,21 @@ public final class MicroTechBluetoothManager: NSObject {
         switch state {
         case .connected:
             return false
-        case .disconnected, .connecting, .disconnecting:
+        case .disconnected, .connecting:
             return true
+        case .disconnecting:
+            return false
+        @unknown default:
+            return true
+        }
+    }
+
+    static func shouldClaimPeripheralForConnection(state: CBPeripheralState) -> Bool {
+        switch state {
+        case .connected, .disconnected, .connecting:
+            return true
+        case .disconnecting:
+            return false
         @unknown default:
             return true
         }
@@ -400,6 +423,10 @@ public final class MicroTechBluetoothManager: NSObject {
 
     static func configurationTimedOutLogMessage(identifier: UUID, name: String) -> String {
         "peripheral configure timed out \(identifier), name \(name)"
+    }
+
+    static func disconnectingPeripheralLogMessage(identifier: UUID, name: String) -> String {
+        "peripheral is disconnecting \(identifier), name \(name), waiting for disconnect before reconnecting"
     }
 
     private func cancelConnectionTimeout(for identifier: UUID) {

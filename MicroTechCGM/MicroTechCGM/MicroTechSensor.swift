@@ -203,7 +203,7 @@ public final class MicroTechSensor {
                     break
                 }
             } catch MicroTechAidexParserError.unsupportedPacket(let packetType) {
-                if packetType == 0x03 {
+                if Self.shouldIgnoreUnsupportedPacket(packetType) {
                     delegate?.microTechSensor(
                         self,
                         didIgnorePacketType: packetType,
@@ -526,6 +526,10 @@ public final class MicroTechSensor {
             return "empty"
         }
         return String(format: "0x%02X", packetType)
+    }
+
+    private static func shouldIgnoreUnsupportedPacket(_ packetType: UInt8) -> Bool {
+        packetType == 0x03 || packetType == 0x04
     }
 
     private static func hexPrefix(_ data: Data) -> String {
