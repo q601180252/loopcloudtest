@@ -5282,7 +5282,7 @@
 		A9E675EE22713F4700E25293 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "arm64_32";
+				ARCHS = "$(ARCHS_STANDARD)";
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "";
@@ -5318,7 +5318,7 @@
 		A9E675EF22713F4700E25293 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ARCHS = "arm64_32";
+				ARCHS = "$(ARCHS_STANDARD)";
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_IDENTITY = "";
