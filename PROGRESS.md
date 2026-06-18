@@ -6,10 +6,25 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 107 个通过；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；配置阶段已增加超时保护和明确日志；真机当前仍没有新血糖，最新日志显示 LinX 卡在连接超时和扫描超时，状态仍停留在 2026-06-18 04:32 的 91 mg/dL。
-- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-060210.ipa`，SHA256 `7c1967945ad8390f502ebd26d6e40eea82ade030dc302c49123c4bb2dfafcffa`。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 109 个通过；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
+- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-084646.ipa`，SHA256 `65f1dae1aac109ac29426298a6fa28b95d517f930e71de52d0c095c3e5ecadd8`。
 
 ## 进展日志
+
+### 2026-06-18 023 - 修复 LinX disconnecting 重连循环和 0x04 误报并重新安装
+
+- **任务**：继续确认 LinX 长连 CGM 状态，修复真机日志中反复出现的 `disconnecting -> connect timed out` 循环，并处理 0x04 状态包被误记为错误的问题。
+- **核心交付**：
+  1. `MicroTechCGM/MicroTechCGM/MicroTechBluetoothManager.swift`：发现 `.disconnecting` 外设时不再占用当前连接名额、不再启动连接超时，主动取消旧连接后继续扫描；保存设备恢复和已连接设备取回只有在真正可连接时才停止扫描流程。
+  2. `MicroTechCGM/MicroTechCGM/MicroTechSensor.swift`：LinX 0x04 状态包按可忽略包处理，只记录 receive 日志，不再上报为血糖错误。
+  3. `MicroTechCGM/MicroTechCGMTests/MicroTechCGMManagerTests.swift`、`MicroTechCGM/MicroTechCGMTests/MicroTechSensorHandshakeTests.swift`：新增 `.disconnecting` 不占用连接、0x04 不产生错误的回归测试。
+  4. `build/ipa/Loop-3.9.1-57-20260618-084646.ipa`：已导出的开发签名 IPA。
+- **验证结果**：`.disconnecting` 相关测试先因缺少 `shouldClaimPeripheralForConnection` 和新日志接口失败，修复后目标测试通过；0x04 状态包测试先失败，失败点为仍被当成 `unsupportedPacket(4)` 错误，修复后目标测试 2 个通过；`MicroTechCGM` 全量测试 109 个通过、0 失败；`git diff --check` 通过；`LoopWorkspace` Debug archive 成功；IPA 导出成功；App 签名校验通过；包内版本为 `3.9.1 (57)`；Bundle ID 为 `com.libre.loopkit3.Loop`；后台模式包含 `bluetooth-central`；包内已确认存在 `MicroTechCGM.framework`、`MicroTechCGMPlugin.framework`、`MicroTechCGMUI.framework`；IPA SHA256 为 `65f1dae1aac109ac29426298a6fa28b95d517f930e71de52d0c095c3e5ecadd8`。
+- **真机状态**：iPhone XR `E30C92D5-FE26-5AE1-B5FB-C787E4401F4F` 可用；已安装 `build/ipa/Loop-3.9.1-57-20260618-084646.ipa`；已启动 `com.libre.loopkit3.Loop`；20 秒后主进程仍存在，进程号为 `1344`。
+- **真机 LinX 日志**：最终包安装后状态仍为 `MicroTechLinXCGMManager`，设备 `AiDEX X-22222DKCZE`，传感器序列号 `22222DKCZE`；11:20 到 11:26 连续写入当前血糖，sample 881 到 887；状态文件显示 11:27:44 已更新到 sample 888、84 mg/dL；最终包安装后 `connect timed out` 数量为 0；0x04 包记录为 `receive MicroTech LinX ignored unsupported packet type 0x04`，未再出现 `unsupportedPacket(4)` 错误。
+- **关键发现**：本轮真机证据证明 LinX 已从连接超时循环恢复，当前连接、握手、解密、解析、入库都在持续工作；本轮未做锁屏过夜测试，因此过夜级后台保活仍需要后续长时间 Loop Report 证明。
+- **commit hash**：`b544011`。
+- **push 状态**：已随本轮推送到 `origin/main`。
 
 ### 2026-06-18 022 - 修复 LinX 配置阶段静默卡住保护并重新安装
 
