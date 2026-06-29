@@ -21,8 +21,8 @@
   4. `docs/工具与踩坑.md`：记录 TestFlight Watch 安装失败的包内原因、处理方式和后续避免规则。
 - **验证结果**：旧 TestFlight IPA 先用 `Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-check/build-artifacts/artifacts/Loop.ipa 11.6` 验证失败，失败点为 `WatchApp`、`WatchApp Extension`、`LoopCore.framework`、`LoopKit.framework` 的 `arm64` slice 都是 `minos=26.0 > 11.6`；对 IPA 副本执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0` 后，验证脚本通过，`codesign --verify --deep --strict` 通过，`WatchApp Extension` 的 `arm64` slice 显示 `minos 9.0`；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过。
 - **关键发现**：TestFlight 上传要求 Watch 包保留 `arm64`，不能简单回退到只含 `arm64_32`；本次修正保留 `arm64`，只修正其最低系统标记并重新签名。
-- **commit hash**：`d185447`。
-- **push 状态**：待推送。
+- **commit hash**：`b2c17f1`。
+- **push 状态**：实现提交已推送到 `origin/main`；TestFlight 发布 workflow 待验证。
 
 ### 2026-06-18 023 - 修复 LinX disconnecting 重连循环和 0x04 误报并重新安装
 
