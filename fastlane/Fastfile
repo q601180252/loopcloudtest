@@ -10,6 +10,8 @@
 #     https://docs.fastlane.tools/plugins/available-plugins
 #
 
+require "shellwords"
+
 default_platform(:ios)
 
 TEAMID = ENV["TEAMID"]
@@ -139,8 +141,13 @@ platform :ios do
       buildlog_path: 'buildlog'
     )
 
-    sh("./Scripts/patch_watchos_testflight_compatibility.sh Loop.ipa 9.0")
-    sh("./Scripts/verify_watchos_testflight_compatibility.sh Loop.ipa 11.6")
+    workspace_root = GITHUB_WORKSPACE || File.expand_path("..", __dir__)
+    ipa_path = File.join(workspace_root, "Loop.ipa")
+    patch_script = File.join(workspace_root, "Scripts", "patch_watchos_testflight_compatibility.sh")
+    verify_script = File.join(workspace_root, "Scripts", "verify_watchos_testflight_compatibility.sh")
+
+    sh("bash #{Shellwords.escape(patch_script)} #{Shellwords.escape(ipa_path)} 9.0")
+    sh("bash #{Shellwords.escape(verify_script)} #{Shellwords.escape(ipa_path)} 11.6")
 
     copy_artifacts(
       target_path: "artifacts",

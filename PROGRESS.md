@@ -17,12 +17,12 @@
 - **核心交付**：
   1. `Scripts/patch_watchos_testflight_compatibility.sh`：导出 IPA 后修正 Watch 相关 `arm64` slice 的 watchOS 最低版本标记，并重新签名嵌套 Watch 内容和主 App。
   2. `Scripts/verify_watchos_testflight_compatibility.sh`：验证 IPA 内 `WatchApp.app`、`WatchApp Extension.appex` 存在，检查 Watch 二进制最低系统不高于 `watchOS 11.6`，并执行深度签名校验。
-  3. `fastlane/Fastfile`：`build_loop` 在 `gym` 后自动执行 Watch 兼容性修正和验证，再进入 artifact 保存与 TestFlight 上传流程；脚本调用使用 `./Scripts/...`，避免 GitHub Actions runner 无法从当前目录找到脚本。
+  3. `fastlane/Fastfile`：`build_loop` 在 `gym` 后自动执行 Watch 兼容性修正和验证，再进入 artifact 保存与 TestFlight 上传流程；脚本调用使用 `GITHUB_WORKSPACE` 计算绝对路径，并通过 `bash` 执行，避免受 fastlane 当前目录影响。
   4. `docs/工具与踩坑.md`：记录 TestFlight Watch 安装失败的包内原因、处理方式和后续避免规则。
-- **验证结果**：旧 TestFlight IPA 先用 `Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-check/build-artifacts/artifacts/Loop.ipa 11.6` 验证失败，失败点为 `WatchApp`、`WatchApp Extension`、`LoopCore.framework`、`LoopKit.framework` 的 `arm64` slice 都是 `minos=26.0 > 11.6`；对 IPA 副本执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0` 后，验证脚本通过，`codesign --verify --deep --strict` 通过，`WatchApp Extension` 的 `arm64` slice 显示 `minos 9.0`；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；GitHub Actions run `28344391069` 已确认 IPA 原始导出成功，但因 `Scripts/patch_watchos_testflight_compatibility.sh` 缺少 `./` 前缀导致 fastlane 找不到脚本，已修正后待重新触发。
+- **验证结果**：旧 TestFlight IPA 先用 `Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-check/build-artifacts/artifacts/Loop.ipa 11.6` 验证失败，失败点为 `WatchApp`、`WatchApp Extension`、`LoopCore.framework`、`LoopKit.framework` 的 `arm64` slice 都是 `minos=26.0 > 11.6`；对 IPA 副本执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0` 后，验证脚本通过，`codesign --verify --deep --strict` 通过，`WatchApp Extension` 的 `arm64` slice 显示 `minos 9.0`；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；GitHub Actions run `28344391069` 已确认 IPA 原始导出成功，但因 `Scripts/patch_watchos_testflight_compatibility.sh` 缺少 `./` 前缀导致 fastlane 找不到脚本；run `28345016900` 已确认 `./Scripts/...` 仍受 fastlane 当前目录影响，已改为 `GITHUB_WORKSPACE` 绝对路径后待重新触发。
 - **关键发现**：TestFlight 上传要求 Watch 包保留 `arm64`，不能简单回退到只含 `arm64_32`；本次修正保留 `arm64`，只修正其最低系统标记并重新签名。
-- **commit hash**：`b2c17f1`、`e534656`；路径修正待提交。
-- **push 状态**：实现提交和文档提交已推送到 `origin/main`；TestFlight 发布 workflow 待重新验证。
+- **commit hash**：`b2c17f1`、`e534656`、`39d0653`；绝对路径修正待提交。
+- **push 状态**：实现提交、文档提交和第一次路径修正已推送到 `origin/main`；TestFlight 发布 workflow 待重新验证。
 
 ### 2026-06-18 023 - 修复 LinX disconnecting 重连循环和 0x04 误报并重新安装
 
