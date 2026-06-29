@@ -65,6 +65,20 @@ elif ! find "$WATCHKIT_SUPPORT" -mindepth 1 -print -quit | grep -q .; then
   failures=$((failures + 1))
 fi
 
+WATCHKIT_SUPPORT_WK="$WATCHKIT_SUPPORT/WK"
+WATCH_STUB_WK="$WATCH_APP/_WatchKitStub/WK"
+if [ -f "$WATCHKIT_SUPPORT_WK" ] && [ -f "$WATCH_STUB_WK" ]; then
+  support_hash="$(shasum -a 256 "$WATCHKIT_SUPPORT_WK" | awk '{ print $1 }')"
+  stub_hash="$(shasum -a 256 "$WATCH_STUB_WK" | awk '{ print $1 }')"
+  if [ "$support_hash" != "$stub_hash" ]; then
+    echo "WatchKitSupport2/WK does not match Watch app _WatchKitStub/WK" >&2
+    failures=$((failures + 1))
+  fi
+else
+  echo "WatchKit WK file missing from WatchKitSupport2 or Watch app stub" >&2
+  failures=$((failures + 1))
+fi
+
 check_binary() {
   local binary="$1"
   local arch info minos
@@ -90,6 +104,10 @@ check_binary() {
 }
 
 while IFS= read -r bundle; do
+  if [ "$bundle" = "$WATCH_APP" ]; then
+    continue
+  fi
+
   executable="$(plutil -extract CFBundleExecutable raw -o - "$bundle/Info.plist" 2>/dev/null || true)"
   if [ -n "$executable" ] && [ -f "$bundle/$executable" ]; then
     check_binary "$bundle/$executable"

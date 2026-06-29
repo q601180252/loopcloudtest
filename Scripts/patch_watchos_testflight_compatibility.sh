@@ -91,6 +91,11 @@ patch_binary() {
 }
 
 while IFS= read -r bundle; do
+  if [ "$bundle" = "$WATCH_APP" ]; then
+    echo "Skipping Watch app shell to preserve WatchKit WK pairing: $bundle"
+    continue
+  fi
+
   executable="$(plutil -extract CFBundleExecutable raw -o - "$bundle/Info.plist" 2>/dev/null || true)"
   if [ -n "$executable" ] && [ -f "$bundle/$executable" ]; then
     patch_binary "$bundle/$executable"

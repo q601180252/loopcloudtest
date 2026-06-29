@@ -7,9 +7,21 @@
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 109 个通过；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
-- 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已被 App Store Connect 处理阶段拒绝，错误为 `90589 Invalid WatchKit Support` 和 `90484 WatchKitSupport2 folder is missing`；当前修正为保留 IPA 顶层 `WatchKitSupport2/` 后重新发布。
+- 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已被 App Store Connect 处理阶段拒绝，错误包括 `90589 Invalid WatchKit Support`、`90484 WatchKitSupport2 folder is missing` 和 `90487 WK don’t match`；当前修正为保留 IPA 顶层 `WatchKitSupport2/`，并跳过 Watch app 壳本身，只处理 Watch extension。
 
 ## 进展日志
+
+### 2026-06-29 026 - 避免处理 Watch app 壳导致 WK 不匹配
+
+- **任务**：处理 App Store Connect 返回 `90487 Invalid WatchKit Support`，错误提示 `WK don’t match` 且要求不要 post-process Watch app 内的 `WK`。
+- **核心交付**：
+  1. `Scripts/patch_watchos_testflight_compatibility.sh`：跳过 `WatchApp.app` 主壳，不再修正其主二进制，只修正 `WatchApp Extension.appex` 和 extension 内的 watchOS framework。
+  2. `Scripts/verify_watchos_testflight_compatibility.sh`：新增 `WatchKitSupport2/WK` 与 `WatchApp.app/_WatchKitStub/WK` 的 SHA256 一致性检查；兼容性 minos 检查同步跳过 Watch app 壳。
+  3. `docs/工具与踩坑.md`：记录 `90487` 的原因和避免规则。
+- **验证结果**：旧原始 IPA 经新脚本处理后输出 `Skipping Watch app shell to preserve WatchKit WK pairing`；修正后保留顶层 `Payload Symbols WatchKitSupport2`；`WatchKitSupport2/WK` 与 `WatchApp.app/_WatchKitStub/WK` SHA256 都是 `5d3149a79cbdb2d2b785869e3079bba91499813fbe5ed110b317d60212857db0`；`WatchApp Extension` 的 `arm64` slice 为 `minos 9.0`；`WatchApp` 主壳保持 `minos 26.0`；新验证脚本通过；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；`git diff --check` 通过。
+- **关键发现**：`WATCHOS_DEPLOYMENT_TARGET` 已是 `9.0`，但 Xcode 26 导出的 Watch arm64 slice 仍为 `minos 26.0`；App Store Connect 同时禁止处理 Watch app 壳内的 WatchKit `WK` 配对文件，因此本轮只处理 Watch extension 层。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
 
 ### 2026-06-29 025 - 修复 WatchKitSupport2 丢失导致的处理失败
 
@@ -21,8 +33,8 @@
   4. `docs/工具与踩坑.md`：记录 `90484`、`90589` 的直接原因和发布流程要求。
 - **验证结果**：`Loop 3.9.1 (64)` artifact 用新验证脚本检查会失败，失败点为 `WatchKitSupport2 folder missing from IPA`；上一版原始 IPA 先因 Watch `arm64` slice `minos=26.0 > 11.6` 失败，复制后执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0`，输出 `Preserved top-level IPA entries: Payload Symbols WatchKitSupport2`，随后新验证脚本通过；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；`git diff --check` 通过。
 - **关键发现**：`28345506128` 的 TestFlight 上传步骤成功只代表包已上传，不能代表 App Store Connect 后续处理通过；本次必须等处理完成后再判定发布成功。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`e759d5d`。
+- **push 状态**：已推送到 `origin/main`；后续 App Store Connect 返回 `90487`，需继续修正。
 
 ### 2026-06-29 024 - 修正 TestFlight Watch 包兼容性
 
