@@ -20,8 +20,8 @@
   3. `docs/工具与踩坑.md`：记录 `90487` 的原因和避免规则。
 - **验证结果**：旧原始 IPA 经新脚本处理后输出 `Skipping Watch app shell to preserve WatchKit WK pairing`；修正后保留顶层 `Payload Symbols WatchKitSupport2`；`WatchKitSupport2/WK` 与 `WatchApp.app/_WatchKitStub/WK` SHA256 都是 `5d3149a79cbdb2d2b785869e3079bba91499813fbe5ed110b317d60212857db0`；`WatchApp Extension` 的 `arm64` slice 为 `minos 9.0`；`WatchApp` 主壳保持 `minos 26.0`；新验证脚本通过；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；`git diff --check` 通过。
 - **关键发现**：`WATCHOS_DEPLOYMENT_TARGET` 已是 `9.0`，但 Xcode 26 导出的 Watch arm64 slice 仍为 `minos 26.0`；App Store Connect 同时禁止处理 Watch app 壳内的 WatchKit `WK` 配对文件，因此本轮只处理 Watch extension 层。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`5567c4b`。
+- **push 状态**：已推送到 `origin/main`；TestFlight 发布 workflow 待重新验证。
 
 ### 2026-06-29 025 - 修复 WatchKitSupport2 丢失导致的处理失败
 
