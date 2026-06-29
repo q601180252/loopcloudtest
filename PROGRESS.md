@@ -11,6 +11,19 @@
 
 ## 进展日志
 
+### 2026-06-29 024 - 修正 TestFlight Watch 包兼容性
+
+- **任务**：处理 TestFlight 版本无法安装到 Apple Watch Series 8、watchOS `11.6.2 (22U95)` 的问题，并重新准备兼容包发布流程。
+- **核心交付**：
+  1. `Scripts/patch_watchos_testflight_compatibility.sh`：导出 IPA 后修正 Watch 相关 `arm64` slice 的 watchOS 最低版本标记，并重新签名嵌套 Watch 内容和主 App。
+  2. `Scripts/verify_watchos_testflight_compatibility.sh`：验证 IPA 内 `WatchApp.app`、`WatchApp Extension.appex` 存在，检查 Watch 二进制最低系统不高于 `watchOS 11.6`，并执行深度签名校验。
+  3. `fastlane/Fastfile`：`build_loop` 在 `gym` 后自动执行 Watch 兼容性修正和验证，再进入 artifact 保存与 TestFlight 上传流程。
+  4. `docs/工具与踩坑.md`：记录 TestFlight Watch 安装失败的包内原因、处理方式和后续避免规则。
+- **验证结果**：旧 TestFlight IPA 先用 `Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-check/build-artifacts/artifacts/Loop.ipa 11.6` 验证失败，失败点为 `WatchApp`、`WatchApp Extension`、`LoopCore.framework`、`LoopKit.framework` 的 `arm64` slice 都是 `minos=26.0 > 11.6`；对 IPA 副本执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0` 后，验证脚本通过，`codesign --verify --deep --strict` 通过，`WatchApp Extension` 的 `arm64` slice 显示 `minos 9.0`；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过。
+- **关键发现**：TestFlight 上传要求 Watch 包保留 `arm64`，不能简单回退到只含 `arm64_32`；本次修正保留 `arm64`，只修正其最低系统标记并重新签名。
+- **commit hash**：`d185447`。
+- **push 状态**：待推送。
+
 ### 2026-06-18 023 - 修复 LinX disconnecting 重连循环和 0x04 误报并重新安装
 
 - **任务**：继续确认 LinX 长连 CGM 状态，修复真机日志中反复出现的 `disconnecting -> connect timed out` 循环，并处理 0x04 状态包被误记为错误的问题。

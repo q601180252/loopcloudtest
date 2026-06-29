@@ -139,6 +139,9 @@ platform :ios do
       buildlog_path: 'buildlog'
     )
 
+    sh("Scripts/patch_watchos_testflight_compatibility.sh Loop.ipa 9.0")
+    sh("Scripts/verify_watchos_testflight_compatibility.sh Loop.ipa 11.6")
+
     copy_artifacts(
       target_path: "artifacts",
       artifacts: ["*.mobileprovision", "*.ipa", "*.dSYM.zip"]
