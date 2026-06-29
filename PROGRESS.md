@@ -7,7 +7,7 @@
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 109 个通过；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
-- 最新 IPA：`build/ipa/Loop-3.9.1-57-20260618-084646.ipa`，SHA256 `65f1dae1aac109ac29426298a6fa28b95d517f930e71de52d0c095c3e5ecadd8`。
+- 最新 TestFlight 包：`Loop 3.9.1 (64)`，GitHub Actions run `28345506128`，artifact IPA SHA256 `879e10071ff73eb5f53193ef044b13aa62aa77b444e8c9e3d284ce995b2babd1`。
 
 ## 进展日志
 
@@ -19,10 +19,11 @@
   2. `Scripts/verify_watchos_testflight_compatibility.sh`：验证 IPA 内 `WatchApp.app`、`WatchApp Extension.appex` 存在，检查 Watch 二进制最低系统不高于 `watchOS 11.6`，并执行深度签名校验。
   3. `fastlane/Fastfile`：`build_loop` 在 `gym` 后自动执行 Watch 兼容性修正和验证，再进入 artifact 保存与 TestFlight 上传流程；脚本调用使用 `GITHUB_WORKSPACE` 计算绝对路径，并通过 `bash` 执行，避免受 fastlane 当前目录影响。
   4. `docs/工具与踩坑.md`：记录 TestFlight Watch 安装失败的包内原因、处理方式和后续避免规则。
-- **验证结果**：旧 TestFlight IPA 先用 `Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-check/build-artifacts/artifacts/Loop.ipa 11.6` 验证失败，失败点为 `WatchApp`、`WatchApp Extension`、`LoopCore.framework`、`LoopKit.framework` 的 `arm64` slice 都是 `minos=26.0 > 11.6`；对 IPA 副本执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0` 后，验证脚本通过，`codesign --verify --deep --strict` 通过，`WatchApp Extension` 的 `arm64` slice 显示 `minos 9.0`；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；GitHub Actions run `28344391069` 已确认 IPA 原始导出成功，但因 `Scripts/patch_watchos_testflight_compatibility.sh` 缺少 `./` 前缀导致 fastlane 找不到脚本；run `28345016900` 已确认 `./Scripts/...` 仍受 fastlane 当前目录影响，已改为 `GITHUB_WORKSPACE` 绝对路径后待重新触发。
+- **验证结果**：旧 TestFlight IPA 先用 `Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-check/build-artifacts/artifacts/Loop.ipa 11.6` 验证失败，失败点为 `WatchApp`、`WatchApp Extension`、`LoopCore.framework`、`LoopKit.framework` 的 `arm64` slice 都是 `minos=26.0 > 11.6`；对 IPA 副本执行 `WATCHOS_COMPAT_CODESIGN_IDENTITY='-' Scripts/patch_watchos_testflight_compatibility.sh ... 9.0` 后，验证脚本通过，`codesign --verify --deep --strict` 通过，`WatchApp Extension` 的 `arm64` slice 显示 `minos 9.0`；`ruby -c fastlane/Fastfile` 通过；两个脚本 `bash -n` 通过；GitHub Actions run `28344391069` 已确认 IPA 原始导出成功，但因 `Scripts/patch_watchos_testflight_compatibility.sh` 缺少 `./` 前缀导致 fastlane 找不到脚本；run `28345016900` 已确认 `./Scripts/...` 仍受 fastlane 当前目录影响；run `28345506128` 已通过 `Build Loop`、Watch 兼容性修正、Watch 兼容性验证、TestFlight 上传和 artifact 上传。
+- **发布包**：TestFlight 已上传 `Loop 3.9.1 (64)`；artifact IPA SHA256 为 `879e10071ff73eb5f53193ef044b13aa62aa77b444e8c9e3d284ce995b2babd1`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`；Watch `arm64` slice 的 `LC_BUILD_VERSION` 已显示 `minos 9.0`。
 - **关键发现**：TestFlight 上传要求 Watch 包保留 `arm64`，不能简单回退到只含 `arm64_32`；本次修正保留 `arm64`，只修正其最低系统标记并重新签名。
-- **commit hash**：`b2c17f1`、`e534656`、`39d0653`；绝对路径修正待提交。
-- **push 状态**：实现提交、文档提交和第一次路径修正已推送到 `origin/main`；TestFlight 发布 workflow 待重新验证。
+- **commit hash**：`b2c17f1`、`e534656`、`39d0653`、`91f7b09`。
+- **push 状态**：已推送到 `origin/main`；TestFlight 发布 workflow 已完成。
 
 ### 2026-06-18 023 - 修复 LinX disconnecting 重连循环和 0x04 误报并重新安装
 
