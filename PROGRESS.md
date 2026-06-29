@@ -20,8 +20,8 @@
   3. 更新当前状态，避免继续引用旧的 `90484`、`90487`、`90589` 失败结果。
 - **验证结果**：Actions 日志显示 `Skipping Watch app shell to preserve WatchKit WK pairing`、`Preserved top-level IPA entries: Payload Symbols WatchKitSupport2`、`Watch compatibility verified for /Users/runner/work/loopcloudtest/loopcloudtest/Loop.ipa`、`Successfully uploaded the new binary to App Store Connect`、`Successfully finished processing the build 3.9.1 - 64 for IOS`；`Scripts/verify_watchos_testflight_compatibility.sh /tmp/loopcloudtest-watch-final-28347545488/build-artifacts/artifacts/Loop.ipa 11.6` 通过；包内版本为 `3.9.1 (64)`；`Loop.app` 最低 iOS 为 `15.1`；`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 均为 `9.0`；`WatchKitSupport2/WK` 与 `WatchApp.app/_WatchKitStub/WK` SHA256 均为 `5d3149a79cbdb2d2b785869e3079bba91499813fbe5ed110b317d60212857db0`；artifact IPA SHA256 为 `34b0881ba6972814f2e60f37cec9e32e91c719f7eadf4d7df1b684f411b800d9`。
 - **关键发现**：App Store Connect 处理通过的是当前重新上传后的 `3.9.1 (64)`；此前同 build number 的 `90484`、`90487`、`90589` 邮件属于旧失败包。
-- **commit hash**：`7c49b84`，对应已处理通过的 workflow head。
-- **push 状态**：待推送。
+- **commit hash**：`7c49b84`，对应已处理通过的 workflow head；`4be7060`，对应本次发布验证记录更新。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-06-29 026 - 避免处理 Watch app 壳导致 WK 不匹配
 
