@@ -167,7 +167,7 @@ platform :ios do
       api_key: api_key,
       skip_submission: false,
       ipa: "Loop.ipa",
-      skip_waiting_for_build_processing: true,
+      skip_waiting_for_build_processing: false,
     )
   end
 

@@ -56,6 +56,15 @@ fi
 
 failures=0
 
+WATCHKIT_SUPPORT="$WORKDIR/unpacked/WatchKitSupport2"
+if [ ! -d "$WATCHKIT_SUPPORT" ]; then
+  echo "WatchKitSupport2 folder missing from IPA" >&2
+  failures=$((failures + 1))
+elif ! find "$WATCHKIT_SUPPORT" -mindepth 1 -print -quit | grep -q .; then
+  echo "WatchKitSupport2 folder is empty in IPA" >&2
+  failures=$((failures + 1))
+fi
+
 check_binary() {
   local binary="$1"
   local arch info minos

@@ -42,6 +42,12 @@ if [ -z "$WATCH_APP" ]; then
   exit 65
 fi
 
+WATCHKIT_SUPPORT="$WORKDIR/unpacked/WatchKitSupport2"
+if [ ! -d "$WATCHKIT_SUPPORT" ]; then
+  echo "WatchKitSupport2 folder missing from source IPA" >&2
+  exit 65
+fi
+
 patch_binary() {
   local binary="$1"
   local info sdk ld_version output
@@ -104,6 +110,17 @@ codesign --force --sign "$SIGN_IDENTITY" --preserve-metadata=identifier,entitlem
 codesign --verify --deep --strict --verbose=2 "$APP_PATH" >/dev/null
 
 rm -f "$IPA_PATH"
-(cd "$WORKDIR/unpacked" && zip -qry "$IPA_PATH" Payload)
+top_level_entries=()
+while IFS= read -r entry; do
+  top_level_entries+=("$entry")
+done < <(cd "$WORKDIR/unpacked" && find . -mindepth 1 -maxdepth 1 -exec basename {} \; | sort)
+
+if [ "${#top_level_entries[@]}" -eq 0 ]; then
+  echo "No IPA contents found to repack" >&2
+  exit 65
+fi
+
+(cd "$WORKDIR/unpacked" && zip -qry "$IPA_PATH" "${top_level_entries[@]}")
 
 echo "Repacked IPA: $IPA_PATH"
+echo "Preserved top-level IPA entries: ${top_level_entries[*]}"
