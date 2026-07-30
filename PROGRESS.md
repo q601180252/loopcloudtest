@@ -6,7 +6,7 @@
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 165 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 170 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
@@ -19,10 +19,11 @@
   2. 扫描、连接、系统恢复、Bluetooth 状态、service、characteristic、notification、read、write 和 timeout 均记录稳定的 `stage`、`event` 与完整错误信息。
   3. 握手与通信持续记录完整设备 identifier、base key、pairing key、session key、IV、challenge、发送命令、加密包、解密包和解析失败原始数据，不脱敏、不截断。
   4. `docs/工具与踩坑.md` 已记录排查方法、真实测试入口和 Loop Report 的敏感信息限制。
-- **验证结果**：`MicroTechCGM` 全量 165 个测试通过、0 失败；串行日志关键测试独立运行 3 次均通过；`LoopTests` 的真实 `DeviceLog.json` 导出测试 1 个通过，确认包含 `stage=scan event=failed reason=timeout`；`LoopWorkspace` 使用 `generic/platform=iOS` 且 `CODE_SIGNING_ALLOWED=NO` 构建成功；`git diff --check` 通过。
+  5. 最终审查发现并修复日志回调与状态读取互相等待、首次 Bluetooth 状态可能丢失、GATT 缓存和同步失败缺少稳定节点、日志流状态长期累积的问题；本轮新增测试中的真实设备序列号已替换为虚构值。
+- **验证结果**：`MicroTechCGM` 全量 170 个测试通过、0 失败；串行日志关键测试独立运行 3 次均通过；`LoopTests` 的真实 `DeviceLog.json` 导出测试 1 个通过，确认包含 `stage=scan event=failed reason=timeout`；`LoopWorkspace` 使用 `generic/platform=iOS` 且 `CODE_SIGNING_ALLOWED=NO` 构建成功；最终规格与代码质量复核均通过；`git diff --check` 通过。
 - **关键发现**：直接用 `LoopWorkspace` scheme 运行指定导出测试会被仓库现有 `OmniBLETests/Driver/Comm/message/MessagePacketTests.swift:52` 编译错误阻断，原因是 `RawSpan` 没有 `toHexString`；使用独立 `LoopTests` scheme、明确 Simulator id 和 `MAIN_APP_BUNDLE_IDENTIFIER` 后测试通过。
 - **决策结论**：为满足本次问题分析要求，LinX 日志保留完整密钥和通信数据；Loop Report 只能交给可信分析人员，不得公开分享。
-- **commit hash**：`ccac881`、`a9edde7`、`043d8dd`、`44c9031`。
+- **commit hash**：`ccac881`、`a9edde7`、`043d8dd`、`44c9031`、`03bdfe9`、`27bc79e`。
 - **push 状态**：待推送。
 
 ### 2026-07-30 029 - 完成 LinX 完整连接日志实施计划
