@@ -11,6 +11,20 @@
 
 ## 进展日志
 
+### 2026-07-30 028 - 明确 LinX 全连接日志设计
+
+- **任务**：解决 LinX 首次添加失败时 Loop Report 没有扫描、连接和配对证据的问题，并明确全运行周期完整通信日志范围。
+- **核心交付**：
+  1. `docs/superpowers/specs/2026-07-30-linx-full-connection-logging-design.md`：定义首次添加独立日志入口，不提前安装临时 manager。
+  2. 明确持续记录设备信息、基础 key、pairing key、challenge、session key、IV、完整发送包、完整加密接收包和完整解密包。
+  3. 明确扫描、连接、service、characteristic、通知、读写、配对、解密、CRC 和解析失败的稳定日志字段。
+  4. 要求使用真实 `PersistentDeviceLog` 导出 `DeviceLog.json` 做集成验证。
+- **验证结果**：设计文档两轮审查后通过；文件存在且关键内容可读；`git diff --check` 和 staged diff check 通过。
+- **关键发现**：首次添加 LinX 成功前 manager 没有正式 `CGMManagerDelegate`，现有扫描和配对信息不会进入 Loop Report；提前调用 `didCreateCGMManager` 会改变添加状态，因此采用独立 onboarding 日志入口。
+- **决策结论**：LinX 全运行周期持续记录完整密钥和完整通信数据，不脱敏、不截断；Loop Report 只能交给可信分析人员。
+- **commit hash**：`b54886c`。
+- **push 状态**：已推送到 `origin/main`。
+
 ### 2026-06-29 027 - 确认 TestFlight Watch 发布处理通过
 
 - **任务**：确认最新 TestFlight 包是否已经支持 Apple Watch Series 8、watchOS `11.6.2 (22U95)`。
