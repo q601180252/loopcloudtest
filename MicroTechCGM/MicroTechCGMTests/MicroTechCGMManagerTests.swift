@@ -215,6 +215,1019 @@ final class MicroTechCGMManagerTests: XCTestCase {
         })
     }
 
+    func testDiagnosticErrorFieldsIncludeDomainCodeAndDescription() {
+        let error = NSError(
+            domain: "MicroTechCGMTests",
+            code: 42,
+            userInfo: [NSLocalizedDescriptionKey: "diagnostic failure"]
+        )
+
+        XCTAssertEqual(
+            MicroTechDiagnosticLog.errorFields(error),
+            "errorDomain=MicroTechCGMTests errorCode=42 errorDescription=diagnostic failure"
+        )
+        XCTAssertEqual(
+            MicroTechDiagnosticLog.errorFields(nil),
+            "errorDomain=nil errorCode=nil errorDescription=nil"
+        )
+    }
+
+    func testScanLifecycleLogsStartedFoundAcceptedRejectedStoppedAndTimeout() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanStartedLogMessage(requestedIdentifier: identifier),
+            "stage=scan event=started requestedIdentifier=\(identifier)"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanFoundLogMessage(
+                identifier: identifier,
+                name: nil,
+                advertisement: "localName=LinX-ABC123",
+                rssi: -55
+            ),
+            "stage=scan event=found identifier=\(identifier) name=nil advertisement=localName=LinX-ABC123 rssi=-55"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanDecisionLogMessage(
+                accepted: true,
+                identifier: identifier,
+                reason: "requestedIdentifier"
+            ),
+            "stage=scan event=accepted identifier=\(identifier) reason=requestedIdentifier"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanDecisionLogMessage(
+                accepted: false,
+                identifier: identifier,
+                reason: "delegateRejected"
+            ),
+            "stage=scan event=rejected identifier=\(identifier) reason=delegateRejected"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanStoppedLogMessage(reason: "timeout"),
+            "stage=scan event=stopped reason=timeout"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanTimeoutLogMessage(requestedIdentifier: identifier),
+            "stage=scan event=timeout requestedIdentifier=\(identifier)"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.scanStartedLogMessage(requestedIdentifier: nil),
+            "stage=scan event=started requestedIdentifier=nil"
+        )
+    }
+
+    func testAdvertisementDescriptionRecursivelySerializesAllValuesInStableOrder() {
+        let advertisementData: [String: Any] = [
+            "nested": [
+                "z": [NSNumber(value: 7), "LinX", Data([0xDE, 0xAD])],
+                "a": CBUUID(string: "1808"),
+            ],
+            CBAdvertisementDataServiceDataKey: [
+                CBUUID(string: "FFF0"): Data([0x10, 0x20, 0x00, 0xFE]),
+            ],
+            CBAdvertisementDataManufacturerDataKey: Data([0x01, 0xAB, 0x00, 0xFF]),
+        ]
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.advertisementDescription(advertisementData),
+            "kCBAdvDataManufacturerData=Data(length=4,hex=01AB00FF),kCBAdvDataServiceData={FFF0=Data(length=4,hex=102000FE)},nested={a=1808,z=[7,LinX,Data(length=2,hex=DEAD)]}"
+        )
+    }
+
+    func testConnectionLifecycleLogsAttemptedSucceededFailedTimeoutAndDisconnected() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let error = NSError(
+            domain: "CoreBluetooth",
+            code: 7,
+            userInfo: [NSLocalizedDescriptionKey: "connection lost"]
+        )
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.connectionLogMessage(event: "attempted", identifier: identifier),
+            "stage=connect event=attempted identifier=\(identifier)"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.connectionLogMessage(event: "succeeded", identifier: identifier),
+            "stage=connect event=succeeded identifier=\(identifier)"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.connectionLogMessage(event: "failed", identifier: identifier, error: error),
+            "stage=connect event=failed identifier=\(identifier) errorDomain=CoreBluetooth errorCode=7 errorDescription=connection lost"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.connectionLogMessage(event: "timeout", identifier: identifier),
+            "stage=connect event=timeout identifier=\(identifier)"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.connectionLogMessage(event: "disconnected", identifier: identifier),
+            "stage=connect event=disconnected identifier=\(identifier)"
+        )
+    }
+
+    func testExpectedCancellationDisconnectCallbackLogsNormalDisconnectedWithoutMissingManager() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechDisconnectCallbackState()
+        var entries: [(message: String, type: MicroTechBluetoothLogType)] = []
+
+        state.expectCancellation(identifier: identifier)
+        let result = state.handleConnectionEnd(
+            callback: "didDisconnectPeripheral",
+            identifier: identifier,
+            error: nil,
+            managerPresent: false,
+            log: { entries.append(($0, $1)) }
+        )
+
+        XCTAssertEqual(result, .expectedCancellation)
+        XCTAssertEqual(entries.map(\.message), [
+            "stage=connect event=disconnected identifier=\(identifier)",
+        ])
+        guard let type = entries.first?.type else {
+            return XCTFail("Expected disconnected log entry")
+        }
+        guard case .connection = type else {
+            return XCTFail("Expected normal connection log type")
+        }
+    }
+
+    func testExpectedCancellationFailToConnectUsesSameNormalEndPathAndConsumesMarker() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechDisconnectCallbackState()
+        var entries: [(message: String, type: MicroTechBluetoothLogType)] = []
+        let error = NSError(
+            domain: "CoreBluetooth",
+            code: 7,
+            userInfo: [NSLocalizedDescriptionKey: "cancelled during connect"]
+        )
+
+        state.expectCancellation(identifier: identifier)
+        let expectedResult = state.handleConnectionEnd(
+            callback: "didFailToConnect",
+            identifier: identifier,
+            error: error,
+            managerPresent: true,
+            log: { entries.append(($0, $1)) }
+        )
+        let consumedResult = state.handleConnectionEnd(
+            callback: "didFailToConnect",
+            identifier: identifier,
+            error: nil,
+            managerPresent: false,
+            log: { entries.append(($0, $1)) }
+        )
+
+        XCTAssertEqual(expectedResult, .expectedCancellation)
+        XCTAssertEqual(consumedResult, .missingPeripheralManager)
+        XCTAssertEqual(
+            entries.first?.message,
+            "stage=connect event=disconnected identifier=\(identifier) errorDomain=CoreBluetooth errorCode=7 errorDescription=cancelled during connect"
+        )
+        XCTAssertEqual(entries.first?.type, .connection)
+        XCTAssertFalse(entries.contains { $0.message.contains("event=failed") })
+        XCTAssertEqual(
+            entries.last?.message,
+            "stage=callback event=ignored callback=didFailToConnect identifier=\(identifier) reason=missingPeripheralManager"
+        )
+    }
+
+    func testRestoredPeripheralLogsRestorationSourceAndIdentifier() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.restoredPeripheralLogMessage(
+                identifier: identifier,
+                source: .coreBluetoothRestore
+            ),
+            "stage=restore event=restored identifier=\(identifier) source=CoreBluetoothRestore"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.restoredPeripheralLogMessage(
+                identifier: identifier,
+                source: .retrievePeripherals
+            ),
+            "stage=restore event=restored identifier=\(identifier) source=retrievePeripherals"
+        )
+    }
+
+    func testBluetoothStateLossLogsOldAndNewStateAndStoppedOperation() {
+        XCTAssertEqual(
+            MicroTechBluetoothManager.bluetoothStateChangedLogMessage(
+                oldState: .poweredOn,
+                newState: .poweredOff,
+                stoppedOperation: "scan"
+            ),
+            "stage=bluetooth event=state_changed oldState=poweredOn newState=poweredOff stoppedOperation=scan"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.bluetoothStateChangedLogMessage(
+                oldState: nil,
+                newState: .poweredOn,
+                stoppedOperation: nil
+            ),
+            "stage=bluetooth event=state_changed oldState=nil newState=poweredOn stoppedOperation=nil"
+        )
+    }
+
+    func testMissingPeripheralManagerCallbackIncludesIdentifierAndCallback() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.missingPeripheralManagerLogMessage(
+                callback: "didConnect",
+                identifier: identifier
+            ),
+            "stage=callback event=ignored callback=didConnect identifier=\(identifier) reason=missingPeripheralManager"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.missingPeripheralManagerLogMessage(
+                callback: "didFailToConnect",
+                identifier: identifier
+            ),
+            "stage=callback event=ignored callback=didFailToConnect identifier=\(identifier) reason=missingPeripheralManager"
+        )
+    }
+
+    func testBluetoothSendAndReceiveTypesMapToDeviceLogTypes() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        let logQueue = DispatchQueue(label: "MicroTechCGMManagerTests.bluetoothDataLogs")
+        manager.delegateQueue = logQueue
+        manager.cgmManagerDelegate = delegate
+
+        XCTAssertTrue(manager.scanForSensor())
+        bluetoothManager.logHandler?("send payload", .send)
+        bluetoothManager.logHandler?("receive payload", .receive)
+        logQueue.sync {}
+
+        XCTAssertTrue(delegate.loggedEvents.contains { $0.type == .send && $0.message == "send payload" })
+        XCTAssertTrue(delegate.loggedEvents.contains { $0.type == .receive && $0.message == "receive payload" })
+    }
+
+    func testDiscoverServicesErrorLogsFailedWithNSErrorFields() {
+        assertGattErrorLog(
+            callback: .discoverServices,
+            service: MicroTechAidexProfile.serviceUUID,
+            characteristic: nil,
+            operation: "discoverServices"
+        )
+    }
+
+    func testDiscoverCharacteristicsErrorLogsFailedWithNSErrorFields() {
+        assertGattErrorLog(
+            callback: .discoverCharacteristics,
+            service: MicroTechAidexProfile.serviceUUID,
+            characteristic: nil,
+            operation: "discoverCharacteristics"
+        )
+    }
+
+    func testNotificationStateErrorLogsFailedWithNSErrorFields() {
+        assertGattErrorLog(
+            callback: .notificationState,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f002UUID,
+            operation: "notificationState"
+        )
+    }
+
+    func testReadCallbackErrorLogsFailedWithNSErrorFields() {
+        assertGattErrorLog(
+            callback: .read,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f002UUID,
+            operation: "read"
+        )
+    }
+
+    func testReadCallbackWithoutValueLogsFailedReasonMissingValue() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        XCTAssertNoThrow(try state.begin(.read(MicroTechAidexProfile.f002UUID)))
+
+        state.handleValueCallback(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f002UUID,
+            error: nil,
+            value: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(try state.wait(timeout: 0.01), .completed)
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.type, .error)
+        XCTAssertEqual(
+            entries.first?.message,
+            "stage=gatt operation=read event=failed identifier=\(identifier) service=nil characteristic=\(MicroTechAidexProfile.f002UUID.uuidString) reason=missingValue"
+        )
+    }
+
+    func testNotificationCallbackErrorLogsFailedWithNSErrorFields() {
+        assertGattErrorLog(
+            callback: .notificationValue,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f003UUID,
+            operation: "notificationValue"
+        )
+    }
+
+    func testNotificationValueLogsAttemptedBeforeCallbacks() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        XCTAssertNoThrow(try state.begin(.notification(MicroTechAidexProfile.f003UUID)))
+
+        state.handleOperationCallback(
+            callback: .notificationState,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f003UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(try state.wait(timeout: 0.01), .completed)
+        XCTAssertEqual(
+            entries.last?.message,
+            "stage=gatt operation=notificationValue event=attempted identifier=\(identifier) service=nil characteristic=\(MicroTechAidexProfile.f003UUID.uuidString)"
+        )
+    }
+
+    func testNotificationCallbackWithoutValueLogsFailedReasonMissingValue() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+
+        state.handleValueCallback(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f003UUID,
+            error: nil,
+            value: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.type, .error)
+        XCTAssertEqual(
+            entries.first?.message,
+            "stage=gatt operation=notificationValue event=failed identifier=\(identifier) service=nil characteristic=\(MicroTechAidexProfile.f003UUID.uuidString) reason=missingValue"
+        )
+    }
+
+    func testNotificationCallbackLogsSucceededAndFullPayload() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let payload = Data(0...63)
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+
+        state.handleValueCallback(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f003UUID,
+            error: nil,
+            value: payload,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertEqual(entries.first?.type, .receive)
+        XCTAssertTrue(entries.first?.message.contains("valueLength=64") == true)
+        XCTAssertTrue(entries.first?.message.contains("valueHex=\(payload.microTechHexadecimalString)") == true)
+        XCTAssertTrue(entries.first?.message.hasSuffix("3C3D3E3F") == true)
+        XCTAssertFalse(entries.first?.message.contains("rawPrefix") == true)
+        XCTAssertFalse(entries.first?.message.contains("prefix") == true)
+        XCTAssertFalse(entries.first?.message.contains("...") == true)
+    }
+
+    func testWriteCallbackErrorLogsFailedWithNSErrorFields() {
+        assertGattErrorLog(
+            callback: .write,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            operation: "write"
+        )
+    }
+
+    func testGattOperationTimeoutLogsPendingOperationAndTarget() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechPeripheralManager.gattTimeoutLogMessage(
+                identifier: identifier,
+                operation: .discoverCharacteristics(MicroTechAidexProfile.serviceUUID)
+            ),
+            "stage=gatt event=timeout identifier=\(identifier) pendingOperation=discoverCharacteristics service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=nil"
+        )
+        XCTAssertEqual(
+            MicroTechPeripheralManager.gattTimeoutLogMessage(
+                identifier: identifier,
+                operation: .write(MicroTechAidexProfile.f001UUID)
+            ),
+            "stage=gatt event=timeout identifier=\(identifier) pendingOperation=write service=nil characteristic=\(MicroTechAidexProfile.f001UUID.uuidString)"
+        )
+    }
+
+    func testWriteTimeoutInvalidatesSessionRejectsRetryAndIgnoresOldCallback() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var timeoutCount = 0
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.write(MicroTechAidexProfile.f001UUID))
+
+        XCTAssertEqual(
+            try state.wait(timeout: 0.001, onTimeout: {
+                if state.requestDisconnect() {
+                    timeoutCount += 1
+                }
+            }),
+            .timedOut
+        )
+        XCTAssertEqual(timeoutCount, 1)
+        XCTAssertFalse(state.requestDisconnect())
+        for operation in [
+            MicroTechGattOperation.notification(MicroTechAidexProfile.f003UUID),
+            .read(MicroTechAidexProfile.f002UUID),
+            .write(MicroTechAidexProfile.f001UUID),
+        ] {
+            XCTAssertThrowsError(try state.begin(operation)) { error in
+                XCTAssertEqual(error as? MicroTechPeripheralManagerError, .notConnected)
+            }
+        }
+        XCTAssertThrowsError(try state.validateImmediateCommand()) { error in
+            XCTAssertEqual(error as? MicroTechPeripheralManagerError, .notConnected)
+        }
+
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(entries.filter { $0.message.contains("event=ignored") }.count, 1)
+        XCTAssertTrue(entries[0].message.contains("reason=sessionInvalidated"))
+        XCTAssertFalse(entries[0].message.contains("event=succeeded"))
+    }
+
+    func testReadTimeoutInvalidatesSessionRejectsRetryAndIgnoresOldCallback() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.read(MicroTechAidexProfile.f002UUID))
+
+        XCTAssertEqual(try state.wait(timeout: 0.001), .timedOut)
+        XCTAssertThrowsError(try state.begin(.read(MicroTechAidexProfile.f002UUID))) { error in
+            XCTAssertEqual(error as? MicroTechPeripheralManagerError, .notConnected)
+        }
+
+        let value = state.handleValueCallback(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f002UUID,
+            error: nil,
+            value: Data([0x01, 0x02]),
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertNil(value)
+        XCTAssertEqual(entries.filter { $0.message.contains("event=ignored") }.count, 1)
+        XCTAssertTrue(entries[0].message.contains("reason=sessionInvalidated"))
+        XCTAssertFalse(entries[0].message.contains("event=succeeded"))
+    }
+
+    func testDisconnectCompletesPendingReadWithNotConnectedWithoutTimeout() throws {
+        try assertDisconnectCompletesPendingOperation(.read(MicroTechAidexProfile.f002UUID))
+    }
+
+    func testDisconnectCompletesPendingWriteWithNotConnectedWithoutTimeout() throws {
+        try assertDisconnectCompletesPendingOperation(.write(MicroTechAidexProfile.f001UUID))
+    }
+
+    func testSynchronousWriteRejectionLogsFailedWithFullPayloadAndNoAttempt() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let payload = Data(0...63)
+        let state = MicroTechGattOperationState()
+        state.invalidateSession()
+        var entries: [MicroTechGattLogEntry] = []
+
+        do {
+            try state.begin(.write(MicroTechAidexProfile.f001UUID))
+            XCTFail("Expected invalidated session to reject write")
+        } catch {
+            entries.append(MicroTechPeripheralManager.writeSynchronousFailureLogEntry(
+                identifier: identifier,
+                characteristic: MicroTechAidexProfile.f001UUID,
+                value: payload,
+                writeType: .withResponse,
+                error: error
+            ))
+        }
+
+        assertSynchronousWriteFailure(entries, payload: payload, expectedError: .notConnected)
+    }
+
+    func testPendingOperationWriteRejectionLogsFailedWithoutFalseAttempt() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let payload = Data(0...63)
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.read(MicroTechAidexProfile.f002UUID))
+
+        do {
+            try state.begin(.write(MicroTechAidexProfile.f001UUID))
+            XCTFail("Expected pending operation to reject write")
+        } catch {
+            entries.append(MicroTechPeripheralManager.writeSynchronousFailureLogEntry(
+                identifier: identifier,
+                characteristic: MicroTechAidexProfile.f001UUID,
+                value: payload,
+                writeType: .withResponse,
+                error: error
+            ))
+        }
+
+        assertSynchronousWriteFailure(entries, payload: payload, expectedError: .invalidCommand)
+    }
+
+    func testWriteWithResponseLogsAttemptSucceededAndFullPayload() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let payload = Data(0...63)
+        let expectedHex = payload.microTechHexadecimalString
+        let attempted = MicroTechPeripheralManager.writeAttemptLogEntry(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            value: payload,
+            writeType: .withResponse
+        )
+        let state = MicroTechGattOperationState()
+        var succeeded: [MicroTechGattLogEntry] = []
+        XCTAssertNoThrow(try state.begin(.write(MicroTechAidexProfile.f001UUID)))
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { succeeded.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(try state.wait(timeout: 0.01), .completed)
+        XCTAssertEqual(attempted.type, .send)
+        XCTAssertTrue(attempted.message.contains("event=attempted"))
+        XCTAssertTrue(attempted.message.contains("writeType=withResponse"))
+        XCTAssertTrue(attempted.message.contains("payloadLength=64"))
+        XCTAssertTrue(attempted.message.contains("payloadHex=\(expectedHex)"))
+        XCTAssertTrue(attempted.message.hasSuffix("3C3D3E3F"))
+        XCTAssertFalse(attempted.message.contains("rawPrefix"))
+        XCTAssertFalse(attempted.message.contains("prefix"))
+        XCTAssertFalse(attempted.message.contains("..."))
+        XCTAssertEqual(succeeded.count, 1)
+        XCTAssertEqual(succeeded.first?.type, .send)
+        XCTAssertTrue(succeeded.first?.message.contains("event=succeeded") == true)
+    }
+
+    func testWriteWithoutResponseLogsAttemptAndSubmittedWithoutSuccess() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let payload = Data(0...63)
+        let entries = MicroTechPeripheralManager.writeWithoutResponseLogEntries(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            value: payload
+        )
+
+        XCTAssertEqual(entries.map(\.type), [.send, .send])
+        XCTAssertEqual(entries.filter { $0.message.contains("event=attempted") }.count, 1)
+        XCTAssertEqual(entries.filter { $0.message.contains("event=submitted") }.count, 1)
+        XCTAssertTrue(entries.last?.message.contains("noCallback=true") == true)
+        XCTAssertFalse(entries.contains { $0.message.contains("event=succeeded") })
+        XCTAssertTrue(entries.first?.message.contains("payloadLength=64") == true)
+        XCTAssertTrue(entries.first?.message.hasSuffix("3C3D3E3F") == true)
+        XCTAssertFalse(entries.first?.message.contains("rawPrefix") == true)
+        XCTAssertFalse(entries.first?.message.contains("prefix") == true)
+        XCTAssertFalse(entries.first?.message.contains("...") == true)
+    }
+
+    func testMatchingWriteCallbackLogsSucceededAndCompletesPendingWrite() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.write(MicroTechAidexProfile.f001UUID))
+
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(try state.wait(timeout: 0.01), .completed)
+        XCTAssertEqual(entries.filter { $0.message.contains("event=succeeded") }.count, 1)
+        XCTAssertFalse(entries.contains { $0.message.contains("event=ignored") })
+    }
+
+    func testLateWriteCallbackLogsIgnoredWithoutSuccess() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertTrue(entries[0].message.contains("event=ignored"))
+        XCTAssertTrue(entries[0].message.contains("reason=missingPendingOperation"))
+        XCTAssertTrue(entries[0].message.contains("pendingOperation=nil"))
+        XCTAssertFalse(entries[0].message.contains("event=succeeded"))
+    }
+
+    func testFailedPendingWriteIgnoresMatchingLateCallbackAndPreservesFailure() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.write(MicroTechAidexProfile.f001UUID))
+        state.failPending(MicroTechPeripheralManagerError.notConnected)
+
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertFalse(entries.contains { $0.message.contains("event=succeeded") })
+        XCTAssertEqual(entries.filter { $0.message.contains("event=ignored") }.count, 1)
+        XCTAssertTrue(entries[0].message.contains("reason=operationAlreadyCompleted"))
+        XCTAssertThrowsError(try state.wait(timeout: 0.01)) { error in
+            XCTAssertEqual(error as? MicroTechPeripheralManagerError, .notConnected)
+        }
+    }
+
+    func testFailedPendingReadIgnoresMatchingLateCallbackAndPreservesFailure() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.read(MicroTechAidexProfile.f002UUID))
+        state.failPending(MicroTechPeripheralManagerError.notConnected)
+
+        let value = state.handleValueCallback(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f002UUID,
+            error: nil,
+            value: Data(0...63),
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertNil(value)
+        XCTAssertFalse(entries.contains { $0.message.contains("event=succeeded") })
+        XCTAssertEqual(entries.filter { $0.message.contains("event=ignored") }.count, 1)
+        XCTAssertTrue(entries[0].message.contains("reason=operationAlreadyCompleted"))
+        XCTAssertThrowsError(try state.wait(timeout: 0.01)) { error in
+            XCTAssertEqual(error as? MicroTechPeripheralManagerError, .notConnected)
+        }
+    }
+
+    func testMismatchedWriteCallbackLogsIgnoredWithoutCompletingPendingRead() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+        try state.begin(.read(MicroTechAidexProfile.f002UUID))
+
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertEqual(entries.count, 1)
+        XCTAssertTrue(entries[0].message.contains("event=ignored"))
+        XCTAssertTrue(entries[0].message.contains("reason=pendingOperationMismatch"))
+        XCTAssertTrue(entries[0].message.contains("pendingOperation=read"))
+        XCTAssertFalse(entries[0].message.contains("event=succeeded"))
+        XCTAssertEqual(try state.wait(timeout: 0.001), .timedOut)
+    }
+
+    func testWithoutResponseWriteCallbackCannotLogSucceeded() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var entries = MicroTechPeripheralManager.writeWithoutResponseLogEntries(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            value: Data(0...63)
+        )
+
+        state.handleOperationCallback(
+            callback: .write,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f001UUID,
+            error: nil,
+            log: { entries.append(contentsOf: $0.entries) }
+        )
+
+        XCTAssertFalse(entries.contains { $0.message.contains("event=succeeded") })
+        XCTAssertTrue(entries.last?.message.contains("event=ignored") == true)
+        XCTAssertTrue(entries.last?.message.contains("reason=missingPendingOperation") == true)
+    }
+
+    func testNotificationStateProducesOneBatchWithAttemptBeforeAnyValueResult() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        var batches: [MicroTechGattLogBatch] = []
+        try state.begin(.notification(MicroTechAidexProfile.f003UUID))
+
+        state.handleOperationCallback(
+            callback: .notificationState,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f003UUID,
+            error: nil,
+            log: { batches.append($0) }
+        )
+
+        XCTAssertEqual(try state.wait(timeout: 0.05), .completed)
+        XCTAssertEqual(batches.count, 1)
+        XCTAssertEqual(batches[0].entries.count, 2)
+        XCTAssertTrue(batches[0].entries[0].message.contains("operation=notificationState event=succeeded"))
+        XCTAssertTrue(batches[0].entries[1].message.contains("operation=notificationValue event=attempted"))
+    }
+
+    func testBlockedLogHandlerDoesNotDisableOperationDeadline() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        let logQueue = MicroTechGattLogQueue(label: "MicroTechCGMManagerTests.blockedDeadlineLog")
+        let handlerStarted = DispatchSemaphore(value: 0)
+        let releaseHandler = DispatchSemaphore(value: 0)
+        let waitStarted = DispatchSemaphore(value: 0)
+        let waitCompleted = expectation(description: "read wait reached its deadline")
+        let result = ThreadSafeWaitOutcome()
+        let events = ThreadSafeMessages()
+        try state.begin(.read(MicroTechAidexProfile.f002UUID))
+
+        logQueue.handler = { message, _ in
+            events.append(message)
+            if message.contains("event=attempted") {
+                handlerStarted.signal()
+                releaseHandler.wait()
+            }
+        }
+        logQueue.submit(MicroTechPeripheralManager.gattAttemptLogEntry(
+            identifier: identifier,
+            operation: .read(MicroTechAidexProfile.f002UUID)
+        ))
+        XCTAssertEqual(handlerStarted.wait(timeout: .now() + 1), .success)
+
+        DispatchQueue.global().async {
+            waitStarted.signal()
+            result.capture {
+                try state.wait(
+                    timeout: 0.05,
+                    onTimeout: {
+                        logQueue.submit(MicroTechGattLogEntry(
+                            message: MicroTechPeripheralManager.gattTimeoutLogMessage(
+                                identifier: identifier,
+                                operation: .read(MicroTechAidexProfile.f002UUID)
+                            ),
+                            type: .error
+                        ))
+                    }
+                )
+            }
+            waitCompleted.fulfill()
+        }
+
+        XCTAssertEqual(waitStarted.wait(timeout: .now() + 1), .success)
+        wait(for: [waitCompleted], timeout: 1)
+        XCTAssertEqual(result.waitResult, .timedOut)
+        releaseHandler.signal()
+        logQueue.flush()
+        let values = events.values
+        let attemptedIndex = values.firstIndex { $0.contains("operation=read event=attempted") }
+        let timeoutIndex = values.firstIndex { $0.contains("event=timeout") }
+        XCTAssertNotNil(attemptedIndex)
+        XCTAssertNotNil(timeoutIndex)
+        XCTAssertLessThan(attemptedIndex!, timeoutIndex!)
+    }
+
+    func testSerialLogQueueDoesNotLetSlowHandlerBlockReadCompletion() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        let logQueue = MicroTechGattLogQueue(
+            label: "MicroTechCGMManagerTests.slowGattLogHandler"
+        )
+        let events = ThreadSafeMessages()
+        let handlerStarted = DispatchSemaphore(value: 0)
+        let releaseHandler = DispatchSemaphore(value: 0)
+        logQueue.handler = { message, _ in
+            events.append(message)
+            if message.contains("event=attempted") {
+                handlerStarted.signal()
+                releaseHandler.wait()
+            }
+        }
+        try state.begin(.read(MicroTechAidexProfile.f002UUID))
+        logQueue.submit(MicroTechPeripheralManager.gattAttemptLogEntry(
+            identifier: identifier,
+            operation: .read(MicroTechAidexProfile.f002UUID)
+        ))
+        XCTAssertEqual(handlerStarted.wait(timeout: .now() + 1), .success)
+
+        state.handleValueCallback(
+            identifier: identifier,
+            characteristic: MicroTechAidexProfile.f002UUID,
+            error: nil,
+            value: Data([0x01, 0x02]),
+            log: logQueue.submit
+        )
+
+        XCTAssertEqual(try state.wait(timeout: 0.05), .completed)
+        releaseHandler.signal()
+        logQueue.flush()
+        let values = events.values
+        let attemptedIndex = values.firstIndex { $0.contains("operation=read event=attempted") }
+        let resultIndex = values.firstIndex { $0.contains("operation=read event=succeeded") }
+        XCTAssertNotNil(attemptedIndex)
+        XCTAssertNotNil(resultIndex)
+        XCTAssertLessThan(attemptedIndex!, resultIndex!)
+    }
+
+    func testReadWaiterReturnsOnlyAfterBatchSubmitReturns() throws {
+        try assertWaiterReturnsOnlyAfterBatchSubmit(.read(MicroTechAidexProfile.f002UUID))
+    }
+
+    func testWriteWaiterReturnsOnlyAfterBatchSubmitReturns() throws {
+        try assertWaiterReturnsOnlyAfterBatchSubmit(.write(MicroTechAidexProfile.f001UUID))
+    }
+
+    private func assertWaiterReturnsOnlyAfterBatchSubmit(
+        _ operation: MicroTechGattOperation,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        let waitStarted = DispatchSemaphore(value: 0)
+        let waiterReturned = DispatchSemaphore(value: 0)
+        let submitEntered = DispatchSemaphore(value: 0)
+        let releaseSubmit = DispatchSemaphore(value: 0)
+        let callbackFinished = expectation(description: "read callback finished")
+        let outcome = ThreadSafeWaitOutcome()
+        try state.begin(operation)
+
+        DispatchQueue.global().async {
+            waitStarted.signal()
+            outcome.capture {
+                try state.wait(timeout: 1)
+            }
+            waiterReturned.signal()
+        }
+        XCTAssertEqual(waitStarted.wait(timeout: .now() + 1), .success, file: file, line: line)
+
+        DispatchQueue.global().async {
+            let submit: (MicroTechGattLogBatch) -> Void = { _ in
+                submitEntered.signal()
+                releaseSubmit.wait()
+            }
+            switch operation {
+            case .read(let characteristic):
+                state.handleValueCallback(
+                    identifier: identifier,
+                    characteristic: characteristic,
+                    error: nil,
+                    value: Data([0x01, 0x02]),
+                    log: submit
+                )
+            case .write(let characteristic):
+                state.handleOperationCallback(
+                    callback: .write,
+                    identifier: identifier,
+                    service: nil,
+                    characteristic: characteristic,
+                    error: nil,
+                    log: submit
+                )
+            case .discoverServices, .discoverCharacteristics, .notification:
+                XCTFail("Unsupported operation", file: file, line: line)
+            }
+            callbackFinished.fulfill()
+        }
+
+        XCTAssertEqual(submitEntered.wait(timeout: .now() + 1), .success, file: file, line: line)
+        XCTAssertEqual(waiterReturned.wait(timeout: .now() + 0.05), .timedOut, file: file, line: line)
+        releaseSubmit.signal()
+        wait(for: [callbackFinished], timeout: 1)
+        XCTAssertEqual(waiterReturned.wait(timeout: .now() + 1), .success, file: file, line: line)
+        XCTAssertEqual(outcome.waitResult, .completed, file: file, line: line)
+    }
+
+    func testConcurrentNotificationCallbacksLogAttemptBeforeValueResult() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        let logQueue = MicroTechGattLogQueue(
+            label: "MicroTechCGMManagerTests.concurrentNotificationLogs"
+        )
+        let events = ThreadSafeMessages()
+        let firstLogStarted = DispatchSemaphore(value: 0)
+        let releaseFirstLog = DispatchSemaphore(value: 0)
+        let notificationStateFinished = expectation(description: "notification state callback finished")
+        let notificationValueFinished = expectation(description: "notification value callback finished")
+        try state.begin(.notification(MicroTechAidexProfile.f003UUID))
+
+        logQueue.handler = { message, _ in
+            events.append(message)
+            if message.contains("operation=notificationState") {
+                firstLogStarted.signal()
+                releaseFirstLog.wait()
+            }
+        }
+        DispatchQueue.global().async {
+            state.handleOperationCallback(
+                callback: .notificationState,
+                identifier: identifier,
+                service: nil,
+                characteristic: MicroTechAidexProfile.f003UUID,
+                error: nil,
+                log: logQueue.submit
+            )
+            notificationStateFinished.fulfill()
+        }
+        XCTAssertEqual(firstLogStarted.wait(timeout: .now() + 1), .success)
+
+        DispatchQueue.global().async {
+            state.handleValueCallback(
+                identifier: identifier,
+                characteristic: MicroTechAidexProfile.f003UUID,
+                error: nil,
+                value: Data([0x01, 0x02]),
+                log: logQueue.submit
+            )
+            notificationValueFinished.fulfill()
+        }
+        wait(for: [notificationStateFinished, notificationValueFinished], timeout: 1)
+        releaseFirstLog.signal()
+        logQueue.flush()
+
+        let values = events.values
+        let attemptedIndex = values.firstIndex { $0.contains("operation=notificationValue event=attempted") }
+        let resultIndex = values.firstIndex { $0.contains("operation=notificationValue event=succeeded") }
+        XCTAssertNotNil(attemptedIndex)
+        XCTAssertNotNil(resultIndex)
+        XCTAssertLessThan(attemptedIndex!, resultIndex!)
+    }
+
+    func testGattLogBatchSubmissionAllowsHandlerToReenterOperationState() throws {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let state = MicroTechGattOperationState()
+        let logQueue = MicroTechGattLogQueue(label: "MicroTechCGMManagerTests.reentrantGattLog")
+        let reentered = expectation(description: "handler reentered state")
+        try state.begin(.notification(MicroTechAidexProfile.f003UUID))
+
+        logQueue.handler = { message, _ in
+            guard message.contains("operation=notificationState") else {
+                return
+            }
+            _ = state.handleValueCallback(
+                identifier: identifier,
+                characteristic: MicroTechAidexProfile.f003UUID,
+                error: nil,
+                value: Data([0x01]),
+                log: logQueue.submit
+            )
+            _ = logQueue.handler
+            logQueue.handler = nil
+            reentered.fulfill()
+        }
+        state.handleOperationCallback(
+            callback: .notificationState,
+            identifier: identifier,
+            service: nil,
+            characteristic: MicroTechAidexProfile.f003UUID,
+            error: nil,
+            log: logQueue.submit
+        )
+
+        wait(for: [reentered], timeout: 1)
+        logQueue.flush()
+    }
+
     func testSetupInstallsOnboardingLogHandlerBeforeScanning() {
         let bluetoothManager = FakeMicroTechBluetoothManager()
         bluetoothManager.scanLog = ("stage=scan event=started", .connection)
@@ -2178,6 +3191,141 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertFalse(manager.shouldConnectToMicroTechDevice(deviceName: "", identifier: UUID()))
     }
 
+    private func assertSynchronousWriteFailure(
+        _ entries: [MicroTechGattLogEntry],
+        payload: Data,
+        expectedError: MicroTechPeripheralManagerError,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(entries.count, 1, file: file, line: line)
+        guard let entry = entries.first else {
+            return
+        }
+        XCTAssertEqual(entry.type, .error, file: file, line: line)
+        XCTAssertTrue(entry.message.contains("operation=write event=failed"), file: file, line: line)
+        XCTAssertFalse(entry.message.contains("event=attempted"), file: file, line: line)
+        XCTAssertTrue(entry.message.contains("writeType=withResponse"), file: file, line: line)
+        XCTAssertTrue(entry.message.contains("payloadLength=64"), file: file, line: line)
+        XCTAssertTrue(
+            entry.message.contains("payloadHex=\(payload.microTechHexadecimalString)"),
+            file: file,
+            line: line
+        )
+        XCTAssertTrue(entry.message.contains("errorDomain="), file: file, line: line)
+        XCTAssertTrue(entry.message.contains("errorCode="), file: file, line: line)
+        XCTAssertTrue(entry.message.contains(MicroTechDiagnosticLog.errorFields(expectedError)), file: file, line: line)
+    }
+
+    private func assertDisconnectCompletesPendingOperation(
+        _ operation: MicroTechGattOperation,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        let state = MicroTechGattOperationState()
+        let waitStarted = DispatchSemaphore(value: 0)
+        let waitCompleted = expectation(description: "\(operation.name) completed after disconnect")
+        let outcome = ThreadSafeWaitOutcome()
+        try state.begin(operation)
+
+        DispatchQueue.global().async {
+            waitStarted.signal()
+            outcome.capture {
+                try state.wait(
+                    timeout: 0.2,
+                    onTimeout: { outcome.recordTimeout() }
+                )
+            }
+            waitCompleted.fulfill()
+        }
+
+        XCTAssertEqual(waitStarted.wait(timeout: .now() + 1), .success, file: file, line: line)
+        XCTAssertTrue(state.requestDisconnect(), file: file, line: line)
+        wait(for: [waitCompleted], timeout: 1)
+        XCTAssertEqual(outcome.error as? MicroTechPeripheralManagerError, .notConnected, file: file, line: line)
+        XCTAssertEqual(outcome.timeoutCount, 0, file: file, line: line)
+        XCTAssertFalse(state.requestDisconnect(), file: file, line: line)
+    }
+
+    private func assertGattErrorLog(
+        callback: MicroTechGattCallback,
+        service: CBUUID?,
+        characteristic: CBUUID?,
+        operation: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let error = NSError(
+            domain: "CoreBluetooth",
+            code: 17,
+            userInfo: [NSLocalizedDescriptionKey: "callback failure"]
+        )
+        let state = MicroTechGattOperationState()
+        var entries: [MicroTechGattLogEntry] = []
+
+        switch callback {
+        case .read:
+            guard let characteristic else {
+                return XCTFail("Read callback requires characteristic", file: file, line: line)
+            }
+            XCTAssertNoThrow(try state.begin(.read(characteristic)), file: file, line: line)
+            state.handleValueCallback(
+                identifier: identifier,
+                characteristic: characteristic,
+                error: error,
+                value: nil,
+                log: { entries.append(contentsOf: $0.entries) }
+            )
+        case .notificationValue:
+            guard let characteristic else {
+                return XCTFail("Notification callback requires characteristic", file: file, line: line)
+            }
+            state.handleValueCallback(
+                identifier: identifier,
+                characteristic: characteristic,
+                error: error,
+                value: nil,
+                log: { entries.append(contentsOf: $0.entries) }
+            )
+        case .discoverServices, .discoverCharacteristics, .notificationState, .write:
+            let pendingOperation: MicroTechGattOperation?
+            switch callback {
+            case .discoverServices:
+                pendingOperation = service.map(MicroTechGattOperation.discoverServices)
+            case .discoverCharacteristics:
+                pendingOperation = service.map(MicroTechGattOperation.discoverCharacteristics)
+            case .notificationState:
+                pendingOperation = characteristic.map(MicroTechGattOperation.notification)
+            case .write:
+                pendingOperation = characteristic.map(MicroTechGattOperation.write)
+            case .read, .notificationValue:
+                pendingOperation = nil
+            }
+            guard let pendingOperation else {
+                return XCTFail("Callback requires pending operation", file: file, line: line)
+            }
+            XCTAssertNoThrow(try state.begin(pendingOperation), file: file, line: line)
+            state.handleOperationCallback(
+                callback: callback,
+                identifier: identifier,
+                service: service,
+                characteristic: characteristic,
+                error: error,
+                log: { entries.append(contentsOf: $0.entries) }
+            )
+        }
+
+        XCTAssertEqual(entries.count, 1, file: file, line: line)
+        XCTAssertEqual(entries.first?.type, .error, file: file, line: line)
+        XCTAssertEqual(
+            entries.first?.message,
+            "stage=gatt operation=\(operation) event=failed identifier=\(identifier) service=\(service?.uuidString ?? "nil") characteristic=\(characteristic?.uuidString ?? "nil") errorDomain=CoreBluetooth errorCode=17 errorDescription=callback failure",
+            file: file,
+            line: line
+        )
+    }
+
     private func makeReading(
         sampleNumber: Int,
         glucoseMgdl: Int,
@@ -2452,6 +3600,54 @@ private final class ThreadSafeMessages {
         lock.lock()
         defer { lock.unlock() }
         messages.append(message)
+    }
+}
+
+private final class ThreadSafeWaitOutcome {
+    private let lock = NSLock()
+    private var storedResult: MicroTechGattWaitResult?
+    private var storedError: Error?
+    private var storedTimeoutCount = 0
+
+    var waitResult: MicroTechGattWaitResult? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedResult
+    }
+
+    var error: Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedError
+    }
+
+    var timeoutCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedTimeoutCount
+    }
+
+    func capture(_ work: () throws -> MicroTechGattWaitResult) {
+        let outcome: Result<MicroTechGattWaitResult, Error>
+        do {
+            outcome = .success(try work())
+        } catch {
+            outcome = .failure(error)
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        switch outcome {
+        case .success(let result):
+            storedResult = result
+        case .failure(let error):
+            storedError = error
+        }
+    }
+
+    func recordTimeout() {
+        lock.lock()
+        storedTimeoutCount += 1
+        lock.unlock()
     }
 }
 

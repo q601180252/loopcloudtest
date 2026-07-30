@@ -1477,6 +1477,10 @@ private extension MicroTechBluetoothLogType {
         switch self {
         case .connection:
             return .connection
+        case .send:
+            return .send
+        case .receive:
+            return .receive
         case .error:
             return .error
         }
