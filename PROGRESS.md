@@ -24,7 +24,7 @@
 - **关键发现**：直接用 `LoopWorkspace` scheme 运行指定导出测试会被仓库现有 `OmniBLETests/Driver/Comm/message/MessagePacketTests.swift:52` 编译错误阻断，原因是 `RawSpan` 没有 `toHexString`；使用独立 `LoopTests` scheme、明确 Simulator id 和 `MAIN_APP_BUNDLE_IDENTIFIER` 后测试通过。
 - **决策结论**：为满足本次问题分析要求，LinX 日志保留完整密钥和通信数据；Loop Report 只能交给可信分析人员，不得公开分享。
 - **commit hash**：`ccac881`、`a9edde7`、`043d8dd`、`44c9031`、`03bdfe9`、`27bc79e`。
-- **push 状态**：待推送。
+- **push 状态**：已推送到 `origin/main`；首次远端核对为 `4248da21f020bfee6065b1d641d10cdfe9060d31`。
 
 ### 2026-07-30 029 - 完成 LinX 完整连接日志实施计划
 
