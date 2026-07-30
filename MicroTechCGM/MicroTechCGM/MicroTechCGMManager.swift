@@ -1025,10 +1025,6 @@ public final class MicroTechCGMManager: CGMManager {
         return String(format: "0x%02X", packetType)
     }
 
-    private static func hexPrefix(_ data: Data) -> String {
-        Data(data.prefix(32)).microTechHexadecimalString
-    }
-
     private static let glucoseUnit = HKUnit
         .gramUnit(with: .milli)
         .unitDivided(by: .literUnit(with: .deci))
@@ -1204,19 +1200,19 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         let filterStartDate = startDateToFilterNewData()
         let stateChange = mutateProtectedState { state in
             guard isCurrentSensor(sensor, in: state.sensorIdentity) else {
-                logMessage = "current ignored from inactive sensor serial=\(reading.sensorSerial) sample=\(reading.sampleNumber)"
+                logMessage = "current ignored from inactive sensor serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawHex=\(reading.rawBytes.microTechHexadecimalString)"
                 return
             }
 
             guard reading.isValidForTherapy else {
                 result = .noData
-                logMessage = "current rejected serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) quality=\(reading.quality) reason=notTherapyValid"
+                logMessage = "current rejected serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) quality=\(reading.quality) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawHex=\(reading.rawBytes.microTechHexadecimalString) reason=notTherapyValid"
                 return
             }
 
             if let filterStartDate, reading.receivedAt < filterStartDate {
                 result = .noData
-                logMessage = "current rejected serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) at=\(reading.receivedAt) startDate=\(filterStartDate) reason=beforeStartDate"
+                logMessage = "current rejected serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawHex=\(reading.rawBytes.microTechHexadecimalString) at=\(reading.receivedAt) startDate=\(filterStartDate) reason=beforeStartDate"
                 return
             }
 
@@ -1225,7 +1221,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
                Self.isSampleNumber(reading.sampleNumber, notNewerThan: latestSampleNumber)
             {
                 result = .noData
-                logMessage = "current rejected serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) latest=\(latestSampleNumber) reason=duplicateOrOld"
+                logMessage = "current rejected serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) latest=\(latestSampleNumber) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawHex=\(reading.rawBytes.microTechHexadecimalString) reason=duplicateOrOld"
                 return
             }
 
@@ -1243,9 +1239,9 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
                 in: &state.sensorIdentity
             )
             if let recoveryReason {
-                logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawPrefix=\(Self.hexPrefix(reading.rawBytes)) recoveredAfterReconnect reason=\(recoveryReason) at=\(reading.receivedAt)"
+                logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawHex=\(reading.rawBytes.microTechHexadecimalString) recoveredAfterReconnect reason=\(recoveryReason) at=\(reading.receivedAt)"
             } else {
-                logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawPrefix=\(Self.hexPrefix(reading.rawBytes)) at=\(reading.receivedAt)"
+                logMessage = "current accepted serial=\(reading.sensorSerial) sample=\(reading.sampleNumber) value=\(reading.glucoseMgdl) packetType=\(Self.packetTypeDescription(reading.rawBytes)) rawHex=\(reading.rawBytes.microTechHexadecimalString) at=\(reading.receivedAt)"
             }
         }
 
@@ -1400,7 +1396,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         logDeviceCommunication("MicroTech LinX sensor activation time \(activationTime)", type: .connection)
     }
 
-    public func microTechSensor(_ sensor: MicroTechSensor, didIgnorePacketType packetType: UInt8, length: Int, hexPrefix: String) {
+    public func microTechSensor(_ sensor: MicroTechSensor, didIgnorePacketType packetType: UInt8, length: Int, hexPrefix rawHex: String) {
         let shouldLog = readProtectedState { state in
             isCurrentSensor(sensor, in: state.sensorIdentity)
         }
@@ -1410,7 +1406,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         }
 
         logDeviceCommunication(
-            "MicroTech LinX ignored unsupported packet type \(String(format: "0x%02X", packetType)) len=\(length) rawPrefix=\(hexPrefix)",
+            "MicroTech LinX ignored unsupported packet type \(String(format: "0x%02X", packetType)) len=\(length) rawHex=\(rawHex)",
             type: .receive
         )
     }

@@ -2306,6 +2306,79 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42"])
     }
 
+    func testManagerAcceptedReadingLogsCompleteRawPacket() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let rawPacket = Data((0..<48).map(UInt8.init))
+        let readingDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: readingDate,
+                rawBytes: rawPacket
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        let acceptedLog = try XCTUnwrap(delegate.loggedEvents.first { event in
+            event.type == .receive && event.message.contains("current accepted serial=ABC123 sample=42")
+        })
+        XCTAssertTrue(acceptedLog.message.contains("rawHex=\(rawPacket.microTechHexadecimalString)"))
+        XCTAssertFalse(acceptedLog.message.contains("rawPrefix"))
+        XCTAssertFalse(acceptedLog.message.contains("hexPrefix"))
+        XCTAssertFalse(acceptedLog.message.contains("..."))
+    }
+
+    func testManagerRejectedReadingLogsCompleteRawPacket() throws {
+        let manager = MicroTechCGMManager()
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        let session = makeSession()
+        let sensor = makeSensor(session: session)
+        let acceptedPacket = Data((0..<40).map(UInt8.init))
+        let rejectedPacket = Data((40..<88).map(UInt8.init))
+        let readingDate = Date(timeIntervalSince1970: 1_700_000_000)
+
+        manager.microTechSensorDidConnect(sensor, session: session)
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: readingDate,
+                rawBytes: acceptedPacket
+            )
+        )
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(
+                sampleNumber: 42,
+                glucoseMgdl: 123,
+                receivedAt: readingDate.addingTimeInterval(60),
+                rawBytes: rejectedPacket
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        let rejectedLog = try XCTUnwrap(delegate.loggedEvents.first { event in
+            event.type == .receive &&
+                event.message.contains("current rejected serial=ABC123 sample=42") &&
+                event.message.contains("reason=duplicateOrOld")
+        })
+        XCTAssertTrue(rejectedLog.message.contains("rawHex=\(rejectedPacket.microTechHexadecimalString)"))
+        XCTAssertFalse(rejectedLog.message.contains("rawPrefix"))
+        XCTAssertFalse(rejectedLog.message.contains("..."))
+    }
+
     func testLinxF003CurrentNotificationFromDeviceLogEmitsNewDataAndDiagnosticLogs() throws {
         let manager = MicroTechCGMManager()
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 1)
@@ -2346,20 +2419,20 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.latestReading?.trend, -2)
         XCTAssertTrue(delegate.loggedEvents.contains { event in
             event.type == .receive &&
-                event.message.contains("notification F003 decrypted type=0x03") &&
-                event.message.contains("rawPrefix=030100FE60545F80B303800C4500004D5B")
+                event.message.contains("stage=packet event=decrypted characteristic=F003") &&
+                event.message.contains("plainHex=030100FE60545F80B303800C4500004D5B")
         })
         XCTAssertTrue(delegate.loggedEvents.contains { event in
             event.type == .receive &&
                 event.message.contains("parsed current packetType=0x03") &&
                 event.message.contains("sample=21600") &&
-                event.message.contains("rawPrefix=030100FE60545F80B303800C4500004D5B")
+                event.message.contains("rawHex=030100FE60545F80B303800C4500004D5B")
         })
         XCTAssertTrue(delegate.loggedEvents.contains { event in
             event.type == .receive &&
                 event.message.contains("current accepted serial=ABC123 sample=21600") &&
                 event.message.contains("packetType=0x03") &&
-                event.message.contains("rawPrefix=030100FE60545F80B303800C4500004D5B")
+                event.message.contains("rawHex=030100FE60545F80B303800C4500004D5B")
         })
     }
 
@@ -2453,14 +2526,23 @@ final class MicroTechCGMManagerTests: XCTestCase {
         manager.cgmManagerDelegate = delegate
         let session = makeSession()
         let sensor = makeSensor(session: session)
+        let rawPacket = Data((0..<48).map(UInt8.init))
 
         manager.microTechSensorDidConnect(sensor, session: session)
-        manager.microTechSensor(sensor, didIgnorePacketType: 0x04, length: 5, hexPrefix: "04F405FC9F")
+        manager.microTechSensor(
+            sensor,
+            didIgnorePacketType: 0x04,
+            length: rawPacket.count,
+            hexPrefix: rawPacket.microTechHexadecimalString
+        )
 
         wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
-        XCTAssertTrue(delegate.loggedEvents.contains { event in
+        let ignoredLog = try XCTUnwrap(delegate.loggedEvents.first { event in
             event.type == .receive && event.message.contains("ignored unsupported packet type 0x04")
         })
+        XCTAssertTrue(ignoredLog.message.contains("len=48 rawHex=\(rawPacket.microTechHexadecimalString)"))
+        XCTAssertFalse(ignoredLog.message.contains("rawPrefix"))
+        XCTAssertFalse(ignoredLog.message.contains("..."))
         XCTAssertFalse(delegate.loggedEvents.contains { event in
             event.type == .error && event.message.contains("unsupportedPacket(4)")
         })
@@ -3331,10 +3413,11 @@ final class MicroTechCGMManagerTests: XCTestCase {
         glucoseMgdl: Int,
         receivedAt: Date,
         quality: Int = 0,
-        sensorSerial: String = "ABC123"
+        sensorSerial: String = "ABC123",
+        rawBytes: Data = Data([0x01])
     ) -> MicroTechGlucoseReading {
         let packet = MicroTechAidexCurrentPacket(
-            rawBytes: Data([0x01]),
+            rawBytes: rawBytes,
             packetType: 0x01,
             trend: -1,
             timeOffset: sampleNumber,
