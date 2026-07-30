@@ -84,6 +84,19 @@ struct MicroTechGattLogBatch {
     let streamIdentifier: UUID
     let sequence: Int
     let entries: [MicroTechGattLogEntry]
+    let completesStream: Bool
+
+    init(
+        streamIdentifier: UUID,
+        sequence: Int,
+        entries: [MicroTechGattLogEntry],
+        completesStream: Bool = false
+    ) {
+        self.streamIdentifier = streamIdentifier
+        self.sequence = sequence
+        self.entries = entries
+        self.completesStream = completesStream
+    }
 }
 
 final class MicroTechGattLogQueue {
@@ -91,16 +104,19 @@ final class MicroTechGattLogQueue {
 
     private let queue: DispatchQueue
     private let queueSpecificKey = DispatchSpecificKey<Bool>()
+    private let preHandlerBufferCapacity: Int
     private var storedHandler: Handler?
+    private var preHandlerEntries: [MicroTechGattLogEntry] = []
     private var orderedStreams: [
         UUID: (
             nextSequence: Int,
-            pending: [Int: [MicroTechGattLogEntry]]
+            pending: [Int: (entries: [MicroTechGattLogEntry], completesStream: Bool)]
         )
     ] = [:]
 
-    init(label: String) {
+    init(label: String, preHandlerBufferCapacity: Int = 256) {
         queue = DispatchQueue(label: label)
+        self.preHandlerBufferCapacity = max(0, preHandlerBufferCapacity)
         queue.setSpecific(key: queueSpecificKey, value: true)
     }
 
@@ -109,8 +125,20 @@ final class MicroTechGattLogQueue {
             syncOnQueue { storedHandler }
         }
         set {
-            syncOnQueue { storedHandler = newValue }
+            syncOnQueue {
+                storedHandler = newValue
+                guard newValue != nil, !preHandlerEntries.isEmpty else {
+                    return
+                }
+                let entries = preHandlerEntries
+                preHandlerEntries.removeAll(keepingCapacity: true)
+                deliver(entries)
+            }
         }
+    }
+
+    var orderedStreamCount: Int {
+        syncOnQueue { orderedStreams.count }
     }
 
     func submit(_ entry: MicroTechGattLogEntry) {
@@ -128,10 +156,14 @@ final class MicroTechGattLogQueue {
             guard batch.sequence >= stream.nextSequence else {
                 return
             }
-            stream.pending[batch.sequence] = batch.entries
-            while let entries = stream.pending.removeValue(forKey: stream.nextSequence) {
-                self.deliver(entries)
+            stream.pending[batch.sequence] = (batch.entries, batch.completesStream)
+            while let pendingBatch = stream.pending.removeValue(forKey: stream.nextSequence) {
+                self.deliver(pendingBatch.entries)
                 stream.nextSequence += 1
+                if pendingBatch.completesStream {
+                    self.orderedStreams.removeValue(forKey: batch.streamIdentifier)
+                    return
+                }
             }
             self.orderedStreams[batch.streamIdentifier] = stream
         }
@@ -143,6 +175,14 @@ final class MicroTechGattLogQueue {
 
     private func deliver(_ entries: [MicroTechGattLogEntry]) {
         guard let handler = storedHandler else {
+            guard preHandlerBufferCapacity > 0 else {
+                return
+            }
+            preHandlerEntries.append(contentsOf: entries)
+            let overflow = preHandlerEntries.count - preHandlerBufferCapacity
+            if overflow > 0 {
+                preHandlerEntries.removeFirst(overflow)
+            }
             return
         }
         entries.forEach { handler($0.message, $0.type) }
@@ -173,6 +213,7 @@ final class MicroTechGattOperationState {
     private var sessionInvalidated = false
     private var invalidatedOperation: MicroTechGattOperation?
     private var disconnectRequested = false
+    private var logStreamCompleted = false
 
     func begin(_ operation: MicroTechGattOperation) throws {
         condition.lock()
@@ -246,6 +287,18 @@ final class MicroTechGattOperationState {
         condition.unlock()
     }
 
+    func completeLogStream(log: (MicroTechGattLogBatch) -> Void) {
+        condition.lock()
+        guard !logStreamCompleted else {
+            condition.unlock()
+            return
+        }
+        logStreamCompleted = true
+        let batch = makeLogBatchLocked([], completesStream: true)
+        condition.unlock()
+        log(batch)
+    }
+
     func requestDisconnect() -> Bool {
         condition.lock()
         if let pendingOperation, !pendingCompleted {
@@ -287,9 +340,15 @@ final class MicroTechGattOperationState {
         service: CBUUID?,
         characteristic: CBUUID?,
         error: Error?,
+        discoveredServiceUUIDs: [CBUUID]? = nil,
+        discoveredCharacteristicUUIDs: [CBUUID]? = nil,
         log: (MicroTechGattLogBatch) -> Void
     ) {
         condition.lock()
+        guard !logStreamCompleted else {
+            condition.unlock()
+            return
+        }
         if sessionInvalidated {
             let pendingName = pendingOperation?.name ?? invalidatedOperation?.name
             let batch = makeLogBatchLocked([
@@ -348,7 +407,9 @@ final class MicroTechGattOperationState {
             service: service,
             characteristic: characteristic,
             error: error,
-            value: nil
+            value: nil,
+            discoveredServiceUUIDs: discoveredServiceUUIDs,
+            discoveredCharacteristicUUIDs: discoveredCharacteristicUUIDs
         )
         if
             callback == .notificationState,
@@ -378,6 +439,10 @@ final class MicroTechGattOperationState {
         log: (MicroTechGattLogBatch) -> Void
     ) -> Data? {
         condition.lock()
+        guard !logStreamCompleted else {
+            condition.unlock()
+            return nil
+        }
         if sessionInvalidated {
             let invalidatedCallback: MicroTechGattCallback
             if invalidatedOperation == .read(characteristic) {
@@ -482,12 +547,16 @@ final class MicroTechGattOperationState {
         condition.signal()
     }
 
-    private func makeLogBatchLocked(_ entries: [MicroTechGattLogEntry]) -> MicroTechGattLogBatch {
+    private func makeLogBatchLocked(
+        _ entries: [MicroTechGattLogEntry],
+        completesStream: Bool = false
+    ) -> MicroTechGattLogBatch {
         defer { nextLogSequence += 1 }
         return MicroTechGattLogBatch(
             streamIdentifier: logStreamIdentifier,
             sequence: nextLogSequence,
-            entries: entries
+            entries: entries,
+            completesStream: completesStream
         )
     }
 
@@ -584,14 +653,36 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
     }
 
     public func configure() throws {
-        try operationState.validateImmediateCommand()
-        if peripheral.services?.contains(where: { $0.uuid == MicroTechAidexProfile.serviceUUID }) != true {
+        do {
+            try operationState.validateImmediateCommand()
+        } catch {
+            log(Self.synchronousFailureLogEntry(
+                identifier: deviceIdentifier,
+                operation: .discoverServices(MicroTechAidexProfile.serviceUUID),
+                error: error
+            ))
+            throw error
+        }
+        let discoveredServiceUUIDs = peripheral.services?.map(\.uuid) ?? []
+        if discoveredServiceUUIDs.contains(MicroTechAidexProfile.serviceUUID) {
+            log(Self.discoveryCacheHitLogEntry(
+                identifier: deviceIdentifier,
+                operation: .discoverServices(MicroTechAidexProfile.serviceUUID),
+                discoveredUUIDs: discoveredServiceUUIDs
+            ))
+        } else {
             try run(.discoverServices(MicroTechAidexProfile.serviceUUID)) {
                 peripheral.discoverServices([MicroTechAidexProfile.serviceUUID])
             }
         }
 
         guard let service = peripheral.services?.first(where: { $0.uuid == MicroTechAidexProfile.serviceUUID }) else {
+            log(Self.configureMissingAttributeLogEntry(
+                identifier: deviceIdentifier,
+                service: MicroTechAidexProfile.serviceUUID,
+                characteristic: nil,
+                discoveredUUIDs: peripheral.services?.map(\.uuid) ?? []
+            ))
             throw MicroTechPeripheralManagerError.unknownService
         }
 
@@ -602,7 +693,13 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
         ]
 
         let knownCharacteristicUUIDs = service.characteristics?.map(\.uuid) ?? []
-        if requiredCharacteristics.contains(where: { !knownCharacteristicUUIDs.contains($0) }) {
+        if requiredCharacteristics.allSatisfy(knownCharacteristicUUIDs.contains) {
+            log(Self.discoveryCacheHitLogEntry(
+                identifier: deviceIdentifier,
+                operation: .discoverCharacteristics(service.uuid),
+                discoveredUUIDs: knownCharacteristicUUIDs
+            ))
+        } else {
             try run(.discoverCharacteristics(service.uuid)) {
                 peripheral.discoverCharacteristics(requiredCharacteristics, for: service)
             }
@@ -614,15 +711,36 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
                 .map { ($0.uuid, $0) }
         )
 
-        for characteristic in requiredCharacteristics where characteristics[characteristic] == nil {
+        let finalCharacteristicUUIDs = service.characteristics?.map(\.uuid) ?? []
+        let missingCharacteristics = requiredCharacteristics.filter { characteristics[$0] == nil }
+        for characteristic in missingCharacteristics {
+            log(Self.configureMissingAttributeLogEntry(
+                identifier: deviceIdentifier,
+                service: service.uuid,
+                characteristic: characteristic,
+                discoveredUUIDs: finalCharacteristicUUIDs
+            ))
+        }
+        if let characteristic = missingCharacteristics.first {
             throw MicroTechPeripheralManagerError.unknownCharacteristic(characteristic)
         }
     }
 
     public func subscribe(_ characteristic: CBUUID) throws {
-        try validateSession()
-        let cbCharacteristic = try requiredCharacteristic(characteristic)
-        try run(.notification(characteristic)) {
+        let operation = MicroTechGattOperation.notification(characteristic)
+        let cbCharacteristic: CBCharacteristic
+        do {
+            try validateSession()
+            cbCharacteristic = try requiredCharacteristic(characteristic)
+        } catch {
+            log(Self.synchronousFailureLogEntry(
+                identifier: deviceIdentifier,
+                operation: operation,
+                error: error
+            ))
+            throw error
+        }
+        try run(operation) {
             peripheral.setNotifyValue(true, for: cbCharacteristic)
         }
     }
@@ -678,9 +796,20 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
     }
 
     public func read(_ characteristic: CBUUID) throws -> Data {
-        try validateSession()
-        let cbCharacteristic = try requiredCharacteristic(characteristic)
-        try run(.read(characteristic)) {
+        let operation = MicroTechGattOperation.read(characteristic)
+        let cbCharacteristic: CBCharacteristic
+        do {
+            try validateSession()
+            cbCharacteristic = try requiredCharacteristic(characteristic)
+        } catch {
+            log(Self.synchronousFailureLogEntry(
+                identifier: deviceIdentifier,
+                operation: operation,
+                error: error
+            ))
+            throw error
+        }
+        try run(operation) {
             peripheral.readValue(for: cbCharacteristic)
         }
         guard let value = cbCharacteristic.value else {
@@ -693,6 +822,7 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
         guard operationState.requestDisconnect() else {
             return
         }
+        operationState.completeLogStream(log: log)
         guard let centralManager, peripheral.state != .disconnected else {
             return
         }
@@ -702,6 +832,7 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
 
     func didDisconnect(error: Error?) {
         operationState.invalidateSession(error ?? MicroTechPeripheralManagerError.notConnected)
+        operationState.completeLogStream(log: log)
         delegate?.microTechPeripheralManager(self, didDisconnectWith: error)
     }
 
@@ -723,11 +854,20 @@ public final class MicroTechPeripheralManager: NSObject, MicroTechPeripheralSess
         attemptLogEntry: MicroTechGattLogEntry? = nil,
         action: () -> Void
     ) throws {
-        guard peripheral.state == .connected else {
-            throw MicroTechPeripheralManagerError.notConnected
+        do {
+            guard peripheral.state == .connected else {
+                throw MicroTechPeripheralManagerError.notConnected
+            }
+            try operationState.begin(command)
+        } catch {
+            log(Self.synchronousFailureLogEntry(
+                identifier: deviceIdentifier,
+                operation: command,
+                error: error
+            ))
+            throw error
         }
 
-        try operationState.begin(command)
         log(attemptLogEntry ?? Self.gattAttemptLogEntry(identifier: deviceIdentifier, operation: command))
         action()
 
@@ -762,7 +902,9 @@ extension MicroTechPeripheralManager {
         service: CBUUID?,
         characteristic: CBUUID?,
         error: Error?,
-        value: Data?
+        value: Data?,
+        discoveredServiceUUIDs: [CBUUID]? = nil,
+        discoveredCharacteristicUUIDs: [CBUUID]? = nil
     ) -> [MicroTechGattLogEntry] {
         let target = targetFields(service: service, characteristic: characteristic)
         let base = "stage=gatt operation=\(callback.rawValue)"
@@ -791,7 +933,17 @@ extension MicroTechPeripheralManager {
                 message: "\(base) event=succeeded identifier=\(identifier) \(target)",
                 type: .send
             )]
-        case .discoverServices, .discoverCharacteristics, .notificationState:
+        case .discoverServices:
+            return [MicroTechGattLogEntry(
+                message: "\(base) event=succeeded identifier=\(identifier) \(target) discoveredServices=\(uuidList(discoveredServiceUUIDs ?? []))",
+                type: .connection
+            )]
+        case .discoverCharacteristics:
+            return [MicroTechGattLogEntry(
+                message: "\(base) event=succeeded identifier=\(identifier) \(target) discoveredCharacteristics=\(uuidList(discoveredCharacteristicUUIDs ?? []))",
+                type: .connection
+            )]
+        case .notificationState:
             return [MicroTechGattLogEntry(
                 message: "\(base) event=succeeded identifier=\(identifier) \(target)",
                 type: .connection
@@ -806,6 +958,45 @@ extension MicroTechPeripheralManager {
         MicroTechGattLogEntry(
             message: "stage=gatt operation=\(operation.name) event=attempted identifier=\(identifier) \(targetFields(service: operation.service, characteristic: operation.characteristic))",
             type: operation.name == "read" || operation.name == "notificationState" ? .send : .connection
+        )
+    }
+
+    static func discoveryCacheHitLogEntry(
+        identifier: UUID,
+        operation: MicroTechGattOperation,
+        discoveredUUIDs: [CBUUID]
+    ) -> MicroTechGattLogEntry {
+        let collectionName = operation.name == "discoverServices"
+            ? "discoveredServices"
+            : "discoveredCharacteristics"
+        return MicroTechGattLogEntry(
+            message: "stage=gatt operation=\(operation.name) event=cacheHit identifier=\(identifier) \(targetFields(service: operation.service, characteristic: operation.characteristic)) \(collectionName)=\(uuidList(discoveredUUIDs))",
+            type: .connection
+        )
+    }
+
+    static func configureMissingAttributeLogEntry(
+        identifier: UUID,
+        service: CBUUID,
+        characteristic: CBUUID?,
+        discoveredUUIDs: [CBUUID]
+    ) -> MicroTechGattLogEntry {
+        let reason = characteristic == nil ? "missingService" : "missingCharacteristic"
+        let collectionName = characteristic == nil ? "discoveredServices" : "discoveredCharacteristics"
+        return MicroTechGattLogEntry(
+            message: "stage=gatt operation=configure event=failed identifier=\(identifier) \(targetFields(service: service, characteristic: characteristic)) reason=\(reason) \(collectionName)=\(uuidList(discoveredUUIDs))",
+            type: .error
+        )
+    }
+
+    static func synchronousFailureLogEntry(
+        identifier: UUID,
+        operation: MicroTechGattOperation,
+        error: Error
+    ) -> MicroTechGattLogEntry {
+        MicroTechGattLogEntry(
+            message: "stage=gatt operation=\(operation.name) event=failed identifier=\(identifier) \(targetFields(service: operation.service, characteristic: operation.characteristic)) reason=synchronousFailure \(MicroTechDiagnosticLog.errorFields(error))",
+            type: .error
         )
     }
 
@@ -908,6 +1099,10 @@ extension MicroTechPeripheralManager {
             return "unknown"
         }
     }
+
+    private static func uuidList(_ uuids: [CBUUID]) -> String {
+        "[\(uuids.map(\.uuidString).sorted().joined(separator: ","))]"
+    }
 }
 
 extension MicroTechPeripheralManager: CBPeripheralDelegate {
@@ -918,6 +1113,7 @@ extension MicroTechPeripheralManager: CBPeripheralDelegate {
             service: MicroTechAidexProfile.serviceUUID,
             characteristic: nil,
             error: error,
+            discoveredServiceUUIDs: peripheral.services?.map(\.uuid),
             log: log
         )
     }
@@ -929,6 +1125,7 @@ extension MicroTechPeripheralManager: CBPeripheralDelegate {
             service: service.uuid,
             characteristic: nil,
             error: error,
+            discoveredCharacteristicUUIDs: service.characteristics?.map(\.uuid),
             log: log
         )
     }

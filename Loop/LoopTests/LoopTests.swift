@@ -81,7 +81,7 @@ class LoopTests: XCTestCase {
 
             controller.onboardingDeviceLogHandler?(
                 "MicroTechLinXCGMManager",
-                "22222DKCZE",
+                "TEST-LINX-SERIAL-0001",
                 .error,
                 "stage=scan event=failed reason=timeout"
             )
@@ -101,7 +101,7 @@ class LoopTests: XCTestCase {
         let exportedEntries = try JSONDecoder().decode([ExportedDeviceLogEntry].self, from: export.data)
         let matchingEntries = exportedEntries.filter {
             $0.managerIdentifier == "MicroTechLinXCGMManager" &&
-                $0.deviceIdentifier == "22222DKCZE" &&
+                $0.deviceIdentifier == "TEST-LINX-SERIAL-0001" &&
                 $0.type == "error" &&
                 $0.message == "stage=scan event=failed reason=timeout"
         }

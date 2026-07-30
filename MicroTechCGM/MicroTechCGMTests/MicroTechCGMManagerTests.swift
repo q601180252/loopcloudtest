@@ -1062,11 +1062,63 @@ final class MicroTechCGMManagerTests: XCTestCase {
         releaseHandler.signal()
         logQueue.flush()
         let values = events.values
-        let attemptedIndex = values.firstIndex { $0.contains("operation=read event=attempted") }
-        let resultIndex = values.firstIndex { $0.contains("operation=read event=succeeded") }
-        XCTAssertNotNil(attemptedIndex)
-        XCTAssertNotNil(resultIndex)
-        XCTAssertLessThan(attemptedIndex!, resultIndex!)
+        let attemptedIndex = try XCTUnwrap(values.firstIndex { $0.contains("operation=read event=attempted") })
+        let resultIndex = try XCTUnwrap(values.firstIndex { $0.contains("operation=read event=succeeded") })
+        XCTAssertLessThan(attemptedIndex, resultIndex)
+    }
+
+    func testLogQueueReplaysBoundedPreHandlerEntriesInOrder() {
+        let logQueue = MicroTechGattLogQueue(
+            label: "MicroTechCGMManagerTests.preHandlerReplay",
+            preHandlerBufferCapacity: 3
+        )
+        let events = ThreadSafeMessages()
+
+        for index in 0..<5 {
+            logQueue.submit(MicroTechGattLogEntry(message: "message-\(index)", type: .connection))
+        }
+        logQueue.flush()
+        logQueue.handler = { message, _ in
+            events.append(message)
+        }
+        logQueue.flush()
+
+        XCTAssertEqual(events.values, ["message-2", "message-3", "message-4"])
+    }
+
+    func testCompletedOrderedStreamsAreRemovedWithoutBreakingOutOfOrderDelivery() {
+        let logQueue = MicroTechGattLogQueue(
+            label: "MicroTechCGMManagerTests.completedOrderedStreams"
+        )
+        let events = ThreadSafeMessages()
+        logQueue.handler = { message, _ in
+            events.append(message)
+        }
+
+        for index in 0..<100 {
+            let streamIdentifier = UUID()
+            logQueue.submit(MicroTechGattLogBatch(
+                streamIdentifier: streamIdentifier,
+                sequence: 1,
+                entries: [MicroTechGattLogEntry(message: "\(index)-1", type: .connection)],
+                completesStream: true
+            ))
+            logQueue.submit(MicroTechGattLogBatch(
+                streamIdentifier: streamIdentifier,
+                sequence: 0,
+                entries: [MicroTechGattLogEntry(message: "\(index)-0", type: .connection)]
+            ))
+        }
+        logQueue.flush()
+
+        XCTAssertEqual(logQueue.orderedStreamCount, 0)
+        XCTAssertEqual(events.values.count, 200)
+        for index in 0..<100 {
+            XCTAssertEqual(
+                Array(events.values[(index * 2)..<(index * 2 + 2)]),
+                ["\(index)-0", "\(index)-1"]
+            )
+        }
     }
 
     func testReadWaiterReturnsOnlyAfterBatchSubmitReturns() throws {
@@ -1251,9 +1303,131 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(receivedMessages.filter { $0 == "stage=scan event=started" }, ["stage=scan event=started"])
     }
 
+    func testBluetoothLogHandlerInstallationAndBufferedCallbackDoNotWaitForManagerStateLock() {
+        let bluetoothManager = ReentrantLogHandlerMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let completed = expectation(description: "log handler installed without manager state lock")
+        bluetoothManager.onSetLogHandler = { handler in
+            _ = manager.state
+            handler?("stage=bluetooth event=state state=poweredOn", .connection)
+            _ = manager.state
+        }
+        manager.onboardingDeviceLogHandler = { _, _, _ in
+            _ = manager.state
+        }
+
+        DispatchQueue.global().async {
+            _ = manager.scanForSensor()
+            completed.fulfill()
+        }
+
+        wait(for: [completed], timeout: 1)
+    }
+
+    func testConfigureCacheAndMissingAttributeLogsUseStableStageEvents() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let services = [
+            MicroTechAidexProfile.serviceUUID,
+            CBUUID(string: "180F"),
+        ]
+        let characteristics = [
+            MicroTechAidexProfile.f003UUID,
+            MicroTechAidexProfile.f001UUID,
+            MicroTechAidexProfile.f002UUID,
+        ]
+
+        XCTAssertEqual(
+            MicroTechPeripheralManager.discoveryCacheHitLogEntry(
+                identifier: identifier,
+                operation: .discoverServices(MicroTechAidexProfile.serviceUUID),
+                discoveredUUIDs: services
+            ).message,
+            "stage=gatt operation=discoverServices event=cacheHit identifier=\(identifier) service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=nil discoveredServices=[\(MicroTechAidexProfile.serviceUUID.uuidString),180F]"
+        )
+        XCTAssertEqual(
+            MicroTechPeripheralManager.discoveryCacheHitLogEntry(
+                identifier: identifier,
+                operation: .discoverCharacteristics(MicroTechAidexProfile.serviceUUID),
+                discoveredUUIDs: characteristics
+            ).message,
+            "stage=gatt operation=discoverCharacteristics event=cacheHit identifier=\(identifier) service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=nil discoveredCharacteristics=[\(MicroTechAidexProfile.f001UUID.uuidString),\(MicroTechAidexProfile.f002UUID.uuidString),\(MicroTechAidexProfile.f003UUID.uuidString)]"
+        )
+        XCTAssertEqual(
+            MicroTechPeripheralManager.configureMissingAttributeLogEntry(
+                identifier: identifier,
+                service: MicroTechAidexProfile.serviceUUID,
+                characteristic: nil,
+                discoveredUUIDs: []
+            ).message,
+            "stage=gatt operation=configure event=failed identifier=\(identifier) service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=nil reason=missingService discoveredServices=[]"
+        )
+        XCTAssertEqual(
+            MicroTechPeripheralManager.configureMissingAttributeLogEntry(
+                identifier: identifier,
+                service: MicroTechAidexProfile.serviceUUID,
+                characteristic: MicroTechAidexProfile.f002UUID,
+                discoveredUUIDs: [MicroTechAidexProfile.f001UUID, MicroTechAidexProfile.f003UUID]
+            ).message,
+            "stage=gatt operation=configure event=failed identifier=\(identifier) service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=\(MicroTechAidexProfile.f002UUID.uuidString) reason=missingCharacteristic discoveredCharacteristics=[\(MicroTechAidexProfile.f001UUID.uuidString),\(MicroTechAidexProfile.f003UUID.uuidString)]"
+        )
+    }
+
+    func testDiscoverSuccessAndSynchronousFailuresIncludeActualContext() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let services = [CBUUID(string: "180F"), MicroTechAidexProfile.serviceUUID]
+        let characteristics = [MicroTechAidexProfile.f003UUID, MicroTechAidexProfile.f001UUID]
+
+        XCTAssertEqual(
+            MicroTechPeripheralManager.callbackLogEntries(
+                callback: .discoverServices,
+                identifier: identifier,
+                service: MicroTechAidexProfile.serviceUUID,
+                characteristic: nil,
+                error: nil,
+                value: nil,
+                discoveredServiceUUIDs: services
+            ).first?.message,
+            "stage=gatt operation=discoverServices event=succeeded identifier=\(identifier) service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=nil discoveredServices=[\(MicroTechAidexProfile.serviceUUID.uuidString),180F]"
+        )
+        XCTAssertEqual(
+            MicroTechPeripheralManager.callbackLogEntries(
+                callback: .discoverCharacteristics,
+                identifier: identifier,
+                service: MicroTechAidexProfile.serviceUUID,
+                characteristic: nil,
+                error: nil,
+                value: nil,
+                discoveredCharacteristicUUIDs: characteristics
+            ).first?.message,
+            "stage=gatt operation=discoverCharacteristics event=succeeded identifier=\(identifier) service=\(MicroTechAidexProfile.serviceUUID.uuidString) characteristic=nil discoveredCharacteristics=[\(MicroTechAidexProfile.f001UUID.uuidString),\(MicroTechAidexProfile.f003UUID.uuidString)]"
+        )
+
+        let subscribeError = MicroTechPeripheralManagerError.unknownCharacteristic(MicroTechAidexProfile.f003UUID)
+        XCTAssertEqual(
+            MicroTechPeripheralManager.synchronousFailureLogEntry(
+                identifier: identifier,
+                operation: .notification(MicroTechAidexProfile.f003UUID),
+                error: subscribeError
+            ).message,
+            "stage=gatt operation=notificationState event=failed identifier=\(identifier) service=nil characteristic=\(MicroTechAidexProfile.f003UUID.uuidString) reason=synchronousFailure \(MicroTechDiagnosticLog.errorFields(subscribeError))"
+        )
+        let readError = MicroTechPeripheralManagerError.notConnected
+        XCTAssertEqual(
+            MicroTechPeripheralManager.synchronousFailureLogEntry(
+                identifier: identifier,
+                operation: .read(MicroTechAidexProfile.f002UUID),
+                error: readError
+            ).message,
+            "stage=gatt operation=read event=failed identifier=\(identifier) service=nil characteristic=\(MicroTechAidexProfile.f002UUID.uuidString) reason=synchronousFailure \(MicroTechDiagnosticLog.errorFields(readError))"
+        )
+    }
+
     func testOnboardingLogHandlerReceivesScanFailureBeforeManagerCreation() {
         var state = MicroTechCGMManagerState()
-        state.sensorSerial = "22222DKCZE"
+        state.sensorSerial = "TEST-LINX-SERIAL-0001"
         let bluetoothManager = FakeMicroTechBluetoothManager()
         bluetoothManager.scanLog = ("stage=scan event=failed reason=timeout", .error)
         let manager = MicroTechCGMManager(
@@ -1278,7 +1452,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(receivedEvents.filter { $0.message == "stage=scan event=failed reason=timeout" }.count, 1)
         let event = receivedEvents.first { $0.message == "stage=scan event=failed reason=timeout" }
         XCTAssertEqual(event?.managerIdentifier, MicroTechCGMManager.pluginIdentifier)
-        XCTAssertEqual(event?.deviceIdentifier, "22222DKCZE")
+        XCTAssertEqual(event?.deviceIdentifier, "TEST-LINX-SERIAL-0001")
         XCTAssertEqual(event?.type, .error)
         XCTAssertTrue(onboardingDelegate.createdManagers.isEmpty)
         XCTAssertTrue(onboardingDelegate.onboardedManagers.isEmpty)
@@ -3667,6 +3841,26 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     func forgetPeripheral() {
         forgetPeripheralCallCount += 1
     }
+}
+
+private final class ReentrantLogHandlerMicroTechBluetoothManager: MicroTechBluetoothManaging {
+    weak var delegate: MicroTechBluetoothManagerDelegate?
+    var onSetLogHandler: ((((String, MicroTechBluetoothLogType) -> Void)?) -> Void)?
+    var logHandler: ((String, MicroTechBluetoothLogType) -> Void)? {
+        didSet {
+            onSetLogHandler?(logHandler)
+        }
+    }
+    var isScanning = false
+    var isConnected = false
+
+    func scan(remoteIdentifier: UUID?) {
+        isScanning = true
+    }
+
+    func refreshConnectedPeripheral() {}
+    func disconnect() {}
+    func forgetPeripheral() {}
 }
 
 private final class ThreadSafeMessages {

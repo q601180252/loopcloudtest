@@ -271,9 +271,6 @@ public final class MicroTechCGMManager: CGMManager {
             }
 
             let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
-            manager.logHandler = { [weak self] message, type in
-                self?.logDeviceCommunication(message, type: type.deviceLogEntryType)
-            }
             protectedState.bluetoothManager = manager
 
             if let sensorSerial = currentState.sensorSerial, !sensorSerial.isEmpty,
@@ -304,6 +301,9 @@ public final class MicroTechCGMManager: CGMManager {
             bluetoothManager = manager
             shouldRefreshConnectedPeripheral = manager.isConnected
             shouldStartScan = !(manager.isScanning || manager.isConnected)
+        }
+        bluetoothManager?.logHandler = { [weak self] message, type in
+            self?.logDeviceCommunication(message, type: type.deviceLogEntryType)
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
 
