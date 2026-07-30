@@ -11,6 +11,19 @@
 
 ## 进展日志
 
+### 2026-07-30 029 - 完成 LinX 完整连接日志实施计划
+
+- **任务**：将已确认的 LinX 全连接日志设计拆分为可执行、可验证的开发步骤。
+- **核心交付**：
+  1. `docs/superpowers/plans/2026-07-30-linx-full-connection-logging.md`：明确首次添加日志写入真实 `DeviceLog.json` 的实现与测试顺序。
+  2. 分别覆盖扫描、连接、恢复、Bluetooth 状态、service、characteristic、notification、read、write 和 timeout 的独立失败分支。
+  3. 明确完整 key、IV、challenge、发送命令、加密接收包和解密包的记录与逐字测试。
+  4. 明确正式 delegate 切换期间日志无缺失、无重复，以及文档、commit、push、`PROGRESS.md` 的真实状态记录顺序。
+- **验证结果**：实施计划经过两轮复审并通过；文件存在且关键内容可读；`git diff --check` 和 staged diff check 通过。
+- **决策结论**：按计划使用 TDD 分三部分实施；完成真实导出测试、全量 MicroTech 测试和 workspace 构建后才能判定完成。
+- **commit hash**：`cede19f`。
+- **push 状态**：已推送到 `origin/main`，远端 `refs/heads/main` 已核对为 `cede19f05154bf75f7d3fc502785a2b3071d9531`。
+
 ### 2026-07-30 028 - 明确 LinX 全连接日志设计
 
 - **任务**：解决 LinX 首次添加失败时 Loop Report 没有扫描、连接和配对证据的问题，并明确全运行周期完整通信日志范围。
