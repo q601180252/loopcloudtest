@@ -710,12 +710,36 @@ final class DeviceDataManager {
         }
 
         let result = cgmManagerUIType.setupViewController(bluetoothProvider: bluetoothProvider, displayGlucosePreference: displayGlucosePreference, colorPalette: .default, allowDebugFeatures: FeatureFlags.allowDebugFeatures, prefersToSkipUserInteraction: prefersToSkipUserInteraction)
-        if case .createdAndOnboarded(let cgmManagerUI) = result {
+        if case .userInteractionRequired(let viewController) = result {
+            Self.configureCGMOnboardingDeviceLogging(on: viewController, deviceLog: deviceLog)
+        } else if case .createdAndOnboarded(let cgmManagerUI) = result {
             cgmManagerOnboarding(didCreateCGMManager: cgmManagerUI)
             cgmManagerOnboarding(didOnboardCGMManager: cgmManagerUI)
         }
 
         return .success(result)
+    }
+
+    static func makeCGMOnboardingDeviceLogHandler(deviceLog: PersistentDeviceLog) -> CGMManagerOnboardingDeviceLogHandler {
+        { managerIdentifier, deviceIdentifier, type, message in
+            deviceLog.log(
+                managerIdentifier: managerIdentifier,
+                deviceIdentifier: deviceIdentifier,
+                type: type,
+                message: message
+            )
+        }
+    }
+
+    static func configureCGMOnboardingDeviceLogging(
+        on onboarding: CGMManagerOnboarding,
+        deviceLog: PersistentDeviceLog
+    ) {
+        guard let deviceLogging = onboarding as? CGMManagerOnboardingDeviceLogging else {
+            return
+        }
+
+        deviceLogging.onboardingDeviceLogHandler = makeCGMOnboardingDeviceLogHandler(deviceLog: deviceLog)
     }
 
     public func cgmManagerTypeByIdentifier(_ identifier: String) -> CGMManagerUI.Type? {

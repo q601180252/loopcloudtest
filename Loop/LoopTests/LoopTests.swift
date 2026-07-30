@@ -9,6 +9,7 @@
 import XCTest
 import HealthKit
 import LoopKit
+import LoopKitUI
 
 @testable import Loop
 
@@ -62,6 +63,53 @@ class LoopTests: XCTestCase {
         XCTAssertTrue(message.contains("stored=1"))
         XCTAssertTrue(message.contains("ids=[ABC123-21600]"))
         XCTAssertTrue(message.contains("valuesMgdl=[95]"))
+    }
+
+    func testConfigureCGMOnboardingDeviceLoggingExportsLinXScanFailure() throws {
+        let storageDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: storageDirectory, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: storageDirectory)
+        }
+        let export = autoreleasepool {
+            let storageFile = storageDirectory.appendingPathComponent("DeviceLog.sqlite")
+            let deviceLog = PersistentDeviceLog(storageFile: storageFile)
+            let controller = FakeCGMOnboardingLoggingController()
+            DeviceDataManager.configureCGMOnboardingDeviceLogging(on: controller, deviceLog: deviceLog)
+            let saved = expectation(description: "LinX scan failure saved")
+
+            controller.onboardingDeviceLogHandler?(
+                "MicroTechLinXCGMManager",
+                "22222DKCZE",
+                .error,
+                "stage=scan event=failed reason=timeout"
+            )
+            deviceLog.getLogEntries(startDate: .distantPast) { result in
+                if case .failure(let error) = result {
+                    XCTFail(String(describing: error))
+                }
+                saved.fulfill()
+            }
+            wait(for: [saved], timeout: 2)
+
+            let stream = TestDataOutputStream()
+            let progress = Progress(totalUnitCount: 1)
+            XCTAssertNil(deviceLog.export(startDate: .distantPast, endDate: .distantFuture, to: stream, progress: progress))
+            return (name: deviceLog.exportName, data: stream.data)
+        }
+        let exportedEntries = try JSONDecoder().decode([ExportedDeviceLogEntry].self, from: export.data)
+        let matchingEntries = exportedEntries.filter {
+            $0.managerIdentifier == "MicroTechLinXCGMManager" &&
+                $0.deviceIdentifier == "22222DKCZE" &&
+                $0.type == "error" &&
+                $0.message == "stage=scan event=failed reason=timeout"
+        }
+
+        XCTAssertEqual(export.name, "DeviceLog.json")
+        XCTAssertEqual(matchingEntries.count, 1)
+        XCTAssertEqual(exportedEntries.count, 1)
+        XCTAssertEqual(matchingEntries.first?.message, "stage=scan event=failed reason=timeout")
     }
 
     func testPresentAfterDismissingPresentedViewControllerDismissesBeforePresenting() {
@@ -124,6 +172,29 @@ private final class MockNavigationController: UINavigationController {
         fakePresentedViewController = nil
         completion?()
     }
+}
+
+private final class FakeCGMOnboardingLoggingController: UIViewController, CGMManagerOnboarding, CGMManagerOnboardingDeviceLogging {
+    var cgmManagerOnboardingDelegate: CGMManagerOnboardingDelegate?
+    var onboardingDeviceLogHandler: CGMManagerOnboardingDeviceLogHandler?
+}
+
+private final class TestDataOutputStream: DataOutputStream {
+    private(set) var data = Data()
+    var streamError: Error?
+
+    func write(_ data: Data) throws {
+        self.data.append(data)
+    }
+
+    func finish(sync: Bool) throws {}
+}
+
+private struct ExportedDeviceLogEntry: Decodable {
+    let managerIdentifier: String
+    let deviceIdentifier: String?
+    let type: String
+    let message: String
 }
 
 extension XCTestCase {

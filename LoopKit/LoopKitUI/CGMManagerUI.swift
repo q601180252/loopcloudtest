@@ -84,3 +84,14 @@ public protocol CGMManagerOnboarding {
     /// Delegate to notify about CGM manager onboarding.
     var cgmManagerOnboardingDelegate: CGMManagerOnboardingDelegate? { get set }
 }
+
+public typealias CGMManagerOnboardingDeviceLogHandler = (
+    _ managerIdentifier: String,
+    _ deviceIdentifier: String?,
+    _ type: DeviceLogEntryType,
+    _ message: String
+) -> Void
+
+public protocol CGMManagerOnboardingDeviceLogging: AnyObject {
+    var onboardingDeviceLogHandler: CGMManagerOnboardingDeviceLogHandler? { get set }
+}

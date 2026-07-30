@@ -4,9 +4,16 @@ import HealthKit
 import LoopKit
 import os.log
 
+public typealias MicroTechOnboardingDeviceLogHandler = (
+    _ deviceIdentifier: String?,
+    _ type: DeviceLogEntryType,
+    _ message: String
+) -> Void
+
 public final class MicroTechCGMManager: CGMManager {
     private let lockedManagerState: Locked<MicroTechCGMManagerProtectedState>
     private let delegate = WeakSynchronizedDelegate<CGMManagerDelegate>()
+    private let deviceLogDestination = Locked<MicroTechDeviceLogDestination>(.systemOnly)
     private let statusObservers = WeakSynchronizedSet<CGMManagerStatusObserver>()
     private let delegateQueueSpecificKey = DispatchSpecificKey<UUID>()
     private let delegateQueueSpecificValue = UUID()
@@ -33,7 +40,28 @@ public final class MicroTechCGMManager: CGMManager {
             delegate.delegate
         }
         set {
-            delegate.delegate = newValue
+            deviceLogDestination.mutate { destination in
+                delegate.delegate = newValue
+                destination = newValue == nil ? .systemOnly : .formalDelegate
+            }
+        }
+    }
+
+    public var onboardingDeviceLogHandler: MicroTechOnboardingDeviceLogHandler? {
+        get {
+            if case .onboarding(let handler) = deviceLogDestination.value {
+                return handler
+            }
+            return nil
+        }
+        set {
+            deviceLogDestination.mutate { destination in
+                guard delegate.delegate == nil else {
+                    destination = .formalDelegate
+                    return
+                }
+                destination = newValue.map(MicroTechDeviceLogDestination.onboarding) ?? .systemOnly
+            }
         }
     }
 
@@ -588,8 +616,16 @@ public final class MicroTechCGMManager: CGMManager {
 
     private func logDeviceCommunication(_ message: String, type: DeviceLogEntryType = .send) {
         os_log("%{public}@", log: log, type: .default, message)
-        delegate.notify { delegate in
-            delegate?.deviceManager(self, logEventForDeviceIdentifier: self.state.sensorSerial, type: type, message: message, completion: nil)
+        let deviceIdentifier = state.sensorSerial
+        switch deviceLogDestination.value {
+        case .onboarding(let handler):
+            handler(deviceIdentifier, type, message)
+        case .formalDelegate:
+            delegate.notify { delegate in
+                delegate?.deviceManager(self, logEventForDeviceIdentifier: deviceIdentifier, type: type, message: message, completion: nil)
+            }
+        case .systemOnly:
+            break
         }
     }
 
@@ -1075,6 +1111,12 @@ public final class MicroTechCGMManager: CGMManager {
             }
         }
     }
+}
+
+private enum MicroTechDeviceLogDestination {
+    case onboarding(MicroTechOnboardingDeviceLogHandler)
+    case formalDelegate
+    case systemOnly
 }
 
 extension MicroTechCGMManager: MicroTechBluetoothManagerDelegate {

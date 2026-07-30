@@ -3,8 +3,13 @@ import LoopKit
 import LoopKitUI
 import MicroTechCGM
 
-class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, CompletionNotifying, UINavigationControllerDelegate {
+class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, CGMManagerOnboardingDeviceLogging, CompletionNotifying, UINavigationControllerDelegate {
     var cgmManagerOnboardingDelegate: CGMManagerOnboardingDelegate?
+    var onboardingDeviceLogHandler: CGMManagerOnboardingDeviceLogHandler? {
+        didSet {
+            configureOnboardingDeviceLogging(on: cgmManager)
+        }
+    }
     var completionDelegate: CompletionDelegate?
     var cgmManager: MicroTechCGMManager?
     var displayGlucosePreference: DisplayGlucosePreference
@@ -75,11 +80,20 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, Comp
 
     func completeSetup() {
         let manager = makeCGMManager()
+        configureOnboardingDeviceLogging(on: manager)
         cgmManager = manager
         manager.addStatusObserver(self, queue: .main)
         manager.scanForSensor()
         finishOnboardingIfReady()
         setViewControllers([initialView()], animated: true)
+    }
+
+    private func configureOnboardingDeviceLogging(on manager: MicroTechCGMManager?) {
+        manager?.onboardingDeviceLogHandler = onboardingDeviceLogHandler.map { handler in
+            { deviceIdentifier, type, message in
+                handler(MicroTechCGMManager.pluginIdentifier, deviceIdentifier, type, message)
+            }
+        }
     }
 
     private func finishOnboardingIfReady() {

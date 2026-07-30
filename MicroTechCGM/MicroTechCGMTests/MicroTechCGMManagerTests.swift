@@ -215,6 +215,157 @@ final class MicroTechCGMManagerTests: XCTestCase {
         })
     }
 
+    func testSetupInstallsOnboardingLogHandlerBeforeScanning() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        bluetoothManager.scanLog = ("stage=scan event=started", .connection)
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let coordinator = MicroTechUICoordinator(
+            colorPalette: EnvironmentValues().colorPalette,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit),
+            allowDebugFeatures: false,
+            makeCGMManager: { manager }
+        )
+        var receivedMessages: [String] = []
+        coordinator.onboardingDeviceLogHandler = { _, _, _, message in
+            receivedMessages.append(message)
+        }
+
+        coordinator.completeSetup()
+
+        XCTAssertEqual(receivedMessages.filter { $0 == "stage=scan event=started" }, ["stage=scan event=started"])
+    }
+
+    func testOnboardingLogHandlerReceivesScanFailureBeforeManagerCreation() {
+        var state = MicroTechCGMManagerState()
+        state.sensorSerial = "22222DKCZE"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        bluetoothManager.scanLog = ("stage=scan event=failed reason=timeout", .error)
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let onboardingDelegate = TestCGMOnboardingDelegate(expectedCreateCount: 0, expectedOnboardCount: 0)
+        let coordinator = MicroTechUICoordinator(
+            colorPalette: EnvironmentValues().colorPalette,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit),
+            allowDebugFeatures: false,
+            makeCGMManager: { manager }
+        )
+        var receivedEvents: [(managerIdentifier: String, deviceIdentifier: String?, type: DeviceLogEntryType, message: String)] = []
+        coordinator.cgmManagerOnboardingDelegate = onboardingDelegate
+        coordinator.onboardingDeviceLogHandler = { managerIdentifier, deviceIdentifier, type, message in
+            receivedEvents.append((managerIdentifier, deviceIdentifier, type, message))
+        }
+
+        coordinator.completeSetup()
+
+        XCTAssertEqual(receivedEvents.filter { $0.message == "stage=scan event=failed reason=timeout" }.count, 1)
+        let event = receivedEvents.first { $0.message == "stage=scan event=failed reason=timeout" }
+        XCTAssertEqual(event?.managerIdentifier, MicroTechCGMManager.pluginIdentifier)
+        XCTAssertEqual(event?.deviceIdentifier, "22222DKCZE")
+        XCTAssertEqual(event?.type, .error)
+        XCTAssertTrue(onboardingDelegate.createdManagers.isEmpty)
+        XCTAssertTrue(onboardingDelegate.onboardedManagers.isEmpty)
+    }
+
+    func testFormalDelegateSuppressesOnboardingHandlerToAvoidDuplicateLogs() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        let delegateQueue = DispatchQueue(label: "MicroTechCGMManagerTests.formalDelegateLogs")
+        var onboardingMessages: [String] = []
+        manager.onboardingDeviceLogHandler = { _, _, message in
+            onboardingMessages.append(message)
+        }
+
+        XCTAssertTrue(manager.scanForSensor())
+        bluetoothManager.logHandler?("onboarding-only", .error)
+        manager.delegateQueue = delegateQueue
+        manager.cgmManagerDelegate = delegate
+        bluetoothManager.logHandler?("formal-only", .error)
+        delegateQueue.sync {}
+
+        XCTAssertEqual(onboardingMessages.filter { $0 == "onboarding-only" }, ["onboarding-only"])
+        XCTAssertFalse(onboardingMessages.contains("formal-only"))
+        XCTAssertEqual(delegate.loggedEvents.filter { $0.message == "formal-only" }.count, 1)
+        XCTAssertFalse(delegate.loggedEvents.contains { $0.message == "onboarding-only" })
+    }
+
+    func testConcurrentFormalDelegateTransitionLogsEveryMessageExactlyOnce() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        let delegateQueue = DispatchQueue(label: "MicroTechCGMManagerTests.concurrentFormalDelegateLogs")
+        let onboardingMessages = ThreadSafeMessages()
+        manager.onboardingDeviceLogHandler = { _, _, message in
+            onboardingMessages.append(message)
+        }
+        XCTAssertTrue(manager.scanForSensor())
+
+        let messageCount = 500
+        let start = DispatchSemaphore(value: 0)
+        let group = DispatchGroup()
+        let producerQueue = DispatchQueue(label: "MicroTechCGMManagerTests.concurrentLogProducer", attributes: .concurrent)
+        for index in 0..<messageCount {
+            group.enter()
+            producerQueue.async {
+                start.wait()
+                bluetoothManager.logHandler?("message-\(index)", .error)
+                group.leave()
+            }
+        }
+        group.enter()
+        producerQueue.async {
+            start.wait()
+            manager.delegateQueue = delegateQueue
+            manager.cgmManagerDelegate = delegate
+            group.leave()
+        }
+
+        for _ in 0...messageCount {
+            start.signal()
+        }
+        XCTAssertEqual(group.wait(timeout: .now() + 5), .success)
+        delegateQueue.sync {}
+
+        let allMessages = onboardingMessages.values + delegate.loggedEvents.map(\.message)
+        for index in 0..<messageCount {
+            XCTAssertEqual(allMessages.filter { $0 == "message-\(index)" }.count, 1, "message-\(index)")
+        }
+    }
+
+    func testFailedSetupDoesNotCreateOrOnboardManager() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        manager.delete {}
+        let onboardingDelegate = TestCGMOnboardingDelegate(expectedCreateCount: 0, expectedOnboardCount: 0)
+        let coordinator = MicroTechUICoordinator(
+            colorPalette: EnvironmentValues().colorPalette,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit),
+            allowDebugFeatures: false,
+            makeCGMManager: { manager }
+        )
+        coordinator.cgmManagerOnboardingDelegate = onboardingDelegate
+
+        coordinator.completeSetup()
+
+        XCTAssertTrue(bluetoothManager.scanRemoteIdentifiers.isEmpty)
+        XCTAssertTrue(onboardingDelegate.createdManagers.isEmpty)
+        XCTAssertTrue(onboardingDelegate.onboardedManagers.isEmpty)
+    }
+
     func testNearbyScanConnectsDiscoveredLinxAndSavesSensor() throws {
         let bluetoothManager = FakeMicroTechBluetoothManager()
         let manager = MicroTechCGMManager(
@@ -2246,6 +2397,7 @@ private final class TestCGMOnboardingDelegate: CGMManagerOnboardingDelegate {
 private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     weak var delegate: MicroTechBluetoothManagerDelegate?
     var logHandler: ((String, MicroTechBluetoothLogType) -> Void)?
+    var scanLog: (message: String, type: MicroTechBluetoothLogType)?
     var isScanning = false
     var isConnectedReadCount = 0
     private var storedIsConnected = false
@@ -2266,6 +2418,9 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     func scan(remoteIdentifier: UUID?) {
         isScanning = true
         scanRemoteIdentifiers.append(remoteIdentifier)
+        if let scanLog {
+            logHandler?(scanLog.message, scanLog.type)
+        }
     }
 
     func refreshConnectedPeripheral() {
@@ -2280,6 +2435,23 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
 
     func forgetPeripheral() {
         forgetPeripheralCallCount += 1
+    }
+}
+
+private final class ThreadSafeMessages {
+    private let lock = NSLock()
+    private var messages: [String] = []
+
+    var values: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return messages
+    }
+
+    func append(_ message: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        messages.append(message)
     }
 }
 
