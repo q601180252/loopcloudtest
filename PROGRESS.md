@@ -29,7 +29,7 @@
 - **关键发现**：此前使用 clean DerivedData 和 `Loop` scheme 构建时，只生成主 App，`Install Plugins` 不会补建 Nightscout 插件，导致添加 CGM 列表缺少 Nightscout；源码和插件注册并未删除。
 - **决策结论**：所有真机安装和后续发布使用 `LoopWorkspace` scheme；配置任意 CGM 后均可从首页进入同一历史页。
 - **commit hash**：`ebfa670` 至 `033c76f`。
-- **push 状态**：待合并并推送到 `origin/main`。
+- **push 状态**：已推送到 `origin/main`，远端已包含 `c3b429d`。
 
 ### 2026-07-31 038 - 编写首页血糖历史页面实施计划
 
