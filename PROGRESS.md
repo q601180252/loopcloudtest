@@ -5,6 +5,7 @@
 - 已安装本项目 AI 开发规则入口：`AGENTS.md`。
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
+- 当前已确认首页血糖历史页面设计：入口位于首页状态区下方、现有曲线上方，页面使用 `6 Hours / 12 Hours / 24 Hours` 三个 Tab，共用 Loop `GlucoseStore` 的曲线和倒序明细，默认显示最近 6 小时。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 170 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 当前 MicroTech LinX 添加页已支持 `直接连接` 和 `广播数据` 两种方式；广播模式只解析 Aidex 广播中的最新血糖，直连模式保持原有蓝牙连接流程。
@@ -13,6 +14,19 @@
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
+
+### 2026-07-31 037 - 明确首页血糖历史页面设计
+
+- **任务**：为 Loop 首页增加血糖历史入口，支持查看最近 6 小时、12 小时和 24 小时。
+- **核心交付**：
+  1. `docs/superpowers/specs/2026-07-31-glucose-history-page-design.md`：定义首页独立历史入口、三段时间选择、曲线、倒序明细、空状态、错误和自动刷新。
+  2. 历史页面直接查询 Loop `GlucoseStore`，不在 MicroTech 插件中复制历史数据。
+  3. MicroTech LinX 直接连接继续负责当前值和历史补包；历史页面只展示已经写入 Loop 的真实数据。
+  4. 首页现有 Glucose 曲线点击行为和底部五个工具按钮保持不变。
+- **验证结果**：独立设计审查通过；设计文档存在且关键内容可读；`git diff --check` 通过。
+- **决策结论**：首页本身隐藏导航栏，因此采用状态区下方的独立历史入口；历史页默认 6 小时，支持 6、12、24 小时三个 Tab，上方曲线、下方明细。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
 
 ### 2026-07-31 036 - 修复 LinX 广播无效血糖入库
 
