@@ -154,6 +154,7 @@ final class GlucoseHistoryViewTests: XCTestCase {
         XCTAssertFalse(loadingContent.isEmpty)
         XCTAssertNil(loadingContent.errorDescription)
         XCTAssertFalse(loadingContent.canRetry)
+        XCTAssertNil(loadingContent.terminalStateAccessibilityIdentifier)
 
         loader.completeRequest(at: 0, with: .success([]))
         await drainMainQueue()
@@ -166,6 +167,10 @@ final class GlucoseHistoryViewTests: XCTestCase {
         XCTAssertTrue(emptyContent.isEmpty)
         XCTAssertNil(emptyContent.errorDescription)
         XCTAssertFalse(emptyContent.canRetry)
+        XCTAssertEqual(
+            emptyContent.terminalStateAccessibilityIdentifier,
+            "glucoseHistory.terminal.sixHours"
+        )
         viewModel.stopObserving()
     }
 

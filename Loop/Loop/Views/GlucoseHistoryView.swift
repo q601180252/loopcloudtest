@@ -43,6 +43,14 @@ struct GlucoseHistoryViewContent {
     let selectRange: (GlucoseHistoryRange) -> Void
     let retry: () -> Void
 
+    var terminalStateAccessibilityIdentifier: String? {
+        guard !isLoading else {
+            return nil
+        }
+
+        return "glucoseHistory.terminal.\(selectedRange.accessibilityIdentifierComponent)"
+    }
+
     init(
         viewModel: GlucoseHistoryViewModel,
         displayGlucosePreference: DisplayGlucosePreference
@@ -82,7 +90,13 @@ struct GlucoseHistoryView: View {
             rangePicker(page: page)
             chart(page: page)
             Divider()
-            detail(page: page)
+            ZStack {
+                detail(page: page)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(
+                page.terminalStateAccessibilityIdentifier ?? "glucoseHistory.loading"
+            )
         }
         .navigationTitle(Text("Glucose History", comment: "Title for the glucose history screen"))
         .navigationBarTitleDisplayMode(.inline)

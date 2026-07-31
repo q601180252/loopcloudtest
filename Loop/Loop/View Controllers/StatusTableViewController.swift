@@ -1348,6 +1348,7 @@ final class StatusTableViewController: LoopChartsTableViewController {
         let view = GlucoseHistoryView(viewModel: viewModel)
             .environmentObject(deviceManager.displayGlucosePreference)
         let controller = UIHostingController(rootView: view)
+        controller.hidesBottomBarWhenPushed = true
         navigationController?.pushViewController(controller, animated: true)
     }
 

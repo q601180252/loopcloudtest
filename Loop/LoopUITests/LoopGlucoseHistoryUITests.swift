@@ -47,7 +47,10 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
         selectRange("24 Hours", in: rangePicker)
         assertSelectedRange("24 Hours", in: rangePicker)
 
-        waitForSuccessfulTerminalState(in: app)
+        waitForSuccessfulTerminalState(
+            in: app,
+            terminalStateIdentifier: "glucoseHistory.terminal.twentyFourHours"
+        )
 
         let backButton = historyNavigationBar.buttons.firstMatch
         tap(backButton, named: "Glucose History back button", in: app)
@@ -96,20 +99,16 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
 
     private func waitForSuccessfulTerminalState(
         in app: XCUIApplication,
+        terminalStateIdentifier: String,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         let historyList = app.otherElements["glucoseHistory.list"]
         let emptyState = app.staticTexts["glucoseHistory.empty"]
         let errorState = app.otherElements["glucoseHistory.error"]
-        let terminalStateReached = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in
-                historyList.exists || emptyState.exists || errorState.exists
-            },
-            object: app
-        )
+        let terminalState = app.otherElements[terminalStateIdentifier]
 
-        guard XCTWaiter.wait(for: [terminalStateReached], timeout: 15) == .completed else {
+        guard terminalState.waitForExistence(timeout: 15) else {
             attachDiagnostics(in: app, named: "Glucose History 24-hour terminal state")
             XCTFail(
                 "The 24-hour Glucose History request did not finish.",

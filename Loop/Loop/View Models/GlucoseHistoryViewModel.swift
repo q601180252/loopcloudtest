@@ -49,6 +49,17 @@ enum GlucoseHistoryRange: CaseIterable, Equatable, Identifiable {
             return .hours(4)
         }
     }
+
+    var accessibilityIdentifierComponent: String {
+        switch self {
+        case .sixHours:
+            return "sixHours"
+        case .twelveHours:
+            return "twelveHours"
+        case .twentyFourHours:
+            return "twentyFourHours"
+        }
+    }
 }
 
 @MainActor
