@@ -54,7 +54,16 @@ final class ChartsManagerTests: XCTestCase {
         XCTAssertEqual(manager.xAxisValues?.count, 7)
     }
 
-    private func makeManager(xAxisLabelInterval: TimeInterval = .hours(1)) -> ChartsManager {
+    private func makeManager() -> ChartsManager {
+        return ChartsManager(
+            colors: colors,
+            settings: .default,
+            charts: [],
+            traitCollection: .current
+        )
+    }
+
+    private func makeManager(xAxisLabelInterval: TimeInterval) -> ChartsManager {
         return ChartsManager(
             colors: colors,
             settings: .default,
