@@ -25,8 +25,8 @@
 - **验证结果**：新增日志测试先失败，失败点为缺少广播 timeout/stopped 日志和发现日志模式选择；修复后广播日志相关 9 个测试通过；`MicroTechCGM` 全量 182 个测试通过、0 失败；`LoopWorkspace` generic iOS 构建通过；`git diff --check` 通过。
 - **关键发现**：修复前能看出是否 accepted/rejected，但不能快速区分“收到广播但解析成功后被过滤”和“广播扫描超时”；广播发现还会混入普通扫描日志。
 - **决策结论**：广播问题排查按 `started -> found -> parsed -> accepted/rejected`，或 `started -> timeout/stopped` 判断。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`68aa2c4`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-07-31 033 - 新增 LinX 广播连接选择
 
