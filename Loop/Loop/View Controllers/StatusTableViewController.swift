@@ -108,6 +108,10 @@ final class StatusTableViewController: LoopChartsTableViewController {
                     self?.registerCGMManager()
                     self?.configureCGMManagerHUDViews()
                     self?.updateToolbarItems()
+                    self?.tableView.reloadSections(
+                        IndexSet(integer: Section.glucoseHistory.rawValue),
+                        with: .automatic
+                    )
                 }
             },
             notificationCenter.addObserver(forName: .PumpEventsAdded, object: deviceManager, queue: nil) { [weak self] (notification: Notification) in
@@ -662,6 +666,7 @@ final class StatusTableViewController: LoopChartsTableViewController {
         case alertWarning
         case hud
         case status
+        case glucoseHistory
         case charts
     }
 
@@ -717,6 +722,18 @@ final class StatusTableViewController: LoopChartsTableViewController {
     }
 
     private var statusRowMode = StatusRowMode.hidden
+
+    static func shouldShowGlucoseHistoryEntry(
+        hasConfiguredCGM: Bool
+    ) -> Bool {
+        hasConfiguredCGM
+    }
+
+    private var shouldShowGlucoseHistoryEntry: Bool {
+        Self.shouldShowGlucoseHistoryEntry(
+            hasConfiguredCGM: deviceManager.cgmManager != nil
+        )
+    }
 
     private func determineStatusRowMode() -> StatusRowMode {
         let statusRowMode: StatusRowMode
@@ -890,6 +907,8 @@ final class StatusTableViewController: LoopChartsTableViewController {
             return ChartRow.allCases.count
         case .status:
             return shouldShowStatus ? StatusRow.allCases.count : 0
+        case .glucoseHistory:
+            return shouldShowGlucoseHistoryEntry ? 1 : 0
         }
     }
 
@@ -990,6 +1009,25 @@ final class StatusTableViewController: LoopChartsTableViewController {
             let cell = tableView.dequeueReusableCell(withIdentifier: HUDViewTableViewCell.className, for: indexPath) as! HUDViewTableViewCell
             hudView = cell.hudView
 
+            return cell
+        case .glucoseHistory:
+            let reuseIdentifier = "GlucoseHistoryEntryCell"
+            let cell = tableView.dequeueReusableCell(withIdentifier: reuseIdentifier)
+                ?? UITableViewCell(style: .default, reuseIdentifier: reuseIdentifier)
+            var content = cell.defaultContentConfiguration()
+            content.text = NSLocalizedString(
+                "Glucose History",
+                comment: "Status screen glucose history entry"
+            )
+            content.image = UIImage(systemName: "chart.xyaxis.line")
+                ?? UIImage(systemName: "chart.bar")
+            content.imageProperties.tintColor = .glucoseTintColor
+            cell.contentConfiguration = content
+            cell.accessoryType = .disclosureIndicator
+            cell.selectionStyle = .default
+            cell.isAccessibilityElement = true
+            cell.accessibilityLabel = content.text
+            cell.accessibilityIdentifier = "status.glucoseHistory"
             return cell
         case .charts:
             let cell = tableView.dequeueReusableCell(withIdentifier: ChartTableViewCell.className, for: indexPath) as! ChartTableViewCell
@@ -1178,7 +1216,7 @@ final class StatusTableViewController: LoopChartsTableViewController {
                     cell.setSubtitleLabel(label: nil)
                 }
             }
-        case .hud, .status, .alertWarning:
+        case .glucoseHistory, .hud, .status, .alertWarning:
             break
         }
     }
@@ -1199,6 +1237,8 @@ final class StatusTableViewController: LoopChartsTableViewController {
             case .iob, .dose, .cob:
                 return max(106, 0.21 * availableSize)
             }
+        case .glucoseHistory:
+            return 44
         case .hud, .status, .alertWarning:
             return UITableView.automaticDimension
         }
@@ -1216,6 +1256,9 @@ final class StatusTableViewController: LoopChartsTableViewController {
             }
         case .hud:
             break
+        case .glucoseHistory:
+            tableView.deselectRow(at: indexPath, animated: true)
+            showGlucoseHistory()
         case .status:
             switch StatusRow(rawValue: indexPath.row)! {
             case .status:
@@ -1288,6 +1331,24 @@ final class StatusTableViewController: LoopChartsTableViewController {
                 performSegue(withIdentifier: CarbAbsorptionViewController.className, sender: indexPath)
             }
         }
+    }
+
+    private func showGlucoseHistory() {
+        let glucoseStore = deviceManager.glucoseStore
+        let viewModel = GlucoseHistoryViewModel(
+            loader: { start, end, completion in
+                glucoseStore.getGlucoseSamples(
+                    start: start,
+                    end: end,
+                    completion: completion
+                )
+            },
+            glucoseStoreNotificationObject: glucoseStore
+        )
+        let view = GlucoseHistoryView(viewModel: viewModel)
+            .environmentObject(deviceManager.displayGlucosePreference)
+        let controller = UIHostingController(rootView: view)
+        navigationController?.pushViewController(controller, animated: true)
     }
 
     private func presentUnmuteAlertConfirmation() {

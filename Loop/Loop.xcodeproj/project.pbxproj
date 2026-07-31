@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		F10000000000000000000001 /* GlucoseHistoryViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000002 /* GlucoseHistoryViewTests.swift */; };
 		F10000000000000000000004 /* GlucoseHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F10000000000000000000005 /* GlucoseHistoryView.swift */; };
+		F20000000000000000000001 /* StatusTableViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000002 /* StatusTableViewControllerTests.swift */; };
+		F20000000000000000000004 /* LoopGlucoseHistoryUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20000000000000000000005 /* LoopGlucoseHistoryUITests.swift */; };
 		B583E4B158164B66AF773D16 /* GlucoseHistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1931FCC130DE4FE0A242C715 /* GlucoseHistoryViewModel.swift */; };
 		D18D4F0FC27A49FFB614C753 /* GlucoseHistoryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 042B6F63E758459886E8FC08 /* GlucoseHistoryViewModelTests.swift */; };
 		1419606428D9550400BA86E0 /* LoopKitUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 437AFEE6203688CF008C4892 /* LoopKitUI.framework */; };
@@ -750,6 +752,8 @@
 /* Begin PBXFileReference section */
 		F10000000000000000000002 /* GlucoseHistoryViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseHistoryViewTests.swift; sourceTree = "<group>"; };
 		F10000000000000000000005 /* GlucoseHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseHistoryView.swift; sourceTree = "<group>"; };
+		F20000000000000000000002 /* StatusTableViewControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTableViewControllerTests.swift; sourceTree = "<group>"; };
+		F20000000000000000000005 /* LoopGlucoseHistoryUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopGlucoseHistoryUITests.swift; sourceTree = "<group>"; };
 		042B6F63E758459886E8FC08 /* GlucoseHistoryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseHistoryViewModelTests.swift; sourceTree = "<group>"; };
 		1931FCC130DE4FE0A242C715 /* GlucoseHistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlucoseHistoryViewModel.swift; sourceTree = "<group>"; };
 		142CB7582A60BF2E0075748A /* EditMode.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EditMode.swift; sourceTree = "<group>"; };
@@ -2016,6 +2020,7 @@
 				1DA7A83F24476E8C008257F0 /* Managers */,
 				A9E6DFED246A0460005B1A1C /* Models */,
 				F10000000000000000000003 /* Views */,
+				F20000000000000000000003 /* ViewControllers */,
 				B4BC56362518DE8800373647 /* ViewModels */,
 				43E2D90F1D20C581004DA55F /* Info.plist */,
 				A9DF02CA24F72B9E00B7C988 /* CriticalEventLogTests.swift */,
@@ -2033,6 +2038,14 @@
 				F10000000000000000000002 /* GlucoseHistoryViewTests.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		F20000000000000000000003 /* ViewControllers */ = {
+			isa = PBXGroup;
+			children = (
+				F20000000000000000000002 /* StatusTableViewControllerTests.swift */,
+			);
+			path = ViewControllers;
 			sourceTree = "<group>";
 		};
 		4F70C1DF1DE8DCA7006380B7 /* Loop Status Extension */ = {
@@ -2195,6 +2208,7 @@
 		6D57CB8976CB5648E3EC5898 /* LoopUITests */ = {
 			isa = PBXGroup;
 			children = (
+				F20000000000000000000005 /* LoopGlucoseHistoryUITests.swift */,
 				2954C0A64BFEDA24EB7C3AAF /* LoopCGMSetupUITests.swift */,
 				BFE56EDFE6338E7E6E7AB9FA /* Info.plist */,
 			);
@@ -3722,6 +3736,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F10000000000000000000001 /* GlucoseHistoryViewTests.swift in Sources */,
+				F20000000000000000000001 /* StatusTableViewControllerTests.swift in Sources */,
 				D18D4F0FC27A49FFB614C753 /* GlucoseHistoryViewModelTests.swift in Sources */,
 				A9DF02CB24F72B9E00B7C988 /* CriticalEventLogTests.swift in Sources */,
 				1D80313D24746274002810DF /* AlertStoreTests.swift in Sources */,
@@ -3833,6 +3848,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F20000000000000000000004 /* LoopGlucoseHistoryUITests.swift in Sources */,
 				44132C75615802606CFE7E94 /* LoopCGMSetupUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
