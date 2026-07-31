@@ -1,5 +1,7 @@
 # LinX Broadcast Mode Implementation Plan
 
+> **历史记录：此计划对应已取消的 LinX 广播模式添加方案，不再代表当前添加流程。当前方案见 [LinX 添加流程固定直连设计](../specs/2026-07-31-linx-direct-only-setup-design.md) 和 [LinX 固定直连实施计划](2026-07-31-linx-direct-only-setup.md)。**
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a MicroTech LinX setup choice between direct connection and broadcast data, and let broadcast mode read the latest Aidex/LinX glucose from BLE advertisements without connecting.

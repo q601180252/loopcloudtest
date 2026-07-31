@@ -59,8 +59,8 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, CGMM
             return DismissibleHostingController(content: view, colorPalette: colorPalette)
         } else {
             let view = MicroTechSetupView(
-                didContinue: { [weak self] connectionMode in
-                    self?.completeSetup(connectionMode: connectionMode)
+                didContinue: { [weak self] in
+                    self?.completeSetup()
                 },
                 didCancel: { [weak self] in
                     guard let self = self else {
@@ -78,9 +78,9 @@ class MicroTechUICoordinator: UINavigationController, CGMManagerOnboarding, CGMM
         }
     }
 
-    func completeSetup(connectionMode: MicroTechCGMConnectionMode = .direct) {
+    func completeSetup() {
         let manager = makeCGMManager()
-        manager.configureConnectionMode(connectionMode)
+        manager.configureConnectionMode(.direct)
         configureOnboardingDeviceLogging(on: manager)
         cgmManager = manager
         manager.addStatusObserver(self, queue: .main)

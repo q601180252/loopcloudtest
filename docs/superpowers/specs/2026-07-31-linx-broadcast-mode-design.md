@@ -1,5 +1,7 @@
 # LinX 广播数据模式设计
 
+> **历史记录：此文档描述已取消的 LinX 广播模式添加方案，不再代表当前添加流程。当前方案见 [LinX 添加流程固定直连设计](2026-07-31-linx-direct-only-setup-design.md) 和 [LinX 固定直连实施计划](../plans/2026-07-31-linx-direct-only-setup.md)。**
+
 ## 目标
 
 在 MicroTech LinX 添加 CGM 时，让用户选择数据获取方式：

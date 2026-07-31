@@ -8,13 +8,27 @@
 - 当前已实现首页通用血糖历史页面：任意 CGM 已配置时显示入口，支持 `6 Hours / 12 Hours / 24 Hours`，共用 Loop `GlucoseStore` 的实际血糖曲线和倒序明细，默认显示最近 6 小时；当前手机未配置 CGM，配置后的真机页面验收待完成。
 - 当前 LinX 和血糖历史真机自动化入口为 `LoopUITests` scheme，要求手机已安装 `com.libre.loopkit3.Loop`；Xcode destination 使用 `xcrun xctrace list devices` 查询，`devicectl` 设备标识使用 `xcrun devicectl list devices` 查询，不混用两类标识。
 - 当前完整插件 Debug 包已使用 `LoopWorkspace` scheme 构建并安装，包内已确认包含 `NightscoutRemoteCGMPlugin`、`NightscoutRemoteCGM` 和 `MicroTechCGMPlugin`；禁止使用 `Loop` scheme 生成真机安装包。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 191 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
-- 当前 MicroTech LinX 添加页已支持 `直接连接` 和 `广播数据` 两种方式；广播模式只解析 Aidex 广播中的最新血糖，直连模式保持原有蓝牙连接流程。
-- 当前 LinX 广播模式日志已覆盖扫描开始、发现广播、解析成功、解析失败、接受、拒绝、扫描超时和扫描停止；解析成功和接受日志包含 identifier、name、RSSI、serial、sample、value、trend、status、records 和完整 rawHex；广播扫描先使用 Aidex service UUID 过滤，过滤扫描超时后会自动切到无 service 过滤扫描。
-- 当前 LinX 广播模式会拒绝 `timeOffset < 7` 的未开始或预热数据，以及最新记录中的 `0xFF` 血糖占位值；最新记录有效而后续历史位置为 `0xFF` 时保留最新值；旧版已保存的预热或 `255 mg/dL` 占位血糖会在恢复状态时清除；支持 `LinX`、`AiDEX` 和 `BWCGM` 设备名；无过滤扫描只处理厂商标识 `0x0059` 的广播。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 193 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新完整 App 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
+- 当前 MicroTech LinX 新添加流程固定使用直接连接；添加页不再显示 `直接连接 / 广播数据` 选择，点击搜索后只进入原有蓝牙直连流程。
+- LinX 底层广播解析、状态兼容、诊断日志和测试仍保留，用于历史排障，但新添加页已没有广播入口。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
+
+### 2026-07-31 042 - 修改 LinX 添加流程固定直连
+
+- **任务**：移除 LinX 添加页面的连接方式选择，使所有新添加的 LinX 固定进入直接连接流程。
+- **核心交付**：
+  1. 添加页删除 `直接连接 / 广播数据` 选择，只保留原有说明、搜索和取消操作。
+  2. 添加流程改为无连接方式参数，并在开始扫描前显式设置为 `.direct`。
+  3. 单元测试增加无参数添加动作和强制直连断言；真机 UI 自动化改为断言连接方式控件、`直接连接` 和 `广播数据` 均不存在，搜索按钮仍存在。
+  4. 真机 UI 自动化发现已有 CGM 时明确失败，不再把打开现有 LinX 设置页当作新添加流程通过。
+  5. 底层广播解析、状态兼容、诊断日志和既有测试保留，但不再提供新添加入口。
+  6. 当前说明、排障文档和旧广播设计入口同步区分现行固定直连与历史广播记录。
+- **验证结果**：新增 3 项固定直连测试通过；`MicroTechCGM` 全量 193 项通过、0 失败；`LoopWorkspace` 完整开发签名构建通过；安装包内 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM` 均存在，完整签名检查通过；新版已安装并启动到 iPhone XR，20 秒后主程序仍在运行；移除原有 CGM 后，真机 UI 自动化 1 项通过，确认 LinX 添加页没有连接方式控件、`直接连接` 或 `广播数据`，且搜索按钮存在。测试没有开始扫描或保存新 CGM。
+- **TestFlight**：待完成；尚未触发或确认新的发布结果。
+- **commit hash**：待完成。
+- **push 状态**：待完成。
 
 ### 2026-07-31 041 - 确认 LinX 添加流程固定直连设计
 

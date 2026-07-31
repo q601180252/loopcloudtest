@@ -1376,6 +1376,40 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(receivedMessages.filter { $0 == "stage=scan event=started" }, ["stage=scan event=started"])
     }
 
+    func testSetupViewContinueActionDoesNotExposeConnectionMode() {
+        var didContinue = false
+        let view = MicroTechSetupView(
+            didContinue: { didContinue = true },
+            didCancel: nil
+        )
+
+        view.didContinue?()
+
+        XCTAssertTrue(didContinue)
+    }
+
+    func testSetupCoordinatorExposesParameterlessDirectAction() {
+        var state = MicroTechCGMManagerState()
+        state.connectionMode = .broadcast
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        let coordinator = MicroTechUICoordinator(
+            colorPalette: EnvironmentValues().colorPalette,
+            displayGlucosePreference: DisplayGlucosePreference(displayGlucoseUnit: Self.mgdlUnit),
+            allowDebugFeatures: false,
+            makeCGMManager: { manager }
+        )
+        let completeSetup: () -> Void = coordinator.completeSetup
+
+        completeSetup()
+
+        XCTAssertEqual(manager.state.connectionMode, .direct)
+        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [nil])
+    }
+
     func testBluetoothLogHandlerInstallationAndBufferedCallbackDoNotWaitForManagerStateLock() {
         let bluetoothManager = ReentrantLogHandlerMicroTechBluetoothManager()
         let manager = MicroTechCGMManager(
