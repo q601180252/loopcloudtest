@@ -1,6 +1,11 @@
 import Foundation
 import LoopKit
 
+public enum MicroTechCGMConnectionMode: String, Codable, Equatable {
+    case direct
+    case broadcast
+}
+
 public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
     public typealias RawValue = CGMManager.RawStateValue
 
@@ -13,11 +18,13 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
     public var latestSampleNumber: Int?
     public var hasConnectedSensorSession: Bool
     public var uploadReadings: Bool
+    public var connectionMode: MicroTechCGMConnectionMode
     public var lastConnectionErrorDescription: String?
 
     public init() {
         hasConnectedSensorSession = false
         uploadReadings = false
+        connectionMode = .direct
     }
 
     public init(rawValue: RawValue) {
@@ -35,6 +42,7 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
         latestReading = Self.restoreLatestReading(from: rawValue["latestReading"])
         hasConnectedSensorSession = rawValue["hasConnectedSensorSession"] as? Bool ?? (sensorSerial?.isEmpty == false)
         uploadReadings = rawValue["uploadReadings"] as? Bool ?? false
+        connectionMode = (rawValue["connectionMode"] as? String).flatMap(MicroTechCGMConnectionMode.init(rawValue:)) ?? .direct
         lastConnectionErrorDescription = rawValue["lastConnectionErrorDescription"] as? String
     }
 
@@ -49,6 +57,7 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
         rawValue["latestReading"] = latestReading.map(Self.rawValue(for:))
         rawValue["hasConnectedSensorSession"] = hasConnectedSensorSession
         rawValue["uploadReadings"] = uploadReadings
+        rawValue["connectionMode"] = connectionMode.rawValue
         rawValue["lastConnectionErrorDescription"] = lastConnectionErrorDescription
         return rawValue
     }

@@ -22,6 +22,7 @@ final class MicroTechCGMManagerStateTests: XCTestCase {
         state.latestSampleNumber = 42
         state.hasConnectedSensorSession = true
         state.uploadReadings = true
+        state.connectionMode = .broadcast
         state.lastConnectionErrorDescription = "Bluetooth failed: poweredOff"
 
         let restored = MicroTechCGMManagerState(rawValue: state.rawValue)
@@ -35,6 +36,7 @@ final class MicroTechCGMManagerStateTests: XCTestCase {
         XCTAssertEqual(restored.latestSampleNumber, 42)
         XCTAssertEqual(restored.hasConnectedSensorSession, true)
         XCTAssertEqual(restored.uploadReadings, true)
+        XCTAssertEqual(restored.connectionMode, .broadcast)
         XCTAssertEqual(restored.lastConnectionErrorDescription, "Bluetooth failed: poweredOff")
     }
 
@@ -45,6 +47,16 @@ final class MicroTechCGMManagerStateTests: XCTestCase {
         ])
 
         XCTAssertTrue(restored.hasConnectedSensorSession)
+        XCTAssertEqual(restored.connectionMode, .direct)
+    }
+
+    func testLegacyRawStateDefaultsConnectionModeToDirect() {
+        let restored = MicroTechCGMManagerState(rawValue: [
+            "deviceName": "LinX-ABC123",
+            "connectionMode": "unsupported",
+        ])
+
+        XCTAssertEqual(restored.connectionMode, .direct)
     }
 
     private func makeReading(

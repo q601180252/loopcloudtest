@@ -2,6 +2,65 @@ import XCTest
 @testable import MicroTechCGM
 
 final class MicroTechAidexParserTests: XCTestCase {
+    func testBroadcastParserParsesAdvertisementAndManufacturerPayloads() throws {
+        let advertisingPayload = try Data(microTechHexadecimalString: "02010603021f1817ff590060540100026e80436c80416a80410000f33ee04e1309416944455820582d3232323232374a4b464b08ff590003f9054b360000")
+        let manufacturerData = try Data(microTechHexadecimalString: "590060540100026e80436c80416a80410000f33ee04e")
+        let manufacturerPayload = try Data(microTechHexadecimalString: "60540100026e80436c80416a80410000f33ee04e")
+
+        let fromAdvertisement = try MicroTechAidexBroadcastParser.parseAdvertisementData([
+            "kCBAdvDataManufacturerData": manufacturerData,
+        ])
+        let fromAdvertisingPayload = try MicroTechAidexBroadcastParser.parseAdvertisingPayload(advertisingPayload)
+        let fromManufacturerPayload = try MicroTechAidexBroadcastParser.parseManufacturerPayload(manufacturerPayload)
+
+        for reading in [fromAdvertisement, fromAdvertisingPayload, fromManufacturerPayload] {
+            XCTAssertEqual(reading.timeOffset, 21_600)
+            XCTAssertEqual(reading.status, 1)
+            XCTAssertEqual(reading.calibrationTemperature, 0)
+            XCTAssertEqual(reading.trend, 2)
+            XCTAssertEqual(reading.records, [
+                MicroTechAidexBroadcastRecord(timeOffset: 21_600, glucose: 110, reserved: 0x80, quality: 67),
+                MicroTechAidexBroadcastRecord(timeOffset: 21_599, glucose: 108, reserved: 0x80, quality: 65),
+                MicroTechAidexBroadcastRecord(timeOffset: 21_598, glucose: 106, reserved: 0x80, quality: 65),
+            ])
+            XCTAssertEqual(reading.latestRecord, reading.records.first)
+            XCTAssertEqual(reading.rawManufacturerPayload, manufacturerPayload)
+        }
+    }
+
+    func testBroadcastParserParsesNegativeTrend() throws {
+        let payload = try Data(microTechHexadecimalString: "60540100fe6e80436c80416a80410000f33ee04e")
+
+        let reading = try MicroTechAidexBroadcastParser.parseManufacturerPayload(payload)
+
+        XCTAssertEqual(reading.trend, -2)
+    }
+
+    func testBroadcastParserRejectsInvalidManufacturerData() throws {
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseAdvertisementData([:])) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .missingManufacturerData)
+        }
+
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseAdvertisementData([
+            "kCBAdvDataManufacturerData": Data([0x58, 0x00, 0x60, 0x54, 0x01]),
+        ])) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .wrongCompanyIdentifier)
+        }
+
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(Data([0x60, 0x54, 0x01, 0x00]))) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .payloadTooShort)
+        }
+
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(Data([0x60, 0x54, 0x01, 0x00, 0x02]))) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .noRecords)
+        }
+
+        let invalidGlucose = try Data(microTechHexadecimalString: "6054010002208043")
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(invalidGlucose)) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .invalidGlucose(32))
+        }
+    }
+
     func testCurrentPacket() throws {
         let packet = try Data(microTechHexadecimalString: "010003FF2A007B00D204C409B80B0100003FC5")
         let parsed = try MicroTechAidexParser.parse(packet)
