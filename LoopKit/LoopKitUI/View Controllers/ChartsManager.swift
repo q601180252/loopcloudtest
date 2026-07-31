@@ -197,7 +197,7 @@ open class ChartsManager {
 
         let xAxisValues = ChartAxisValuesStaticGenerator.generateXAxisValuesWithChartPoints(points,
             minSegmentCount: segments - 1,
-            maxSegmentCount: segments + 1,
+            maxSegmentCount: segments + 2,
             multiple: xAxisLabelInterval,
             axisValueGenerator: {
                 ChartAxisValueDate(
