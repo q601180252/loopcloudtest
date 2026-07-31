@@ -41,6 +41,15 @@ final class MicroTechAidexParserTests: XCTestCase {
             XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .missingManufacturerData)
         }
 
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseAdvertisingPayload(Data([
+            0x00,
+            0x16, 0xFF, 0x59, 0x00, 0x60, 0x54, 0x01, 0x00, 0x02,
+            0x6E, 0x80, 0x43, 0x6C, 0x80, 0x41, 0x6A, 0x80, 0x41,
+            0x00, 0x00, 0xF3, 0x3E, 0xE0, 0x4E,
+        ]))) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .missingManufacturerData)
+        }
+
         XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseAdvertisementData([
             "kCBAdvDataManufacturerData": Data([0x58, 0x00, 0x60, 0x54, 0x01]),
         ])) { error in

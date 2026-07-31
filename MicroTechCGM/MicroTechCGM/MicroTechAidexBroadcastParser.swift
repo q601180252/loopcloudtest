@@ -56,8 +56,7 @@ public enum MicroTechAidexBroadcastParser {
         while index < bytes.count {
             let length = Int(bytes[index])
             guard length > 0 else {
-                index += 1
-                continue
+                break
             }
 
             let fieldEnd = index + length + 1
