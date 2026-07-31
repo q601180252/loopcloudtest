@@ -22,8 +22,8 @@
   5. 计划包含 setup/settings 手工验证、真机 BLE 验证、push 重试和 `PROGRESS.md` commit hash / push 状态补写步骤。
 - **验证结果**：计划文件存在且关键内容可读；三块计划审查均通过；`git diff --check` 通过。
 - **决策结论**：按三块实施：状态与广播解析、广播扫描与入库、UI 与最终验证。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`965be30`。
+- **push 状态**：已推送到 `origin/main`，远端 `refs/heads/main` 已核对为 `965be306657b33e949d26f5c4c6ffeb1df97d2da`。
 
 ### 2026-07-31 031 - 明确 LinX 广播数据模式设计
 
