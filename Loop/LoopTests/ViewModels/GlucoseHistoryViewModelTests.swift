@@ -19,6 +19,7 @@ final class GlucoseHistoryViewModelTests: XCTestCase {
     private var glucoseStoreNotificationObject: NSObject!
     private var loader: ControllableGlucoseHistoryLoader!
     private var viewModel: GlucoseHistoryViewModel!
+    private var currentNow: Date!
 
     override func setUp() {
         super.setUp()
@@ -26,11 +27,12 @@ final class GlucoseHistoryViewModelTests: XCTestCase {
         notificationCenter = NotificationCenter()
         glucoseStoreNotificationObject = NSObject()
         loader = ControllableGlucoseHistoryLoader()
+        currentNow = Self.now
         viewModel = GlucoseHistoryViewModel(
             loader: loader.load,
             notificationCenter: notificationCenter,
             glucoseStoreNotificationObject: glucoseStoreNotificationObject,
-            now: { Self.now }
+            now: { [unowned self] in currentNow }
         )
     }
 
@@ -40,6 +42,7 @@ final class GlucoseHistoryViewModelTests: XCTestCase {
         loader = nil
         glucoseStoreNotificationObject = nil
         notificationCenter = nil
+        currentNow = nil
 
         super.tearDown()
     }
@@ -128,6 +131,56 @@ final class GlucoseHistoryViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.chartSamples, samples)
         XCTAssertEqual(Array(viewModel.listSamples.reversed()), viewModel.chartSamples)
+    }
+
+    func testSelectingDifferentRangeClearsOldSamplesAndKeepsThemEmptyAfterFailure() async {
+        let sixHourSample = sample(value: 118, date: Self.now - .hours(2))
+        viewModel.startObserving()
+        loader.completeRequest(at: 0, with: .success([sixHourSample]))
+        await drainMainActor()
+        viewModel.stopObserving()
+        currentNow = Self.now + .hours(3)
+
+        viewModel.selectRange(.twentyFourHours)
+
+        XCTAssertTrue(viewModel.chartSamples.isEmpty)
+        XCTAssertEqual(viewModel.selectedRange, .twentyFourHours)
+        XCTAssertEqual(
+            viewModel.chartDateInterval,
+            DateInterval(start: currentNow - .hours(24), end: currentNow)
+        )
+        XCTAssertEqual(loader.requests.count, 1)
+
+        viewModel.startObserving()
+        loader.completeRequest(
+            at: 1,
+            with: .failure(NSError(domain: "GlucoseHistoryViewModelTests", code: 2))
+        )
+        await drainMainActor()
+
+        XCTAssertTrue(viewModel.chartSamples.isEmpty)
+        XCTAssertNotNil(viewModel.errorDescription)
+    }
+
+    func testFailedRefreshKeepsSamplesAndLastSuccessfulChartEndForSameRange() async {
+        let sample = sample(value: 132, date: Self.now - .hours(1))
+        viewModel.startObserving()
+        loader.completeRequest(at: 0, with: .success([sample]))
+        await drainMainActor()
+        let successfulInterval = DateInterval(start: Self.now - .hours(6), end: Self.now)
+        XCTAssertEqual(viewModel.chartDateInterval, successfulInterval)
+
+        currentNow = Self.now + .hours(2)
+        viewModel.refresh()
+        loader.completeRequest(
+            at: 1,
+            with: .failure(NSError(domain: "GlucoseHistoryViewModelTests", code: 3))
+        )
+        await drainMainActor()
+
+        XCTAssertEqual(viewModel.chartSamples, [sample])
+        XCTAssertEqual(viewModel.chartDateInterval, successfulInterval)
+        XCTAssertNotNil(viewModel.errorDescription)
     }
 
     func testGlucoseChangeAndForegroundEachRefreshCurrentRange() async {

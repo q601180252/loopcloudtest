@@ -160,6 +160,9 @@ final class GlucoseHistoryViewModel: ObservableObject {
 
         selectedRange = range
         chartManager.xAxisLabelInterval = range.xAxisLabelInterval
+        chartSamples = []
+        lastQueryEnd = nil
+        errorDescription = nil
         if isObserving {
             refresh()
         }
@@ -174,7 +177,6 @@ final class GlucoseHistoryViewModel: ObservableObject {
         let generation = requestGeneration
         let end = now()
         let start = end.addingTimeInterval(-selectedRange.duration)
-        lastQueryEnd = end
         isLoading = true
         errorDescription = nil
 
@@ -190,6 +192,7 @@ final class GlucoseHistoryViewModel: ObservableObject {
                 self.isLoading = false
                 switch result {
                 case .success(let samples):
+                    self.lastQueryEnd = end
                     self.chartSamples = samples
                 case .failure(let error):
                     self.errorDescription = error.localizedDescription
