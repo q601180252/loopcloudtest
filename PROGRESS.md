@@ -15,6 +15,22 @@
 
 ## 进展日志
 
+### 2026-07-31 039 - 新增通用血糖历史页面并修复完整插件安装
+
+- **任务**：在 Loop 首页为任意已配置 CGM 增加血糖历史入口，支持查看最近 6、12、24 小时，并解决重新安装后添加 CGM 列表缺少 Nightscout 的问题。
+- **核心交付**：
+  1. 首页在任意 CGM 已配置时显示 `Glucose History` 入口，不限定 MicroTech LinX；CGM 切换后会自动刷新入口。
+  2. 历史页直接读取 Loop `GlucoseStore`，支持 6、12、24 小时三种范围，显示实际血糖曲线和按时间倒序的明细，不显示预测线或模拟数据。
+  3. 图表横轴按范围使用 1、2、4 小时间隔，并严格覆盖所选时间起止点；页面支持新血糖、前台恢复、错误重试和单位变化自动刷新。
+  4. 历史页隐藏首页底部工具栏；真机自动检查使用当前范围专属完成标识，避免把旧范围结果误认为 24 小时结果。
+  5. 真机安装流程改用 `LoopWorkspace` scheme，完整构建并携带 Nightscout、MicroTech 等 CGM 插件。
+  6. `LoopKitTests` 补齐 `LoopKitUI` 依赖，全新 DerivedData 下图表测试不再依赖旧缓存。
+- **验证结果**：全新 DerivedData 下 `ChartsManagerTests` 和 `PredictedGlucoseChartTests` 共 11 项通过、0 失败；历史数据模型、页面和首页入口共 19 项通过、0 失败；MicroTech 全量 191 项通过、0 失败；`LoopUITests` 真机测试包构建通过；`LoopWorkspace` 无签名完整构建和真机签名完整构建均通过；安装包内 `NightscoutRemoteCGMPlugin`、`NightscoutRemoteCGM` 和 `MicroTechCGMPlugin` 均存在，完整签名校验通过；新包已安装并启动到 iPhone XR，20 秒后进程仍存在。真机历史页自动检查未通过，失败点是当前手机没有配置 CGM，因此首页按设计不显示历史入口；未删除或替换用户设备配置。
+- **关键发现**：此前使用 clean DerivedData 和 `Loop` scheme 构建时，只生成主 App，`Install Plugins` 不会补建 Nightscout 插件，导致添加 CGM 列表缺少 Nightscout；源码和插件注册并未删除。
+- **决策结论**：所有真机安装和后续发布使用 `LoopWorkspace` scheme；配置任意 CGM 后均可从首页进入同一历史页。
+- **commit hash**：`ebfa670` 至 `033c76f`。
+- **push 状态**：待合并并推送到 `origin/main`。
+
 ### 2026-07-31 038 - 编写首页血糖历史页面实施计划
 
 - **任务**：把已确认的首页血糖历史页面设计整理成可直接执行和逐步验证的实施计划。
