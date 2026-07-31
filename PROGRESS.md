@@ -24,8 +24,8 @@
 - **验证结果**：新增 fallback 测试先失败，失败点为缺少广播扫描阶段、无过滤扫描参数和 fallback 日志；修复后广播相关 10 个测试通过；`MicroTechCGM` 全量测试两次均在旧日志队列测试出现时序波动，失败项单独和合并复跑通过；`LoopWorkspace` generic iOS 构建通过；`git diff --check` 通过。
 - **关键发现**：当前本地没有这次真机问题的 Loop Report；根因判断来自现象与代码路径比对。
 - **决策结论**：保留直连流程不变；广播模式增加一次无 service 过滤 fallback，解决只广播厂商数据的 LinX 包被系统过滤的问题。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`d553e3b`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-07-31 034 - 补齐 LinX 广播模式诊断日志
 
