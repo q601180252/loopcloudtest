@@ -67,9 +67,7 @@ public enum MicroTechAidexBroadcastParser {
 
             if bytes[index + 1] == 0xFF {
                 let manufacturerData = Data(bytes[(index + 2)..<fieldEnd])
-                if manufacturerData.starts(with: companyIdentifier) {
-                    return try parseManufacturerData(manufacturerData)
-                }
+                return try parseManufacturerData(manufacturerData)
             }
 
             index = fieldEnd

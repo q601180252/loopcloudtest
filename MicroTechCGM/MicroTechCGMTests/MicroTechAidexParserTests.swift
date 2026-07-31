@@ -47,6 +47,12 @@ final class MicroTechAidexParserTests: XCTestCase {
             XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .wrongCompanyIdentifier)
         }
 
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseAdvertisingPayload(Data([
+            0x06, 0xFF, 0x58, 0x00, 0x60, 0x54, 0x01,
+        ]))) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .wrongCompanyIdentifier)
+        }
+
         XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(Data([0x60, 0x54, 0x01, 0x00]))) { error in
             XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .payloadTooShort)
         }
