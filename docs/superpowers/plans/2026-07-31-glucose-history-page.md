@@ -1355,17 +1355,17 @@ Expected: FAIL，原因是 `shouldShowGlucoseHistoryEntry` 尚不存在。
 ```bash
 xcodebuild build \
   -workspace LoopWorkspace.xcworkspace \
-  -scheme Loop \
+  -scheme LoopWorkspace \
   -configuration Debug \
   -destination 'id=00008020-000A64D0229A002E' \
-  -derivedDataPath build/GlucoseHistoryDerivedData \
+  -derivedDataPath build/GlucoseHistoryFullPluginsDerivedData \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   -disableAutomaticPackageResolution
 
 xcrun devicectl device install app \
   --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
-  build/GlucoseHistoryDerivedData/Build/Products/Debug-iphoneos/Loop.app
+  build/GlucoseHistoryFullPluginsDerivedData/Build/Products/Debug-iphoneos/Loop.app
 
 xcodebuild test -quiet \
   -workspace LoopWorkspace.xcworkspace \
@@ -1617,10 +1617,10 @@ Expected: `BUILD SUCCEEDED`。
 ```bash
 xcodebuild build \
   -workspace LoopWorkspace.xcworkspace \
-  -scheme Loop \
+  -scheme LoopWorkspace \
   -configuration Debug \
   -destination 'id=00008020-000A64D0229A002E' \
-  -derivedDataPath build/GlucoseHistoryDerivedData \
+  -derivedDataPath build/GlucoseHistoryFullPluginsDerivedData \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   -disableAutomaticPackageResolution
@@ -1635,7 +1635,7 @@ Expected: `BUILD SUCCEEDED`，生成可安装的 `Loop.app`。
 ```bash
 xcrun devicectl device install app \
   --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
-  build/GlucoseHistoryDerivedData/Build/Products/Debug-iphoneos/Loop.app
+  build/GlucoseHistoryFullPluginsDerivedData/Build/Products/Debug-iphoneos/Loop.app
 
 xcrun devicectl device process launch \
   --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
