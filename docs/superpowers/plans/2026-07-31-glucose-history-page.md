@@ -10,6 +10,12 @@
 
 ---
 
+## 执行状态
+
+本计划的代码、单元测试、构建、完整插件检查、真机安装、文档、合并和推送已完成。当前手机未配置 CGM，因此“使用真实 LinX 数据验收”及配置 CGM 后的真机页面操作仍为待完成；不得写成已通过。
+
+下方复选框保留原始执行计划，不再作为当前状态来源。实际结果以 [PROGRESS.md 第 039 条](../../../PROGRESS.md) 为准，最终页面说明见 [血糖历史页面设计](../specs/2026-07-31-glucose-history-page-design.md)。
+
 ## Chunk 1: 可执行计划
 
 ## 完成标准
@@ -538,7 +544,7 @@ xcodebuild test \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopTests \
   -configuration Debug \
-  -destination 'platform=iOS Simulator,id=EB9BC703-48AF-483D-87CA-A69B4BCFFC1C' \
+  -destination 'platform=iOS Simulator,id=<iOS Simulator ID>' \
   -disableAutomaticPackageResolution \
   -only-testing:LoopTests/GlucoseHistoryViewModelTests \
   MAIN_APP_BUNDLE_IDENTIFIER=com.libre.loopkit3.Loop
@@ -746,7 +752,7 @@ xcodebuild test \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopTests \
   -configuration Debug \
-  -destination 'platform=iOS Simulator,id=EB9BC703-48AF-483D-87CA-A69B4BCFFC1C' \
+  -destination 'platform=iOS Simulator,id=<iOS Simulator ID>' \
   -disableAutomaticPackageResolution \
   -only-testing:LoopTests/GlucoseHistoryViewModelTests \
   MAIN_APP_BUNDLE_IDENTIFIER=com.libre.loopkit3.Loop
@@ -957,7 +963,7 @@ xcodebuild test \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopTests \
   -configuration Debug \
-  -destination 'platform=iOS Simulator,id=EB9BC703-48AF-483D-87CA-A69B4BCFFC1C' \
+  -destination 'platform=iOS Simulator,id=<iOS Simulator ID>' \
   -disableAutomaticPackageResolution \
   -only-testing:LoopTests/GlucoseHistoryViewTests \
   MAIN_APP_BUNDLE_IDENTIFIER=com.libre.loopkit3.Loop
@@ -1342,7 +1348,7 @@ xcodebuild test \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopTests \
   -configuration Debug \
-  -destination 'platform=iOS Simulator,id=EB9BC703-48AF-483D-87CA-A69B4BCFFC1C' \
+  -destination 'platform=iOS Simulator,id=<iOS Simulator ID>' \
   -disableAutomaticPackageResolution \
   -only-testing:LoopTests/StatusTableViewControllerTests \
   MAIN_APP_BUNDLE_IDENTIFIER=com.libre.loopkit3.Loop
@@ -1357,21 +1363,21 @@ xcodebuild build \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopWorkspace \
   -configuration Debug \
-  -destination 'id=00008020-000A64D0229A002E' \
+  -destination 'id=<Xcode destination ID>' \
   -derivedDataPath build/GlucoseHistoryFullPluginsDerivedData \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   -disableAutomaticPackageResolution
 
 xcrun devicectl device install app \
-  --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
+  --device '<devicectl device identifier>' \
   build/GlucoseHistoryFullPluginsDerivedData/Build/Products/Debug-iphoneos/Loop.app
 
 xcodebuild test -quiet \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopUITests \
   -configuration Debug \
-  -destination 'id=00008020-000A64D0229A002E' \
+  -destination 'id=<Xcode destination ID>' \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
   -disableAutomaticPackageResolution \
@@ -1575,7 +1581,7 @@ xcodebuild test \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopTests \
   -configuration Debug \
-  -destination 'platform=iOS Simulator,id=EB9BC703-48AF-483D-87CA-A69B4BCFFC1C' \
+  -destination 'platform=iOS Simulator,id=<iOS Simulator ID>' \
   -disableAutomaticPackageResolution \
   -only-testing:LoopTests/GlucoseHistoryViewModelTests \
   -only-testing:LoopTests/GlucoseHistoryViewTests \
@@ -1619,7 +1625,7 @@ xcodebuild build \
   -workspace LoopWorkspace.xcworkspace \
   -scheme LoopWorkspace \
   -configuration Debug \
-  -destination 'id=00008020-000A64D0229A002E' \
+  -destination 'id=<Xcode destination ID>' \
   -derivedDataPath build/GlucoseHistoryFullPluginsDerivedData \
   -allowProvisioningUpdates \
   -allowProvisioningDeviceRegistration \
@@ -1634,17 +1640,17 @@ Expected: `BUILD SUCCEEDED`，生成可安装的 `Loop.app`。
 
 ```bash
 xcrun devicectl device install app \
-  --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
+  --device '<devicectl device identifier>' \
   build/GlucoseHistoryFullPluginsDerivedData/Build/Products/Debug-iphoneos/Loop.app
 
 xcrun devicectl device process launch \
-  --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
+  --device '<devicectl device identifier>' \
   --terminate-existing \
   com.libre.loopkit3.Loop
 
 sleep 20
 xcrun devicectl device info processes \
-  --device E30C92D5-FE26-5AE1-B5FB-C787E4401F4F \
+  --device '<devicectl device identifier>' \
   | rg '/Loop.app/Loop|com.libre.loopkit3.Loop'
 ```
 

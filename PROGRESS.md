@@ -5,15 +5,28 @@
 - 已安装本项目 AI 开发规则入口：`AGENTS.md`。
 - 已保留通用规则来源文档：`docs/通用开发规则模板.md`。
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
-- 当前已确认首页血糖历史页面设计：入口位于首页状态区下方、现有曲线上方，页面使用 `6 Hours / 12 Hours / 24 Hours` 三个 Tab，共用 Loop `GlucoseStore` 的曲线和倒序明细，默认显示最近 6 小时。
-- 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
-- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 170 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
+- 当前已实现首页通用血糖历史页面：任意 CGM 已配置时显示入口，支持 `6 Hours / 12 Hours / 24 Hours`，共用 Loop `GlucoseStore` 的实际血糖曲线和倒序明细，默认显示最近 6 小时；当前手机未配置 CGM，配置后的真机页面验收待完成。
+- 当前 LinX 和血糖历史真机自动化入口为 `LoopUITests` scheme，要求手机已安装 `com.libre.loopkit3.Loop`；Xcode destination 使用 `xcrun xctrace list devices` 查询，`devicectl` 设备标识使用 `xcrun devicectl list devices` 查询，不混用两类标识。
+- 当前完整插件 Debug 包已使用 `LoopWorkspace` scheme 构建并安装，包内已确认包含 `NightscoutRemoteCGMPlugin`、`NightscoutRemoteCGM` 和 `MicroTechCGMPlugin`；禁止使用 `Loop` scheme 生成真机安装包。
+- 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 191 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 当前 MicroTech LinX 添加页已支持 `直接连接` 和 `广播数据` 两种方式；广播模式只解析 Aidex 广播中的最新血糖，直连模式保持原有蓝牙连接流程。
 - 当前 LinX 广播模式日志已覆盖扫描开始、发现广播、解析成功、解析失败、接受、拒绝、扫描超时和扫描停止；解析成功和接受日志包含 identifier、name、RSSI、serial、sample、value、trend、status、records 和完整 rawHex；广播扫描先使用 Aidex service UUID 过滤，过滤扫描超时后会自动切到无 service 过滤扫描。
 - 当前 LinX 广播模式会拒绝 `timeOffset < 7` 的未开始或预热数据，以及最新记录中的 `0xFF` 血糖占位值；最新记录有效而后续历史位置为 `0xFF` 时保留最新值；旧版已保存的预热或 `255 mg/dL` 占位血糖会在恢复状态时清除；支持 `LinX`、`AiDEX` 和 `BWCGM` 设备名；无过滤扫描只处理厂商标识 `0x0059` 的广播。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
+
+### 2026-07-31 040 - 整理血糖历史与 Nightscout 文档
+
+- **任务**：整理本仓库定制功能、血糖历史页面状态和 Nightscout 完整插件构建说明，形成可重复使用的文档入口。
+- **核心交付**：
+  1. `README.md` 增加本仓库定制功能和文档导航，并明确完整 App 使用 `LoopWorkspace` scheme。
+  2. 血糖历史设计和实施计划标明已完成内容，以及真实 CGM 真机页面验收仍待完成的边界。
+  3. `docs/工具与踩坑.md` 增加快速导航和 Nightscout 完整构建、插件检查、签名、安装及启动命令。
+  4. Nightscout 子项目 README 增加统一排障文档入口；可执行命令中的开发团队、设备标识和本机路径改为变量或仓库相对路径。
+- **验证结果**：文档目标和相对链接已检查；`git diff --check` 通过。
+- **commit hash**：待本次提交。
+- **push 状态**：待推送。
 
 ### 2026-07-31 039 - 新增通用血糖历史页面并修复完整插件安装
 
@@ -28,8 +41,8 @@
 - **验证结果**：全新 DerivedData 下 `ChartsManagerTests` 和 `PredictedGlucoseChartTests` 共 11 项通过、0 失败；历史数据模型、页面和首页入口共 19 项通过、0 失败；MicroTech 全量 191 项通过、0 失败；`LoopUITests` 真机测试包构建通过；`LoopWorkspace` 无签名完整构建和真机签名完整构建均通过；安装包内 `NightscoutRemoteCGMPlugin`、`NightscoutRemoteCGM` 和 `MicroTechCGMPlugin` 均存在，完整签名校验通过；新包已安装并启动到 iPhone XR，20 秒后进程仍存在。真机历史页自动检查未通过，失败点是当前手机没有配置 CGM，因此首页按设计不显示历史入口；未删除或替换用户设备配置。
 - **关键发现**：此前使用 clean DerivedData 和 `Loop` scheme 构建时，只生成主 App，`Install Plugins` 不会补建 Nightscout 插件，导致添加 CGM 列表缺少 Nightscout；源码和插件注册并未删除。
 - **决策结论**：所有真机安装和后续发布使用 `LoopWorkspace` scheme；配置任意 CGM 后均可从首页进入同一历史页。
-- **commit hash**：`ebfa670` 至 `033c76f`。
-- **push 状态**：已推送到 `origin/main`，远端已包含 `c3b429d`。
+- **commit hash**：`ebfa670` 至 `c3b429d`。
+- **push 状态**：已推送到 `origin/main`，远端状态提交为 `e518b51`。
 
 ### 2026-07-31 038 - 编写首页血糖历史页面实施计划
 
