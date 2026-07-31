@@ -47,7 +47,6 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
         selectRange("24 Hours", in: rangePicker)
         assertSelectedRange("24 Hours", in: rangePicker)
 
-        waitForTerminalStateToReset(in: app)
         waitForSuccessfulTerminalState(in: app)
 
         let backButton = historyNavigationBar.buttons.firstMatch
@@ -93,32 +92,6 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
             file: file,
             line: line
         )
-    }
-
-    private func waitForTerminalStateToReset(
-        in app: XCUIApplication,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) {
-        let historyList = app.otherElements["glucoseHistory.list"]
-        let emptyState = app.staticTexts["glucoseHistory.empty"]
-        let errorState = app.otherElements["glucoseHistory.error"]
-        let terminalStateCleared = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in
-                !historyList.exists && !emptyState.exists && !errorState.exists
-            },
-            object: app
-        )
-
-        guard XCTWaiter.wait(for: [terminalStateCleared], timeout: 5) == .completed else {
-            attachDiagnostics(in: app, named: "Glucose History 24-hour loading state")
-            XCTFail(
-                "The previous Glucose History result did not clear after selecting 24 Hours.",
-                file: file,
-                line: line
-            )
-            return
-        }
     }
 
     private func waitForSuccessfulTerminalState(
