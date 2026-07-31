@@ -11,6 +11,20 @@
 
 ## 进展日志
 
+### 2026-07-31 032 - 完成 LinX 广播数据模式实施计划
+
+- **任务**：将已确认的 LinX 广播数据模式设计拆分为可执行、可验证的实施步骤。
+- **核心交付**：
+  1. `docs/superpowers/plans/2026-07-31-linx-broadcast-mode.md`：明确新增直连 / 广播数据选择、状态保存、广播 parser、独立广播扫描、广播入库、设置页显示、验证和提交顺序。
+  2. 计划要求新增 `MicroTechAidexBroadcastParser`，并覆盖 CoreBluetooth 广播字典、完整 advertising payload、manufacturer payload、负数 trend、原始厂商 payload 保留和异常拒绝。
+  3. 计划要求广播模式在 Bluetooth manager 初始化时加载已保存模式，并验证不会调用恢复外设、已连接外设、连接事件注册或 `connect`。
+  4. 计划将广播相关测试拆到独立测试文件，避免继续扩大现有 `MicroTechCGMManagerTests.swift`。
+  5. 计划包含 setup/settings 手工验证、真机 BLE 验证、push 重试和 `PROGRESS.md` commit hash / push 状态补写步骤。
+- **验证结果**：计划文件存在且关键内容可读；三块计划审查均通过；`git diff --check` 通过。
+- **决策结论**：按三块实施：状态与广播解析、广播扫描与入库、UI 与最终验证。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
+
 ### 2026-07-31 031 - 明确 LinX 广播数据模式设计
 
 - **任务**：在添加 MicroTech LinX CGM 时增加“直接连接 / 广播数据”选择，并确认广播模式作为最新血糖来源的设计边界。
