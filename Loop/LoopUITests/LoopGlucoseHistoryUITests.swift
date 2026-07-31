@@ -36,6 +36,10 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
             rangePicker.waitForExistence(timeout: 15),
             "Glucose History range picker was not visible."
         )
+        XCTAssertTrue(
+            app.otherElements["glucoseHistory.chart"].waitForExistence(timeout: 15),
+            "Glucose History chart was not visible."
+        )
 
         assertSelectedRange("6 Hours", in: rangePicker)
         selectRange("12 Hours", in: rangePicker)
@@ -43,15 +47,8 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
         selectRange("24 Hours", in: rangePicker)
         assertSelectedRange("24 Hours", in: rangePicker)
 
-        XCTAssertFalse(
-            app.otherElements["glucoseHistory.error"].exists,
-            "Glucose History showed an error state."
-        )
-        XCTAssertTrue(
-            app.otherElements["glucoseHistory.chart"].exists ||
-                app.staticTexts["glucoseHistory.empty"].exists,
-            "Glucose History showed neither a chart nor an empty state."
-        )
+        waitForTerminalStateToReset(in: app)
+        waitForSuccessfulTerminalState(in: app)
 
         let backButton = historyNavigationBar.buttons.firstMatch
         tap(backButton, named: "Glucose History back button", in: app)
@@ -93,6 +90,75 @@ final class LoopGlucoseHistoryUITests: XCTestCase {
         XCTAssertTrue(
             button.isSelected,
             "\(title) range was not selected.",
+            file: file,
+            line: line
+        )
+    }
+
+    private func waitForTerminalStateToReset(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let historyList = app.otherElements["glucoseHistory.list"]
+        let emptyState = app.staticTexts["glucoseHistory.empty"]
+        let errorState = app.otherElements["glucoseHistory.error"]
+        let terminalStateCleared = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                !historyList.exists && !emptyState.exists && !errorState.exists
+            },
+            object: app
+        )
+
+        guard XCTWaiter.wait(for: [terminalStateCleared], timeout: 5) == .completed else {
+            attachDiagnostics(in: app, named: "Glucose History 24-hour loading state")
+            XCTFail(
+                "The previous Glucose History result did not clear after selecting 24 Hours.",
+                file: file,
+                line: line
+            )
+            return
+        }
+    }
+
+    private func waitForSuccessfulTerminalState(
+        in app: XCUIApplication,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let historyList = app.otherElements["glucoseHistory.list"]
+        let emptyState = app.staticTexts["glucoseHistory.empty"]
+        let errorState = app.otherElements["glucoseHistory.error"]
+        let terminalStateReached = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in
+                historyList.exists || emptyState.exists || errorState.exists
+            },
+            object: app
+        )
+
+        guard XCTWaiter.wait(for: [terminalStateReached], timeout: 15) == .completed else {
+            attachDiagnostics(in: app, named: "Glucose History 24-hour terminal state")
+            XCTFail(
+                "The 24-hour Glucose History request did not finish.",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        if errorState.exists {
+            attachDiagnostics(in: app, named: "Glucose History 24-hour error state")
+            XCTFail(
+                "The 24-hour Glucose History request finished with an error.",
+                file: file,
+                line: line
+            )
+            return
+        }
+
+        XCTAssertTrue(
+            historyList.exists || emptyState.exists,
+            "The 24-hour Glucose History request did not show readings or an empty state.",
             file: file,
             line: line
         )
