@@ -30,8 +30,11 @@ open class ChartsManager {
         settings: ChartSettings,
         axisLabelFont: UIFont = .systemFont(ofSize: 14), // caption1, but hard-coded until axis can scale with type preference
         charts: [ChartProviding],
-        traitCollection: UITraitCollection
+        traitCollection: UITraitCollection,
+        xAxisLabelInterval: TimeInterval = 60 * 60
     ) {
+        precondition(xAxisLabelInterval > 0)
+        self.xAxisLabelInterval = xAxisLabelInterval
         self.colors = colors
         self.chartSettings = settings
         self.charts = charts
@@ -44,6 +47,15 @@ open class ChartsManager {
     }
 
     // MARK: - Configuration
+
+    public var xAxisLabelInterval: TimeInterval {
+        didSet {
+            precondition(xAxisLabelInterval > 0)
+            if xAxisLabelInterval != oldValue {
+                xAxisValues = nil
+            }
+        }
+    }
 
     private let colors: ChartColorPalette
 
@@ -129,7 +141,7 @@ open class ChartsManager {
 
     // MARK: - State
 
-    private var xAxisValues: [ChartAxisValue]? {
+    internal private(set) var xAxisValues: [ChartAxisValue]? {
         didSet {
             if let xAxisValues = xAxisValues, xAxisValues.count > 1 {
                 xAxisModel = ChartAxisModel(axisValues: xAxisValues, lineColor: colors.axisLine, labelSpaceReservationMode: .fixed(20))
@@ -181,12 +193,12 @@ open class ChartsManager {
             )
         ]
 
-        let segments = ceil(endDate.timeIntervalSince(startDate).hours)
+        let segments = ceil(endDate.timeIntervalSince(startDate) / xAxisLabelInterval)
 
         let xAxisValues = ChartAxisValuesStaticGenerator.generateXAxisValuesWithChartPoints(points,
             minSegmentCount: segments - 1,
             maxSegmentCount: segments + 1,
-            multiple: TimeInterval(hours: 1),
+            multiple: xAxisLabelInterval,
             axisValueGenerator: {
                 ChartAxisValueDate(
                     date: ChartAxisValueDate.dateFromScalar($0),

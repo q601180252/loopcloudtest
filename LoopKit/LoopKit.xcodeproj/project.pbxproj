@@ -549,6 +549,7 @@
 		A9D3FF142A6C1A01000C891D /* ChartPointsScatterDownTrianglesLayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D3FF132A6C1A01000C891D /* ChartPointsScatterDownTrianglesLayer.swift */; };
 		A9D3FF162A6C1A16000C891D /* ChartPointsTouchHighlightLayerViewCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D3FF152A6C1A16000C891D /* ChartPointsTouchHighlightLayerViewCache.swift */; };
 		A9D3FF192A6C2C85000C891D /* PredictedGlucoseChartTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D3FF182A6C2C85000C891D /* PredictedGlucoseChartTests.swift */; };
+		4C8F101A2E91A70000E6A451 /* ChartsManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C8F101B2E91A70000E6A451 /* ChartsManagerTests.swift */; };
 		A9D3FF1B2A6C2CA9000C891D /* ChartAxisValuesStaticGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9D3FF1A2A6C2CA9000C891D /* ChartAxisValuesStaticGeneratorTests.swift */; };
 		A9D3FF1D2A6C307E000C891D /* SwiftCharts in Frameworks */ = {isa = PBXBuildFile; productRef = A9D3FF1C2A6C307E000C891D /* SwiftCharts */; };
 		A9D3FF1F2A6C307E000C891D /* SwiftCharts in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A9D3FF1C2A6C307E000C891D /* SwiftCharts */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
@@ -1594,6 +1595,7 @@
 		A9D3FF132A6C1A01000C891D /* ChartPointsScatterDownTrianglesLayer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChartPointsScatterDownTrianglesLayer.swift; sourceTree = "<group>"; };
 		A9D3FF152A6C1A16000C891D /* ChartPointsTouchHighlightLayerViewCache.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChartPointsTouchHighlightLayerViewCache.swift; sourceTree = "<group>"; };
 		A9D3FF182A6C2C85000C891D /* PredictedGlucoseChartTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PredictedGlucoseChartTests.swift; sourceTree = "<group>"; };
+		4C8F101B2E91A70000E6A451 /* ChartsManagerTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChartsManagerTests.swift; sourceTree = "<group>"; };
 		A9D3FF1A2A6C2CA9000C891D /* ChartAxisValuesStaticGeneratorTests.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ChartAxisValuesStaticGeneratorTests.swift; sourceTree = "<group>"; };
 		A9DCF2C925B0F38000C89088 /* LoopUIColorPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoopUIColorPalette.swift; sourceTree = "<group>"; };
 		A9DF02C224F6EEE400B7C988 /* DeviceLogEntryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceLogEntryTests.swift; sourceTree = "<group>"; };
@@ -2905,6 +2907,7 @@
 			isa = PBXGroup;
 			children = (
 				A9D3FF1A2A6C2CA9000C891D /* ChartAxisValuesStaticGeneratorTests.swift */,
+				4C8F101B2E91A70000E6A451 /* ChartsManagerTests.swift */,
 				A9D3FF182A6C2C85000C891D /* PredictedGlucoseChartTests.swift */,
 			);
 			path = Charts;
@@ -4303,6 +4306,7 @@
 				A95A1D892460F8930079378D /* PumpManagerStatusTests.swift in Sources */,
 				B4CEE2A5256E912A0093111B /* DoseProgressTests.swift in Sources */,
 				A9D3FF1B2A6C2CA9000C891D /* ChartAxisValuesStaticGeneratorTests.swift in Sources */,
+				4C8F101A2E91A70000E6A451 /* ChartsManagerTests.swift in Sources */,
 				A963B278252CE2510062AA12 /* StoredCarbEntryTests.swift in Sources */,
 				B46E096D25F80D6C0025A04D /* OverrideTests.swift in Sources */,
 				A95A1D8D246101760079378D /* DoseEntryTests.swift in Sources */,
