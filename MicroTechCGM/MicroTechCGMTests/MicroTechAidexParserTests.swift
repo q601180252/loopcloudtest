@@ -76,6 +76,40 @@ final class MicroTechAidexParserTests: XCTestCase {
         }
     }
 
+    func testBroadcastParserRejectsNotStartedAllFFPayloadFromDeviceLog() throws {
+        let payload = try Data(microTechHexadecimalString: "0000010300FFFFFFFFFFFFFFFFFFFFFFED99C18B")
+
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(payload)) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .sensorNotReady(0))
+        }
+    }
+
+    func testBroadcastParserRejectsLastWarmupMinute() throws {
+        let payload = try Data(microTechHexadecimalString: "0600010300648043")
+
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(payload)) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .sensorNotReady(6))
+        }
+    }
+
+    func testBroadcastParserRejectsFFGlucosePlaceholderAfterWarmup() throws {
+        let payload = try Data(microTechHexadecimalString: "0700010300FFFFFFFFFFFFFFFFFFFFFFED99C18B")
+
+        XCTAssertThrowsError(try MicroTechAidexBroadcastParser.parseManufacturerPayload(payload)) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .invalidGlucose(255))
+        }
+    }
+
+    func testBroadcastParserKeepsLatestValidRecordBeforeFFHistoryPlaceholders() throws {
+        let payload = try Data(microTechHexadecimalString: "0700010300648043FFFFFFFFFFFF")
+
+        let reading = try MicroTechAidexBroadcastParser.parseManufacturerPayload(payload)
+
+        XCTAssertEqual(reading.records, [
+            MicroTechAidexBroadcastRecord(timeOffset: 7, glucose: 100, reserved: 0x80, quality: 67),
+        ])
+    }
+
     func testCurrentPacket() throws {
         let packet = try Data(microTechHexadecimalString: "010003FF2A007B00D204C409B80B0100003FC5")
         let parsed = try MicroTechAidexParser.parse(packet)

@@ -677,6 +677,16 @@ public final class MicroTechBluetoothManager: NSObject {
         }
     }
 
+    static func isMicroTechBroadcastAdvertisement(_ advertisementData: [String: Any]) -> Bool {
+        guard let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data,
+              manufacturerData.count >= 2
+        else {
+            return false
+        }
+        return manufacturerData[manufacturerData.startIndex] == 0x59 &&
+            manufacturerData[manufacturerData.index(after: manufacturerData.startIndex)] == 0x00
+    }
+
     static func discoveryLogMessages(
         connectionMode: MicroTechCGMConnectionMode,
         identifier: UUID,
@@ -948,6 +958,11 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
         rssi RSSI: NSNumber
     ) {
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        if connectionMode == .broadcast,
+           !Self.isMicroTechBroadcastAdvertisement(advertisementData)
+        {
+            return
+        }
         for message in Self.discoveryLogMessages(
             connectionMode: connectionMode,
             identifier: peripheral.identifier,

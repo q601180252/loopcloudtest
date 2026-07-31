@@ -78,6 +78,51 @@ final class MicroTechBroadcastModeTests: XCTestCase {
         XCTAssertEqual(manager.state.latestSampleNumber, 21600)
     }
 
+    func testBroadcastNotStartedAllFFAdvertisementDoesNotChangeState() throws {
+        var state = MicroTechCGMManagerState()
+        state.connectionMode = .broadcast
+        let manager = MicroTechCGMManager(state: state)
+        let rawManufacturerData = try Data(
+            microTechHexadecimalString: "59000000010300FFFFFFFFFFFFFFFFFFFFFFED99C18B"
+        )
+
+        XCTAssertThrowsError(try manager.acceptBroadcastAdvertisement(
+            advertisement(
+                localName: "AiDEX X-22222EDQC5",
+                manufacturerData: rawManufacturerData
+            )
+        )) { error in
+            XCTAssertEqual(error as? MicroTechAidexBroadcastParserError, .sensorNotReady(0))
+        }
+        XCTAssertNil(manager.state.latestReading)
+        XCTAssertNil(manager.state.latestSampleNumber)
+        XCTAssertNil(manager.state.sensorSerial)
+        XCTAssertFalse(manager.state.hasConnectedSensorSession)
+    }
+
+    func testBroadcastAcceptsBWCGMAdvertisementFromDeviceLog() throws {
+        var state = MicroTechCGMManagerState()
+        state.connectionMode = .broadcast
+        let manager = MicroTechCGMManager(state: state)
+        let rawManufacturerData = try Data(
+            microTechHexadecimalString: "590042540000EB98804C9B804CA0804A000072034DFD"
+        )
+
+        let sample = try manager.acceptBroadcastAdvertisement(
+            advertisement(
+                identifier: UUID(uuidString: "4B49D6EC-AE70-0F1D-9770-04C59A30FCC3")!,
+                localName: "BWCGM-22222BGWQD",
+                manufacturerData: rawManufacturerData
+            )
+        )
+
+        XCTAssertNotNil(sample)
+        XCTAssertEqual(manager.state.sensorSerial, "22222BGWQD")
+        XCTAssertEqual(manager.state.latestSampleNumber, 21_570)
+        XCTAssertEqual(manager.state.latestReading?.glucoseMgdl, 152)
+        XCTAssertEqual(manager.state.latestReading?.quality, 76)
+    }
+
     func testBroadcastAdvertisementLogsParsedAndAcceptedEvents() throws {
         var state = MicroTechCGMManagerState()
         state.connectionMode = .broadcast
@@ -164,14 +209,17 @@ final class MicroTechBroadcastModeTests: XCTestCase {
     private func advertisement(
         identifier: UUID = UUID(),
         localName: String?,
-        discoveredAt: Date = Date(timeIntervalSince1970: 1_800_000_000)
+        discoveredAt: Date = Date(timeIntervalSince1970: 1_800_000_000),
+        manufacturerData: Data = try! Data(
+            microTechHexadecimalString: "590060540100026e80436c80416a80410000f33ee04e"
+        )
     ) -> MicroTechBroadcastAdvertisement {
         MicroTechBroadcastAdvertisement(
             identifier: identifier,
             localName: localName,
             peripheralName: nil as String?,
             advertisementData: [
-                CBAdvertisementDataManufacturerDataKey: try! Data(microTechHexadecimalString: "590060540100026e80436c80416a80410000f33ee04e"),
+                CBAdvertisementDataManufacturerDataKey: manufacturerData,
             ],
             rssi: -60,
             discoveredAt: discoveredAt

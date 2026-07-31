@@ -359,6 +359,16 @@ final class MicroTechCGMManagerTests: XCTestCase {
         )
     }
 
+    func testBroadcastPostFilterOnlyForwardsMicroTechManufacturerData() {
+        XCTAssertTrue(MicroTechBluetoothManager.isMicroTechBroadcastAdvertisement([
+            CBAdvertisementDataManufacturerDataKey: Data([0x59, 0x00, 0x42, 0x54]),
+        ]))
+        XCTAssertFalse(MicroTechBluetoothManager.isMicroTechBroadcastAdvertisement([
+            CBAdvertisementDataManufacturerDataKey: Data([0xAA, 0x55]),
+        ]))
+        XCTAssertFalse(MicroTechBluetoothManager.isMicroTechBroadcastAdvertisement([:]))
+    }
+
     func testConnectionLifecycleLogsAttemptedSucceededFailedTimeoutAndDisconnected() {
         let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         let error = NSError(

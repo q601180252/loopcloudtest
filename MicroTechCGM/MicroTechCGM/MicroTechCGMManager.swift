@@ -1169,7 +1169,8 @@ public final class MicroTechCGMManager: CGMManager {
 
     private static func advertisedSensorSerial(from deviceName: String) -> String? {
         guard deviceName.localizedCaseInsensitiveContains("LinX") ||
-            deviceName.localizedCaseInsensitiveContains("AiDEX")
+            deviceName.localizedCaseInsensitiveContains("AiDEX") ||
+            deviceName.localizedCaseInsensitiveContains("BWCGM")
         else {
             return nil
         }

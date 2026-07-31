@@ -44,6 +44,14 @@ public struct MicroTechCGMManagerState: RawRepresentable, Equatable {
         uploadReadings = rawValue["uploadReadings"] as? Bool ?? false
         connectionMode = (rawValue["connectionMode"] as? String).flatMap(MicroTechCGMConnectionMode.init(rawValue:)) ?? .direct
         lastConnectionErrorDescription = rawValue["lastConnectionErrorDescription"] as? String
+
+        if connectionMode == .broadcast,
+           (latestSampleNumber.map { $0 < 7 } ?? false) || latestReading?.glucoseMgdl == 0xFF
+        {
+            lastReadingDate = nil
+            latestSampleNumber = nil
+            latestReading = nil
+        }
     }
 
     public var rawValue: RawValue {

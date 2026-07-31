@@ -103,7 +103,8 @@ final class MicroTechGattLogQueue {
     typealias Handler = (String, MicroTechBluetoothLogType) -> Void
 
     private let queue: DispatchQueue
-    private let queueSpecificKey = DispatchSpecificKey<Bool>()
+    private let queueSpecificKey = DispatchSpecificKey<UUID>()
+    private let queueIdentity = UUID()
     private let preHandlerBufferCapacity: Int
     private var storedHandler: Handler?
     private var preHandlerEntries: [MicroTechGattLogEntry] = []
@@ -117,7 +118,7 @@ final class MicroTechGattLogQueue {
     init(label: String, preHandlerBufferCapacity: Int = 256) {
         queue = DispatchQueue(label: label)
         self.preHandlerBufferCapacity = max(0, preHandlerBufferCapacity)
-        queue.setSpecific(key: queueSpecificKey, value: true)
+        queue.setSpecific(key: queueSpecificKey, value: queueIdentity)
     }
 
     var handler: Handler? {
@@ -189,7 +190,7 @@ final class MicroTechGattLogQueue {
     }
 
     private func syncOnQueue<Value>(_ work: () -> Value) -> Value {
-        if DispatchQueue.getSpecific(key: queueSpecificKey) == true {
+        if DispatchQueue.getSpecific(key: queueSpecificKey) == queueIdentity {
             return work()
         }
         return queue.sync(execute: work)

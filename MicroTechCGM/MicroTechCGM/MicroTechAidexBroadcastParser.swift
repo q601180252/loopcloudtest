@@ -32,6 +32,7 @@ public enum MicroTechAidexBroadcastParserError: Error, Equatable {
     case wrongCompanyIdentifier
     case payloadTooShort
     case noRecords
+    case sensorNotReady(UInt16)
     case invalidGlucose(Int)
 }
 
@@ -40,6 +41,7 @@ public enum MicroTechAidexBroadcastParser {
     private static let headerLength = 5
     private static let recordLength = 3
     private static let maximumRecordCount = 3
+    private static let warmupMinutes: UInt16 = 7
 
     public static func parseAdvertisementData(_ advertisementData: [String: Any]) throws -> MicroTechAidexBroadcastReading {
         guard let manufacturerData = advertisementData["kCBAdvDataManufacturerData"] as? Data else {
@@ -82,6 +84,9 @@ public enum MicroTechAidexBroadcastParser {
         }
 
         let timeOffset = UInt16(bytes[0]) | UInt16(bytes[1]) << 8
+        guard timeOffset >= warmupMinutes else {
+            throw MicroTechAidexBroadcastParserError.sensorNotReady(timeOffset)
+        }
         let recordByteCount = bytes.count - headerLength
         let recordCount = min(recordByteCount / recordLength, maximumRecordCount)
         guard recordCount > 0 else {
@@ -92,6 +97,12 @@ public enum MicroTechAidexBroadcastParser {
         for index in 0..<recordCount {
             let recordStart = headerLength + index * recordLength
             let glucose = Int(bytes[recordStart])
+            if glucose == 0xFF {
+                guard index > 0 else {
+                    throw MicroTechAidexBroadcastParserError.invalidGlucose(glucose)
+                }
+                break
+            }
             guard (40...400).contains(glucose) else {
                 throw MicroTechAidexBroadcastParserError.invalidGlucose(glucose)
             }

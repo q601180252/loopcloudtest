@@ -9,9 +9,28 @@
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 170 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 当前 MicroTech LinX 添加页已支持 `直接连接` 和 `广播数据` 两种方式；广播模式只解析 Aidex 广播中的最新血糖，直连模式保持原有蓝牙连接流程。
 - 当前 LinX 广播模式日志已覆盖扫描开始、发现广播、解析成功、解析失败、接受、拒绝、扫描超时和扫描停止；解析成功和接受日志包含 identifier、name、RSSI、serial、sample、value、trend、status、records 和完整 rawHex；广播扫描先使用 Aidex service UUID 过滤，过滤扫描超时后会自动切到无 service 过滤扫描。
+- 当前 LinX 广播模式会拒绝 `timeOffset < 7` 的未开始或预热数据，以及最新记录中的 `0xFF` 血糖占位值；最新记录有效而后续历史位置为 `0xFF` 时保留最新值；旧版已保存的预热或 `255 mg/dL` 占位血糖会在恢复状态时清除；支持 `LinX`、`AiDEX` 和 `BWCGM` 设备名；无过滤扫描只处理厂商标识 `0x0059` 的广播。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
+
+### 2026-07-31 036 - 修复 LinX 广播无效血糖入库
+
+- **任务**：解决 LinX 广播已找到设备，但把 `value=255 quality=255` 当成血糖写入 Loop 的问题。
+- **核心交付**：
+  1. 使用 iPhone XR 设备日志中的真实广播包 `59000000010300FFFFFFFFFFFFFFFFFFFFFFED99C18B` 建立回归测试。
+  2. 广播解析拒绝 `timeOffset < 7` 的未开始或预热数据。
+  3. 广播解析明确拒绝 `0xFF` 血糖占位值，不再将其转换为 `255 mg/dL`。
+  4. 设备名识别增加 `BWCGM-序列号`；真机有效广播可解析为 sample `21570`、血糖 `152`。
+  5. 无 service 过滤扫描增加厂商标识 `0x0059` 的后置过滤，附近其它 BLE 设备不再进入 LinX 日志和解析。
+  6. 无效广播不保存传感器、样本号或最新血糖，继续等待后续有效广播。
+  7. 最新记录有效而后续历史位置为 `0xFF` 时保留最新值；读取旧版状态时清除已保存的预热或 `255 mg/dL` 占位血糖。
+  8. 日志队列使用独立身份标记，避免 `flush` 偶发提前返回，保证广播诊断日志完整。
+- **验证结果**：新增测试分别先因缺少预热判断、`BWCGM` 名称识别、厂商数据后置过滤、旧占位状态清理和后续 `0xFF` 处理而失败；修复后 `MicroTechCGM` 全量 191 个测试通过、0 失败；三项日志队列测试连续执行 10 轮通过；`git diff --check` 通过；`LoopWorkspace` generic iOS 构建通过；真机开发签名构建和签名校验通过；新包已安装并启动到 iPhone XR，20 秒后进程仍存在。完整扫描周期日志只有 started、timeout、fallback、stopped，没有附近其它 BLE 设备日志，也没有 `value=255` accepted。该周期目标设备未发出广播，因此有效值使用同一手机此前抓到的 `BWCGM` 真实包回归验证为 sample `21570`、血糖 `152`、quality `76`。
+- **关键发现**：广播扫描和厂商数据字段解析均正常；首个问题是单字节 `0xFF` 转为 255 后落入原有 `40...400` 判断范围，同时缺少 Aidex 7 分钟就绪判断；第二个问题是有效 `BWCGM` 广播已解析但因设备名未识别而没有 serial；第三个问题是无过滤扫描把附近所有 BLE 设备写入 LinX 日志。
+- **决策结论**：修复广播有效性、`BWCGM` 名称识别和无关设备过滤；保留已绑定序列号匹配，不自动切换到附近其它传感器，不修改未知 quality 规则。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
 
 ### 2026-07-31 035 - 修复 LinX 广播扫描过滤问题
 

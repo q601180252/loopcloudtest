@@ -115,10 +115,13 @@ company ID 使用 little-endian 字节序识别 `59 00`。iOS CoreBluetooth 入�
 
 有效性规则：
 
-- `timeOffset` 接受 `0...65535`，去重使用现有样本号回绕比较规则。
+- `timeOffset` 小于 7 表示探头未开始或仍在预热，广播不入库；7 及以上使用现有样本号比较规则去重。
 - 血糖在 `40...400 mg/dL`。
+- 广播记录中的 `0xFF` 是无效占位值，即使转换后为 `255`，也不能作为血糖入库。
+- 最新记录有效、后续历史位置为 `0xFF` 时保留最新记录，并停止读取后续占位位置。
 - 广播 quality 不能直接套用连接包的 `quality == 0` 规则；广播解析得到的记录按广播格式单独判断。
 - 重复或旧 `timeOffset` 不再入库。
+- 读取旧版广播状态时，清除已保存的预热样本或 `255 mg/dL` 占位血糖，保留已绑定的传感器信息。
 
 ## 广播扫描行为
 
@@ -159,13 +162,15 @@ scanForBroadcast(remoteIdentifier:)
 
 如果 service UUID 过滤在真机上无法收到 Aidex 广播，实施时允许在首次添加前台页面中增加显式的无 service 过滤扫描 fallback；该 fallback 仍必须只做 post-filter，不得连接非目标设备。
 
+无 service 过滤扫描只把厂商数据以 `59 00` 开头的 MicroTech 广播交给上层；附近其它蓝牙设备不写入 LinX 日志，也不进入广播解析。
+
 ## 首次广播绑定
 
 广播 payload 本身不提供传感器序列号。首次添加时序列号来源为广播设备名：
 
 1. 优先从 `CBAdvertisementDataLocalNameKey` 解析。
 2. 其次使用 `CBPeripheral.name`。
-3. 沿用现有 `advertisedSensorSerial(from:)` 规则，从 `LinX-...` 或 `AiDEX X-...` 中提取 serial。
+3. 沿用现有 `advertisedSensorSerial(from:)` 规则，从 `LinX-...`、`AiDEX X-...` 或 `BWCGM-...` 中提取 serial。
 4. 设备名不能解析 serial 时，广播模式拒绝该广播并记录 `reason=missingSerial`。
 
 首次有效广播接受后，manager 必须写入：
@@ -232,6 +237,9 @@ stage=broadcast event=rejected reason=...
 | 设备不广播 | 本轮扫描超时后停止并记录 `scanTimeout`，下次取数或手动扫描再重启 |
 | 广播没有血糖字段 | 记录 `stage=broadcast event=rejected` |
 | 广播数据格式不完整 | 丢弃，不影响已有血糖 |
+| `timeOffset` 小于 7 | 记录探头未开始或预热中，不写入 Loop，继续扫描 |
+| 最新血糖为 `0xFF` | 记录无效占位数据，不写入 Loop，继续扫描 |
+| 最新血糖有效、后续历史位置为 `0xFF` | 接受最新血糖，忽略后续占位位置 |
 | 官方 App 连接后设备停止广播 | Loop 表现为信号丢失 |
 | 血糖重复 | 不重复写入 Loop |
 | 用户需要历史数据 | 提示使用直接连接模式 |

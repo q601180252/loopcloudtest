@@ -59,6 +59,31 @@ final class MicroTechCGMManagerStateTests: XCTestCase {
         XCTAssertEqual(restored.connectionMode, .direct)
     }
 
+    func testRestoredBroadcastStateClearsLegacyAllFFPlaceholderReading() {
+        let receivedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        var state = MicroTechCGMManagerState()
+        state.connectionMode = .broadcast
+        state.deviceName = "AiDEX X-22222EDQC5"
+        state.sensorSerial = "22222EDQC5"
+        state.lastReadingDate = receivedAt
+        state.latestSampleNumber = 0
+        state.latestReading = makeReading(
+            sampleNumber: 0,
+            glucoseMgdl: 255,
+            receivedAt: receivedAt,
+            quality: 255
+        )
+        state.hasConnectedSensorSession = true
+
+        let restored = MicroTechCGMManagerState(rawValue: state.rawValue)
+
+        XCTAssertNil(restored.lastReadingDate)
+        XCTAssertNil(restored.latestSampleNumber)
+        XCTAssertNil(restored.latestReading)
+        XCTAssertEqual(restored.sensorSerial, "22222EDQC5")
+        XCTAssertTrue(restored.hasConnectedSensorSession)
+    }
+
     private func makeReading(
         sampleNumber: Int,
         glucoseMgdl: Int,
