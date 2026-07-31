@@ -78,6 +78,77 @@ final class MicroTechBroadcastModeTests: XCTestCase {
         XCTAssertEqual(manager.state.latestSampleNumber, 21600)
     }
 
+    func testBroadcastAdvertisementLogsParsedAndAcceptedEvents() throws {
+        var state = MicroTechCGMManagerState()
+        state.connectionMode = .broadcast
+        let manager = MicroTechCGMManager(state: state)
+        var loggedEvents: [(type: DeviceLogEntryType, message: String)] = []
+        manager.onboardingDeviceLogHandler = { _, type, message in
+            loggedEvents.append((type: type, message: message))
+        }
+
+        _ = try manager.acceptBroadcastAdvertisement(advertisement(
+            identifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            localName: "AiDEX X-222227JKFK",
+            discoveredAt: Date(timeIntervalSince1970: 1_800_000_000)
+        ))
+
+        let parsedLog = try XCTUnwrap(loggedEvents.first { event in
+            event.type == .receive && event.message.contains("stage=broadcast event=parsed")
+        })
+        XCTAssertTrue(parsedLog.message.contains("identifier=00000000-0000-0000-0000-000000000123"))
+        XCTAssertTrue(parsedLog.message.contains("serial=222227JKFK"))
+        XCTAssertTrue(parsedLog.message.contains("sample=21600"))
+        XCTAssertTrue(parsedLog.message.contains("value=110"))
+        XCTAssertTrue(parsedLog.message.contains("trend=2"))
+        XCTAssertTrue(parsedLog.message.contains("status=1"))
+        XCTAssertTrue(parsedLog.message.contains("records=3"))
+        XCTAssertTrue(parsedLog.message.contains("rssi=-60"))
+        XCTAssertTrue(parsedLog.message.contains("rawHex=60540100026E80436C80416A80410000F33EE04E"))
+
+        let acceptedLog = try XCTUnwrap(loggedEvents.first { event in
+            event.type == .receive && event.message.contains("stage=broadcast event=accepted")
+        })
+        XCTAssertTrue(acceptedLog.message.contains("identifier=00000000-0000-0000-0000-000000000123"))
+        XCTAssertTrue(acceptedLog.message.contains("serial=222227JKFK"))
+        XCTAssertTrue(acceptedLog.message.contains("sample=21600"))
+        XCTAssertTrue(acceptedLog.message.contains("value=110"))
+        XCTAssertTrue(acceptedLog.message.contains("trend=2"))
+        XCTAssertTrue(acceptedLog.message.contains("status=1"))
+        XCTAssertTrue(acceptedLog.message.contains("records=3"))
+        XCTAssertTrue(acceptedLog.message.contains("rawHex=60540100026E80436C80416A80410000F33EE04E"))
+    }
+
+    func testBroadcastParseErrorLogNamesPeripheralAndAdvertisement() throws {
+        var state = MicroTechCGMManagerState()
+        state.connectionMode = .broadcast
+        let manager = MicroTechCGMManager(state: state)
+        var loggedEvents: [(type: DeviceLogEntryType, message: String)] = []
+        manager.onboardingDeviceLogHandler = { _, type, message in
+            loggedEvents.append((type: type, message: message))
+        }
+
+        manager.logBroadcastParseError(
+            MicroTechAidexBroadcastParserError.missingManufacturerData,
+            advertisement: MicroTechBroadcastAdvertisement(
+                identifier: UUID(uuidString: "00000000-0000-0000-0000-000000000124")!,
+                localName: "AiDEX X-222227JKFK",
+                peripheralName: "AiDEX Peripheral",
+                advertisementData: [:],
+                rssi: -71,
+                discoveredAt: Date(timeIntervalSince1970: 1_800_000_000)
+            )
+        )
+
+        let rejectedLog = try XCTUnwrap(loggedEvents.first { event in
+            event.type == .receive && event.message.contains("stage=broadcast event=rejected reason=parseError")
+        })
+        XCTAssertTrue(rejectedLog.message.contains("identifier=00000000-0000-0000-0000-000000000124"))
+        XCTAssertTrue(rejectedLog.message.contains("name=AiDEX X-222227JKFK"))
+        XCTAssertTrue(rejectedLog.message.contains("rssi=-71"))
+        XCTAssertTrue(rejectedLog.message.contains("advertisement=nil"))
+    }
+
     func testBroadcastModeSettingsDisplayString() {
         var state = MicroTechCGMManagerState()
         state.connectionMode = .broadcast

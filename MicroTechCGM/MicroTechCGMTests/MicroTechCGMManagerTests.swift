@@ -276,6 +276,27 @@ final class MicroTechCGMManagerTests: XCTestCase {
             MicroTechBluetoothManager.scanStartedLogMessage(requestedIdentifier: nil),
             "stage=scan event=started requestedIdentifier=nil"
         )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastScanStartedLogMessage(requestedIdentifier: identifier),
+            "stage=broadcast event=started requestedIdentifier=\(identifier)"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastFoundLogMessage(
+                identifier: identifier,
+                name: nil,
+                advertisement: "localName=AiDEX X-ABC123",
+                rssi: -61
+            ),
+            "stage=broadcast event=found identifier=\(identifier) name=nil advertisement=localName=AiDEX X-ABC123 rssi=-61"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastScanStoppedLogMessage(reason: "timeout"),
+            "stage=broadcast event=stopped reason=timeout"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastScanTimeoutLogMessage(requestedIdentifier: identifier),
+            "stage=broadcast event=timeout requestedIdentifier=\(identifier)"
+        )
     }
 
     func testAdvertisementDescriptionRecursivelySerializesAllValuesInStableOrder() {
@@ -294,6 +315,30 @@ final class MicroTechCGMManagerTests: XCTestCase {
             MicroTechBluetoothManager.advertisementDescription(advertisementData),
             "kCBAdvDataManufacturerData=Data(length=4,hex=01AB00FF),kCBAdvDataServiceData={FFF0=Data(length=4,hex=102000FE)},nested={a=1808,z=[7,LinX,Data(length=2,hex=DEAD)]}"
         )
+    }
+
+    func testDiscoveryLogsUseOnlyBroadcastStageInBroadcastMode() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        let directLogs = MicroTechBluetoothManager.discoveryLogMessages(
+            connectionMode: .direct,
+            identifier: identifier,
+            name: "AiDEX X-ABC123",
+            advertisement: "payload=Data(length=3,hex=590102)",
+            rssi: -61
+        )
+        XCTAssertTrue(directLogs.contains { $0.contains("stage=scan event=found") })
+        XCTAssertFalse(directLogs.contains { $0.contains("stage=broadcast event=found") })
+
+        let broadcastLogs = MicroTechBluetoothManager.discoveryLogMessages(
+            connectionMode: .broadcast,
+            identifier: identifier,
+            name: "AiDEX X-ABC123",
+            advertisement: "payload=Data(length=3,hex=590102)",
+            rssi: -61
+        )
+        XCTAssertTrue(broadcastLogs.contains { $0.contains("stage=broadcast event=found") })
+        XCTAssertFalse(broadcastLogs.contains { $0.contains("stage=scan event=found") })
     }
 
     func testConnectionLifecycleLogsAttemptedSucceededFailedTimeoutAndDisconnected() {

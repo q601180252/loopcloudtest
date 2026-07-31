@@ -8,9 +8,25 @@
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 170 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 当前 MicroTech LinX 添加页已支持 `直接连接` 和 `广播数据` 两种方式；广播模式只解析 Aidex 广播中的最新血糖，直连模式保持原有蓝牙连接流程。
+- 当前 LinX 广播模式日志已覆盖扫描开始、发现广播、解析成功、解析失败、接受、拒绝、扫描超时和扫描停止；解析成功和接受日志包含 identifier、name、RSSI、serial、sample、value、trend、status、records 和完整 rawHex。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
+
+### 2026-07-31 034 - 补齐 LinX 广播模式诊断日志
+
+- **任务**：确认 LinX 广播方式日志是否齐全，并补齐会影响快速定位的问题。
+- **核心交付**：
+  1. 广播扫描停止和超时改为 `stage=broadcast event=stopped/timeout`，不再只显示普通扫描日志。
+  2. 广播发现时按当前模式选择日志阶段；广播模式只写 `stage=broadcast event=found`，不再额外写 `stage=scan event=found`。
+  3. 广播解析成功新增 `stage=broadcast event=parsed`。
+  4. 广播解析失败日志补充 identifier、name、localName、peripheralName、RSSI 和广告内容。
+  5. 广播 accepted 日志补充 identifier、name、RSSI、trend、status、records，并继续保留完整 rawHex。
+- **验证结果**：新增日志测试先失败，失败点为缺少广播 timeout/stopped 日志和发现日志模式选择；修复后广播日志相关 9 个测试通过；`MicroTechCGM` 全量 182 个测试通过、0 失败；`LoopWorkspace` generic iOS 构建通过；`git diff --check` 通过。
+- **关键发现**：修复前能看出是否 accepted/rejected，但不能快速区分“收到广播但解析成功后被过滤”和“广播扫描超时”；广播发现还会混入普通扫描日志。
+- **决策结论**：广播问题排查按 `started -> found -> parsed -> accepted/rejected`，或 `started -> timeout/stopped` 判断。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
 
 ### 2026-07-31 033 - 新增 LinX 广播连接选择
 

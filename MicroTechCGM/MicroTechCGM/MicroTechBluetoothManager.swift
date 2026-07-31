@@ -416,7 +416,10 @@ public final class MicroTechBluetoothManager: NSObject {
             return
         }
 
-        logBluetooth(Self.scanStoppedLogMessage(reason: reason))
+        let stoppedLogMessage = connectionMode == .broadcast
+            ? Self.broadcastScanStoppedLogMessage(reason: reason)
+            : Self.scanStoppedLogMessage(reason: reason)
+        logBluetooth(stoppedLogMessage)
         if centralManager.isScanning {
             centralManager.stopScan()
         }
@@ -619,6 +622,39 @@ public final class MicroTechBluetoothManager: NSObject {
         "stage=broadcast event=found identifier=\(identifier) name=\(name ?? "nil") advertisement=\(advertisement) rssi=\(rssi)"
     }
 
+    static func broadcastScanStoppedLogMessage(reason: String) -> String {
+        "stage=broadcast event=stopped reason=\(reason)"
+    }
+
+    static func broadcastScanTimeoutLogMessage(requestedIdentifier: UUID?) -> String {
+        "stage=broadcast event=timeout requestedIdentifier=\(requestedIdentifier?.uuidString ?? "nil")"
+    }
+
+    static func discoveryLogMessages(
+        connectionMode: MicroTechCGMConnectionMode,
+        identifier: UUID,
+        name: String?,
+        advertisement: String,
+        rssi: NSNumber
+    ) -> [String] {
+        switch connectionMode {
+        case .direct:
+            return [scanFoundLogMessage(
+                identifier: identifier,
+                name: name,
+                advertisement: advertisement,
+                rssi: rssi
+            )]
+        case .broadcast:
+            return [broadcastFoundLogMessage(
+                identifier: identifier,
+                name: name,
+                advertisement: advertisement,
+                rssi: rssi
+            )]
+        }
+    }
+
     static func advertisementDescription(_ advertisementData: [String: Any]) -> String {
         guard !advertisementData.isEmpty else {
             return "nil"
@@ -786,7 +822,10 @@ public final class MicroTechBluetoothManager: NSObject {
         }
 
         let error = MicroTechBluetoothManagerError.scanTimeout(remoteIdentifier)
-        logBluetooth(Self.scanTimeoutLogMessage(requestedIdentifier: remoteIdentifier), type: .error)
+        let timeoutLogMessage = connectionMode == .broadcast
+            ? Self.broadcastScanTimeoutLogMessage(requestedIdentifier: remoteIdentifier)
+            : Self.scanTimeoutLogMessage(requestedIdentifier: remoteIdentifier)
+        logBluetooth(timeoutLogMessage, type: .error)
         logBluetooth("scan timed out, remoteIdentifier \(String(describing: remoteIdentifier))", type: .error)
         stopScanningOnQueue(reason: "timeout")
         delegate?.microTechBluetoothManager(self, didFailWith: error)
@@ -855,20 +894,17 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
         rssi RSSI: NSNumber
     ) {
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
-        logBluetooth(Self.scanFoundLogMessage(
+        for message in Self.discoveryLogMessages(
+            connectionMode: connectionMode,
             identifier: peripheral.identifier,
             name: advertisedName ?? peripheral.name,
             advertisement: Self.advertisementDescription(advertisementData),
             rssi: RSSI
-        ))
+        ) {
+            logBluetooth(message)
+        }
         logBluetooth("didDiscover peripheral \(peripheral.identifier), advertisedName \(String(describing: advertisedName)), peripheralName \(String(describing: peripheral.name)), rssi \(RSSI)")
         guard connectionMode == .direct else {
-            logBluetooth(Self.broadcastFoundLogMessage(
-                identifier: peripheral.identifier,
-                name: advertisedName ?? peripheral.name,
-                advertisement: Self.advertisementDescription(advertisementData),
-                rssi: RSSI
-            ))
             delegate?.microTechBluetoothManager(
                 self,
                 didDiscoverBroadcast: MicroTechBroadcastAdvertisement(

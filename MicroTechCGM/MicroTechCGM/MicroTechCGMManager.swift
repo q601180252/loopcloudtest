@@ -445,7 +445,27 @@ public final class MicroTechCGMManager: CGMManager {
     @discardableResult
     func acceptBroadcastAdvertisement(_ advertisement: MicroTechBroadcastAdvertisement) throws -> NewGlucoseSample? {
         let broadcastReading = try MicroTechAidexBroadcastParser.parseAdvertisementData(advertisement.advertisementData)
+        logBroadcastParsed(broadcastReading, advertisement: advertisement)
         return acceptBroadcastReading(broadcastReading, advertisement: advertisement)
+    }
+
+    private func logBroadcastParsed(
+        _ broadcastReading: MicroTechAidexBroadcastReading,
+        advertisement: MicroTechBroadcastAdvertisement
+    ) {
+        let sensorSerial = Self.broadcastSensorSerial(from: advertisement, currentState: state)
+        logDeviceCommunication(
+            "MicroTech LinX stage=broadcast event=parsed \(Self.broadcastAdvertisementContext(advertisement)) \(Self.broadcastReadingContext(broadcastReading, sensorSerial: sensorSerial))",
+            type: .receive
+        )
+    }
+
+    func logBroadcastParseError(_ error: Error, advertisement: MicroTechBroadcastAdvertisement) {
+        let advertisementDescription = MicroTechBluetoothManager.advertisementDescription(advertisement.advertisementData)
+        logDeviceCommunication(
+            "MicroTech LinX stage=broadcast event=rejected reason=parseError \(Self.broadcastAdvertisementContext(advertisement)) error=\(String(describing: error)) advertisement=\(advertisementDescription)",
+            type: .receive
+        )
     }
 
     @discardableResult
@@ -539,7 +559,7 @@ public final class MicroTechCGMManager: CGMManager {
                 date: advertisement.discoveredAt,
                 state: state.state
             )
-            logMessage = "stage=broadcast event=accepted serial=\(sensorSerial) sample=\(sampleNumber) value=\(glucoseMgdl) quality=\(latestRecord.quality) rawHex=\(broadcastReading.rawManufacturerPayload.microTechHexadecimalString)"
+            logMessage = "stage=broadcast event=accepted \(Self.broadcastAdvertisementContext(advertisement)) \(Self.broadcastReadingContext(broadcastReading, sensorSerial: sensorSerial))"
         }
 
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
@@ -547,6 +567,20 @@ public final class MicroTechCGMManager: CGMManager {
             logDeviceCommunication("MicroTech LinX \(logMessage)", type: sample == nil ? .connection : .receive)
         }
         return sample
+    }
+
+    private static func broadcastAdvertisementContext(_ advertisement: MicroTechBroadcastAdvertisement) -> String {
+        "identifier=\(advertisement.identifier) name=\(advertisement.deviceName ?? "nil") localName=\(advertisement.localName ?? "nil") peripheralName=\(advertisement.peripheralName ?? "nil") rssi=\(advertisement.rssi)"
+    }
+
+    private static func broadcastReadingContext(
+        _ broadcastReading: MicroTechAidexBroadcastReading,
+        sensorSerial: String?
+    ) -> String {
+        guard let latestRecord = broadcastReading.latestRecord else {
+            return "serial=\(sensorSerial ?? "nil") sample=nil value=nil quality=nil trend=\(broadcastReading.trend) status=\(broadcastReading.status) records=\(broadcastReading.records.count) rawHex=\(broadcastReading.rawManufacturerPayload.microTechHexadecimalString)"
+        }
+        return "serial=\(sensorSerial ?? "nil") sample=\(latestRecord.timeOffset) value=\(latestRecord.glucose) quality=\(latestRecord.quality) trend=\(broadcastReading.trend) status=\(broadcastReading.status) records=\(broadcastReading.records.count) rawHex=\(broadcastReading.rawManufacturerPayload.microTechHexadecimalString)"
     }
 
     func makeSample(from reading: MicroTechGlucoseReading) -> NewGlucoseSample {
@@ -1300,11 +1334,7 @@ extension MicroTechCGMManager: MicroTechBluetoothManagerDelegate {
             let sample = try acceptBroadcastAdvertisement(advertisement)
             notifyDelegateOfReadingResult(sample.map { .newData([$0]) } ?? .noData)
         } catch {
-            let advertisementDescription = MicroTechBluetoothManager.advertisementDescription(advertisement.advertisementData)
-            logDeviceCommunication(
-                "MicroTech LinX stage=broadcast event=rejected reason=parseError error=\(String(describing: error)) advertisement=\(advertisementDescription)",
-                type: .receive
-            )
+            logBroadcastParseError(error, advertisement: advertisement)
             notifyDelegateOfReadingResult(.noData)
         }
     }
