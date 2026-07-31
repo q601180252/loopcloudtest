@@ -25,8 +25,8 @@
   4. 真机步骤区分 Xcode destination 与 `devicectl` 标识，并固定构建、安装、启动和 20 秒进程检查命令。
 - **验证结果**：三个计划块均通过独立审查；每块少于 1000 行；无占位内容；`git diff --check` 通过。
 - **决策结论**：执行阶段使用 `superpowers:subagent-driven-development`，逐任务实现并进行代码和设计两轮审查。
-- **commit hash**：待提交。
-- **push 状态**：待推送。
+- **commit hash**：`b5170ba`
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-07-31 037 - 明确首页血糖历史页面设计
 
