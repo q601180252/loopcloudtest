@@ -341,6 +341,24 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertFalse(broadcastLogs.contains { $0.contains("stage=scan event=found") })
     }
 
+    func testBroadcastFilteredScanFallsBackToUnfilteredScan() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastScanServiceFilter(phase: .filtered)?.map(\.uuidString),
+            [MicroTechAidexProfile.serviceUUID.uuidString]
+        )
+        XCTAssertNil(MicroTechBluetoothManager.broadcastScanServiceFilter(phase: .unfiltered))
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastScanStartedLogMessage(requestedIdentifier: identifier, phase: .unfiltered),
+            "stage=broadcast event=started phase=unfiltered requestedIdentifier=\(identifier) services=nil"
+        )
+        XCTAssertEqual(
+            MicroTechBluetoothManager.broadcastScanFallbackLogMessage(requestedIdentifier: identifier),
+            "stage=broadcast event=fallback reason=filteredTimeout requestedIdentifier=\(identifier) nextServices=nil"
+        )
+    }
+
     func testConnectionLifecycleLogsAttemptedSucceededFailedTimeoutAndDisconnected() {
         let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         let error = NSError(

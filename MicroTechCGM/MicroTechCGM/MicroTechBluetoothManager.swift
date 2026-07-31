@@ -73,6 +73,11 @@ enum MicroTechDisconnectCallbackResult: Equatable {
     case missingPeripheralManager
 }
 
+enum MicroTechBroadcastScanPhase: Equatable {
+    case filtered
+    case unfiltered
+}
+
 final class MicroTechDisconnectCallbackState {
     private let lock = NSLock()
     private var expectedCancellationIdentifiers: Set<UUID> = []
@@ -240,6 +245,7 @@ public final class MicroTechBluetoothManager: NSObject {
     private var restoredPeripherals: [UUID: CBPeripheral] = [:]
     private var configuringPeripheralIDs: Set<UUID> = []
     private var connectionMode: MicroTechCGMConnectionMode
+    private var broadcastScanPhase: MicroTechBroadcastScanPhase = .filtered
     private var activePeripheralManager: MicroTechPeripheralManager? {
         didSet {
             activeRemoteIdentifier = activePeripheralManager?.deviceIdentifier
@@ -291,6 +297,7 @@ public final class MicroTechBluetoothManager: NSObject {
         managerQueue.async {
             self.connectionMode = .broadcast
             self.activeRemoteIdentifier = remoteIdentifier
+            self.broadcastScanPhase = .filtered
             self.logBluetooth("broadcast scan requested, activeRemoteIdentifier \(String(describing: self.activeRemoteIdentifier))")
             self.scanIfReady()
         }
@@ -401,9 +408,24 @@ public final class MicroTechBluetoothManager: NSObject {
             return
         }
 
-        logBluetooth(Self.broadcastScanStartedLogMessage(requestedIdentifier: activeRemoteIdentifier))
+        startBroadcastScanOnQueue(phase: broadcastScanPhase)
+    }
+
+    private func startBroadcastScanOnQueue(phase: MicroTechBroadcastScanPhase) {
+        guard activePeripheralManager == nil else {
+            return
+        }
+        if centralManager.isScanning {
+            return
+        }
+
+        broadcastScanPhase = phase
+        logBluetooth(Self.broadcastScanStartedLogMessage(
+            requestedIdentifier: activeRemoteIdentifier,
+            phase: phase
+        ))
         centralManager.scanForPeripherals(
-            withServices: [MicroTechAidexProfile.serviceUUID],
+            withServices: Self.broadcastScanServiceFilter(phase: phase),
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
         )
         scheduleScanTimeout(remoteIdentifier: activeRemoteIdentifier)
@@ -618,6 +640,18 @@ public final class MicroTechBluetoothManager: NSObject {
         "stage=broadcast event=started requestedIdentifier=\(requestedIdentifier?.uuidString ?? "nil")"
     }
 
+    static func broadcastScanStartedLogMessage(
+        requestedIdentifier: UUID?,
+        phase: MicroTechBroadcastScanPhase
+    ) -> String {
+        switch phase {
+        case .filtered:
+            return broadcastScanStartedLogMessage(requestedIdentifier: requestedIdentifier)
+        case .unfiltered:
+            return "stage=broadcast event=started phase=unfiltered requestedIdentifier=\(requestedIdentifier?.uuidString ?? "nil") services=nil"
+        }
+    }
+
     static func broadcastFoundLogMessage(identifier: UUID, name: String?, advertisement: String, rssi: NSNumber) -> String {
         "stage=broadcast event=found identifier=\(identifier) name=\(name ?? "nil") advertisement=\(advertisement) rssi=\(rssi)"
     }
@@ -628,6 +662,19 @@ public final class MicroTechBluetoothManager: NSObject {
 
     static func broadcastScanTimeoutLogMessage(requestedIdentifier: UUID?) -> String {
         "stage=broadcast event=timeout requestedIdentifier=\(requestedIdentifier?.uuidString ?? "nil")"
+    }
+
+    static func broadcastScanFallbackLogMessage(requestedIdentifier: UUID?) -> String {
+        "stage=broadcast event=fallback reason=filteredTimeout requestedIdentifier=\(requestedIdentifier?.uuidString ?? "nil") nextServices=nil"
+    }
+
+    static func broadcastScanServiceFilter(phase: MicroTechBroadcastScanPhase) -> [CBUUID]? {
+        switch phase {
+        case .filtered:
+            return [MicroTechAidexProfile.serviceUUID]
+        case .unfiltered:
+            return nil
+        }
     }
 
     static func discoveryLogMessages(
@@ -827,6 +874,13 @@ public final class MicroTechBluetoothManager: NSObject {
             : Self.scanTimeoutLogMessage(requestedIdentifier: remoteIdentifier)
         logBluetooth(timeoutLogMessage, type: .error)
         logBluetooth("scan timed out, remoteIdentifier \(String(describing: remoteIdentifier))", type: .error)
+        if connectionMode == .broadcast, broadcastScanPhase == .filtered {
+            logBluetooth(Self.broadcastScanFallbackLogMessage(requestedIdentifier: remoteIdentifier))
+            stopScanningOnQueue(reason: "filteredTimeoutFallback")
+            startBroadcastScanOnQueue(phase: .unfiltered)
+            return
+        }
+
         stopScanningOnQueue(reason: "timeout")
         delegate?.microTechBluetoothManager(self, didFailWith: error)
     }
