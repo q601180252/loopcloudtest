@@ -23,6 +23,7 @@
 		B23411F81E99A943473C9CA6 /* MicroTechAidexCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C06C4AF1A39FA24AA22300 /* MicroTechAidexCryptoTests.swift */; };
 		B1C2D3E4F5061728394A5B6C /* MicroTechCGMManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F30415263748A9B5C6D7 /* MicroTechCGMManagerTests.swift */; };
 		B39A4022BA9A4994A9AD20D4 /* MicroTechSensorHandshakeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0F56281F88498B9B3D9030 /* MicroTechSensorHandshakeTests.swift */; };
+		B4C5D6E7F8091A2B3C4D5E6F /* MicroTechBroadcastModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5D6E7F8091A2B3C4D5E6F7 /* MicroTechBroadcastModeTests.swift */; };
 		BB5EE567FE694DA2C1D3CB7F /* MicroTechCGM.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0B02EA147C64EDDCD0B398F7 /* MicroTechCGM.framework */; };
 		BF5A03C6836E48E8AB39C4DF /* MicroTechBluetoothManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 633F5401D96D443AA7F47027 /* MicroTechBluetoothManager.swift */; };
 		C2D3E405F617A829B03C4D5E /* MicroTechCGMManagerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F2A304B516C728D93A4B5C /* MicroTechCGMManagerState.swift */; };
@@ -123,6 +124,7 @@
 		9D9697650AB5FCD56D68936F /* MicroTechCGMUI.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = MicroTechCGMUI.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		9EE8B38E25EACA952AE1DF14 /* MicroTechCGMTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MicroTechCGMTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1D2E3F40516273849A5B6C7 /* MicroTechCGMManagerStateTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechCGMManagerStateTests.swift; sourceTree = "<group>"; };
+		C5D6E7F8091A2B3C4D5E6F7 /* MicroTechBroadcastModeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechBroadcastModeTests.swift; sourceTree = "<group>"; };
 		C6B21F41BC02452F2619FD29 /* MicroTechAidexPacket.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexPacket.swift; sourceTree = "<group>"; };
 		D1E2F30415263748A9B5C6D7 /* MicroTechCGMManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechCGMManagerTests.swift; sourceTree = "<group>"; };
 		DCD5DB317E20A76353BD59AC /* MicroTechAidexProfile.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicroTechAidexProfile.swift; sourceTree = "<group>"; };
@@ -249,6 +251,7 @@
 				8D41F6B5B672C3E79D177122 /* MicroTechAidexParserTests.swift */,
 				5B0F56281F88498B9B3D9030 /* MicroTechSensorHandshakeTests.swift */,
 				C1D2E3F40516273849A5B6C7 /* MicroTechCGMManagerStateTests.swift */,
+				C5D6E7F8091A2B3C4D5E6F7 /* MicroTechBroadcastModeTests.swift */,
 				D1E2F30415263748A9B5C6D7 /* MicroTechCGMManagerTests.swift */,
 			);
 			path = MicroTechCGMTests;
@@ -535,6 +538,7 @@
 				B0F1A256B3C7E0D27D9082F0 /* MicroTechAidexParserTests.swift in Sources */,
 				B39A4022BA9A4994A9AD20D4 /* MicroTechSensorHandshakeTests.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* MicroTechCGMManagerStateTests.swift in Sources */,
+				B4C5D6E7F8091A2B3C4D5E6F /* MicroTechBroadcastModeTests.swift in Sources */,
 				B1C2D3E4F5061728394A5B6C /* MicroTechCGMManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

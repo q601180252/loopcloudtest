@@ -7,9 +7,25 @@
 - 当前固定信息：仓库 `q601180252/loopcloudtest`，默认分支 `main`，主 workspace `LoopWorkspace.xcworkspace`。
 - 当前 LinX 添加流程自动化测试入口：`LoopUITests` scheme，真机 destination `id=E30C92D5-FE26-5AE1-B5FB-C787E4401F4F`，要求手机已安装 `com.libre.loopkit3.Loop`。
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 170 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新 IPA 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
+- 当前 MicroTech LinX 添加页已支持 `直接连接` 和 `广播数据` 两种方式；广播模式只解析 Aidex 广播中的最新血糖，直连模式保持原有蓝牙连接流程。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (64)` 已完成 App Store Connect 处理，Actions run `28347545488` 显示 `Successfully finished processing the build 3.9.1 - 64 for IOS`；包内 `Loop.app` 最低 iOS 为 `15.1`，`WatchApp.app` 和 `WatchApp Extension.appex` 最低 watchOS 为 `9.0`，覆盖 Apple Watch Series 8 的 watchOS `11.6.2 (22U95)`。
 
 ## 进展日志
+
+### 2026-07-31 033 - 新增 LinX 广播连接选择
+
+- **任务**：修复添加 CGM 选择 `MicroTech LinX` 后没有 `直接连接 / 广播数据` 选择的问题，并接入广播模式读取最新血糖。
+- **核心交付**：
+  1. `MicroTechSetupView` 新增 `直接连接 / 广播数据` 分段选择，继续按钮会按所选方式开始添加。
+  2. 直连方式保持原有连接流程；广播方式只扫描 Aidex 广播，不主动连接设备。
+  3. 广播方式会解析厂商数据中的最新血糖，保存设备、序列号、最新 sample 和血糖值，并把新数据交给 Loop。
+  4. 设置页新增 `Data Mode`，可看到当前是 `Direct Connection` 还是 `Broadcast Data`。
+  5. `LoopCGMSetupUITests` 增加添加页选择项断言，防止后续再次丢失该控件。
+- **验证结果**：新增广播模式测试 5 个通过；`MicroTechCGM` 全量测试首跑 179 个测试中 3 个日志队列时序测试失败，3 个失败项单独复跑通过；`LoopWorkspace` generic iOS 构建通过；Debug 真机签名构建通过；已安装并启动到 iPhone XR；真机 UI 自动化被 XCTest 自动化模式超时阻断，未跑到页面断言。
+- **关键发现**：添加页之前只有搜索按钮，没有模式选择；广播模式需要在添加前保存选择，否则会继续走直连扫描。
+- **决策结论**：采用同一个 `MicroTech LinX` 入口内选择模式的方案，不新增第二个 CGM 类型。
+- **commit hash**：待提交。
+- **push 状态**：待推送。
 
 ### 2026-07-31 032 - 完成 LinX 广播数据模式实施计划
 

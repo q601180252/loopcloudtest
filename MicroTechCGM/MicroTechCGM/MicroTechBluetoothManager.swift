@@ -142,14 +142,49 @@ protocol MicroTechBluetoothManaging: AnyObject {
     var isScanning: Bool { get }
     var isConnected: Bool { get }
 
+    func configureConnectionMode(_ mode: MicroTechCGMConnectionMode)
     func scan(remoteIdentifier: UUID?)
+    func scanForBroadcast(remoteIdentifier: UUID?)
     func refreshConnectedPeripheral()
     func disconnect()
     func forgetPeripheral()
 }
 
 extension MicroTechBluetoothManaging {
+    func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {}
+    func scanForBroadcast(remoteIdentifier: UUID?) {
+        scan(remoteIdentifier: remoteIdentifier)
+    }
     func refreshConnectedPeripheral() {}
+}
+
+public struct MicroTechBroadcastAdvertisement {
+    public let identifier: UUID
+    public let localName: String?
+    public let peripheralName: String?
+    public let advertisementData: [String: Any]
+    public let rssi: NSNumber
+    public let discoveredAt: Date
+
+    public init(
+        identifier: UUID,
+        localName: String?,
+        peripheralName: String?,
+        advertisementData: [String: Any],
+        rssi: NSNumber,
+        discoveredAt: Date
+    ) {
+        self.identifier = identifier
+        self.localName = localName
+        self.peripheralName = peripheralName
+        self.advertisementData = advertisementData
+        self.rssi = rssi
+        self.discoveredAt = discoveredAt
+    }
+
+    public var deviceName: String? {
+        localName ?? peripheralName
+    }
 }
 
 public protocol MicroTechBluetoothManagerDelegate: AnyObject {
@@ -157,7 +192,12 @@ public protocol MicroTechBluetoothManagerDelegate: AnyObject {
     func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didReady peripheralSession: MicroTechPeripheralSession)
     func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didReceive value: Data, for characteristic: CBUUID, session: MicroTechPeripheralSession)
     func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDisconnect session: MicroTechPeripheralSession)
+    func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDiscoverBroadcast advertisement: MicroTechBroadcastAdvertisement)
     func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didFailWith error: Error)
+}
+
+public extension MicroTechBluetoothManagerDelegate {
+    func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDiscoverBroadcast advertisement: MicroTechBroadcastAdvertisement) {}
 }
 
 public final class MicroTechBluetoothManager: NSObject {
@@ -199,13 +239,15 @@ public final class MicroTechBluetoothManager: NSObject {
     private var managedPeripherals: [UUID: MicroTechPeripheralManager] = [:]
     private var restoredPeripherals: [UUID: CBPeripheral] = [:]
     private var configuringPeripheralIDs: Set<UUID> = []
+    private var connectionMode: MicroTechCGMConnectionMode
     private var activePeripheralManager: MicroTechPeripheralManager? {
         didSet {
             activeRemoteIdentifier = activePeripheralManager?.deviceIdentifier
         }
     }
 
-    public override init() {
+    public init(initialConnectionMode: MicroTechCGMConnectionMode = .direct) {
+        connectionMode = initialConnectionMode
         super.init()
 
         managerQueue.setSpecific(key: managerQueueSpecificKey, value: true)
@@ -230,10 +272,26 @@ public final class MicroTechBluetoothManager: NSObject {
         }
     }
 
+    public func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {
+        managerQueue.async {
+            self.connectionMode = mode
+        }
+    }
+
     public func scan(remoteIdentifier: UUID? = nil) {
         managerQueue.async {
+            self.connectionMode = .direct
             self.activeRemoteIdentifier = remoteIdentifier
             self.logBluetooth("scan requested, activeRemoteIdentifier \(String(describing: self.activeRemoteIdentifier))")
+            self.scanIfReady()
+        }
+    }
+
+    public func scanForBroadcast(remoteIdentifier: UUID? = nil) {
+        managerQueue.async {
+            self.connectionMode = .broadcast
+            self.activeRemoteIdentifier = remoteIdentifier
+            self.logBluetooth("broadcast scan requested, activeRemoteIdentifier \(String(describing: self.activeRemoteIdentifier))")
             self.scanIfReady()
         }
     }
@@ -291,6 +349,11 @@ public final class MicroTechBluetoothManager: NSObject {
             return
         }
 
+        if connectionMode == .broadcast {
+            scanForBroadcastIfReady()
+            return
+        }
+
         if let identifier = activeRemoteIdentifier,
            let peripheral = restoredPeripherals[identifier]
         {
@@ -327,6 +390,22 @@ public final class MicroTechBluetoothManager: NSObject {
         ])
         logBluetooth(Self.scanStartedLogMessage(requestedIdentifier: activeRemoteIdentifier))
         centralManager.scanForPeripherals(withServices: [MicroTechAidexProfile.serviceUUID], options: nil)
+        scheduleScanTimeout(remoteIdentifier: activeRemoteIdentifier)
+    }
+
+    private func scanForBroadcastIfReady() {
+        guard activePeripheralManager == nil else {
+            return
+        }
+        if centralManager.isScanning {
+            return
+        }
+
+        logBluetooth(Self.broadcastScanStartedLogMessage(requestedIdentifier: activeRemoteIdentifier))
+        centralManager.scanForPeripherals(
+            withServices: [MicroTechAidexProfile.serviceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+        )
         scheduleScanTimeout(remoteIdentifier: activeRemoteIdentifier)
     }
 
@@ -530,6 +609,14 @@ public final class MicroTechBluetoothManager: NSObject {
 
     static func scanFoundLogMessage(identifier: UUID, name: String?, advertisement: String, rssi: NSNumber) -> String {
         "stage=scan event=found identifier=\(identifier) name=\(name ?? "nil") advertisement=\(advertisement) rssi=\(rssi)"
+    }
+
+    static func broadcastScanStartedLogMessage(requestedIdentifier: UUID?) -> String {
+        "stage=broadcast event=started requestedIdentifier=\(requestedIdentifier?.uuidString ?? "nil")"
+    }
+
+    static func broadcastFoundLogMessage(identifier: UUID, name: String?, advertisement: String, rssi: NSNumber) -> String {
+        "stage=broadcast event=found identifier=\(identifier) name=\(name ?? "nil") advertisement=\(advertisement) rssi=\(rssi)"
     }
 
     static func advertisementDescription(_ advertisementData: [String: Any]) -> String {
@@ -754,6 +841,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
                 source: .coreBluetoothRestore
             ))
             restoredPeripherals[peripheral.identifier] = peripheral
+            guard connectionMode == .direct else {
+                continue
+            }
             connectIfNeeded(peripheral, advertisedName: peripheral.name)
         }
     }
@@ -772,6 +862,26 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
             rssi: RSSI
         ))
         logBluetooth("didDiscover peripheral \(peripheral.identifier), advertisedName \(String(describing: advertisedName)), peripheralName \(String(describing: peripheral.name)), rssi \(RSSI)")
+        guard connectionMode == .direct else {
+            logBluetooth(Self.broadcastFoundLogMessage(
+                identifier: peripheral.identifier,
+                name: advertisedName ?? peripheral.name,
+                advertisement: Self.advertisementDescription(advertisementData),
+                rssi: RSSI
+            ))
+            delegate?.microTechBluetoothManager(
+                self,
+                didDiscoverBroadcast: MicroTechBroadcastAdvertisement(
+                    identifier: peripheral.identifier,
+                    localName: advertisedName,
+                    peripheralName: peripheral.name,
+                    advertisementData: advertisementData,
+                    rssi: RSSI,
+                    discoveredAt: Date()
+                )
+            )
+            return
+        }
         connectIfNeeded(peripheral, advertisedName: advertisedName)
     }
 
@@ -856,6 +966,10 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
 
     public func centralManager(_ central: CBCentralManager, connectionEventDidOccur event: CBConnectionEvent, for peripheral: CBPeripheral) {
         logBluetooth("connection event \(Self.name(for: event)) peripheral \(peripheral.identifier), name \(String(describing: peripheral.name))")
+        guard connectionMode == .direct else {
+            logBluetooth("connection event ignored in broadcast mode peripheral \(peripheral.identifier)")
+            return
+        }
         switch event {
         case .peerConnected:
             connectIfNeeded(peripheral, advertisedName: peripheral.name)

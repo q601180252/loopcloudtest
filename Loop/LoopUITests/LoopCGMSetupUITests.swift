@@ -38,6 +38,20 @@ final class LoopCGMSetupUITests: XCTestCase {
             "MicroTech LinX setup screen did not open."
         )
 
+        let connectionModePicker = app.segmentedControls["microtech.setup.connectionMode"]
+        XCTAssertTrue(
+            connectionModePicker.waitForExistence(timeout: 3),
+            "MicroTech LinX connection mode picker was not visible."
+        )
+        XCTAssertTrue(
+            app.buttons["直接连接"].exists,
+            "MicroTech LinX direct connection option was not visible."
+        )
+        XCTAssertTrue(
+            app.buttons["广播数据"].exists,
+            "MicroTech LinX broadcast data option was not visible."
+        )
+
         let searchButton = app.buttons["microtech.setup.continue"]
         let localizedSearchButton = app.buttons["Search Nearby Devices"]
         XCTAssertTrue(

@@ -121,7 +121,7 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public init() {
-        bluetoothManagerFactory = { MicroTechBluetoothManager() }
+        bluetoothManagerFactory = { MicroTechBluetoothManager(initialConnectionMode: .direct) }
         bluetoothRetryScheduler = { retry in
             DispatchQueue.global(qos: .utility).async(execute: retry)
         }
@@ -136,7 +136,7 @@ public final class MicroTechCGMManager: CGMManager {
 
     init(
         state: MicroTechCGMManagerState,
-        bluetoothManagerFactory: @escaping () -> MicroTechBluetoothManaging = { MicroTechBluetoothManager() },
+        bluetoothManagerFactory: (() -> MicroTechBluetoothManaging)? = nil,
         bluetoothRetryScheduler: @escaping (@escaping () -> Void) -> Void = { retry in
             DispatchQueue.global(qos: .utility).async(execute: retry)
         },
@@ -146,7 +146,9 @@ public final class MicroTechCGMManager: CGMManager {
         resumeScanWhenDelegateQueueConfigured: Bool = false,
         dateProvider: @escaping () -> Date = { Date() }
     ) {
-        self.bluetoothManagerFactory = bluetoothManagerFactory
+        self.bluetoothManagerFactory = bluetoothManagerFactory ?? {
+            MicroTechBluetoothManager(initialConnectionMode: state.connectionMode)
+        }
         self.bluetoothRetryScheduler = bluetoothRetryScheduler
         self.staleConnectionScheduler = staleConnectionScheduler
         self.dateProvider = dateProvider
@@ -157,7 +159,9 @@ public final class MicroTechCGMManager: CGMManager {
 
     public required init?(rawState: RawStateValue) {
         let restoredState = MicroTechCGMManagerState(rawValue: rawState)
-        bluetoothManagerFactory = { MicroTechBluetoothManager() }
+        bluetoothManagerFactory = {
+            MicroTechBluetoothManager(initialConnectionMode: restoredState.connectionMode)
+        }
         bluetoothRetryScheduler = { retry in
             DispatchQueue.global(qos: .utility).async(execute: retry)
         }
@@ -218,6 +222,25 @@ public final class MicroTechCGMManager: CGMManager {
         return true
     }
 
+    @discardableResult
+    public func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) -> Bool {
+        var bluetoothManager: MicroTechBluetoothManaging?
+        let stateChange = mutateProtectedState { protectedState in
+            protectedState.state.connectionMode = mode
+            bluetoothManager = protectedState.bluetoothManager
+            if mode == .broadcast {
+                protectedState.sensorIdentity.activeSensor = nil
+                protectedState.sensorIdentity.activeIdentifier = nil
+                protectedState.sensorIdentity.activeSensorConnectedAt = nil
+                protectedState.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+            }
+        }
+
+        bluetoothManager?.configureConnectionMode(mode)
+        notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+        return true
+    }
+
     public var debugDescription: String {
         let state = self.state
         let lines = [
@@ -236,7 +259,9 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public func fetchNewDataIfNeeded(_ completion: @escaping (CGMReadingResult) -> Void) {
-        if disconnectStaleConnectedSensorIfNeeded() {
+        if state.connectionMode != .broadcast,
+           disconnectStaleConnectedSensorIfNeeded()
+        {
             completion(.noData)
             return
         }
@@ -253,6 +278,7 @@ public final class MicroTechCGMManager: CGMManager {
     @discardableResult
     private func scanForSensor(clearingConnectionError: Bool) -> Bool {
         let currentState = state
+        let connectionMode = currentState.connectionMode
 
         var bluetoothManager: MicroTechBluetoothManaging?
         var shouldStartScan = false
@@ -272,8 +298,14 @@ public final class MicroTechCGMManager: CGMManager {
 
             let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
             protectedState.bluetoothManager = manager
+            manager.configureConnectionMode(connectionMode)
 
-            if let sensorSerial = currentState.sensorSerial, !sensorSerial.isEmpty,
+            if connectionMode == .broadcast {
+                manager.delegate = self
+                scanLogMessage = "MicroTech LinX broadcast scan started"
+                shouldRefreshConnectedPeripheral = false
+                shouldStartScan = !manager.isScanning
+            } else if let sensorSerial = currentState.sensorSerial, !sensorSerial.isEmpty,
                let activeSensor = protectedState.sensorIdentity.activeSensor
             {
                 manager.delegate = activeSensor
@@ -315,7 +347,12 @@ public final class MicroTechCGMManager: CGMManager {
         }
 
         if shouldStartScan {
-            bluetoothManager.scan(remoteIdentifier: currentState.remoteIdentifier)
+            switch connectionMode {
+            case .direct:
+                bluetoothManager.scan(remoteIdentifier: currentState.remoteIdentifier)
+            case .broadcast:
+                bluetoothManager.scanForBroadcast(remoteIdentifier: currentState.remoteIdentifier)
+            }
             if let scanLogMessage {
                 logDeviceCommunication("\(scanLogMessage), remoteIdentifier \(String(describing: currentState.remoteIdentifier))", type: .connection)
             }
@@ -402,6 +439,113 @@ public final class MicroTechCGMManager: CGMManager {
             sample = makeSample(from: reading, state: state)
         }
 
+        return sample
+    }
+
+    @discardableResult
+    func acceptBroadcastAdvertisement(_ advertisement: MicroTechBroadcastAdvertisement) throws -> NewGlucoseSample? {
+        let broadcastReading = try MicroTechAidexBroadcastParser.parseAdvertisementData(advertisement.advertisementData)
+        return acceptBroadcastReading(broadcastReading, advertisement: advertisement)
+    }
+
+    @discardableResult
+    private func acceptBroadcastReading(
+        _ broadcastReading: MicroTechAidexBroadcastReading,
+        advertisement: MicroTechBroadcastAdvertisement
+    ) -> NewGlucoseSample? {
+        var sample: NewGlucoseSample?
+        var logMessage: String?
+        let filterStartDate = startDateToFilterNewData()
+
+        let stateChange = mutateProtectedState { state in
+            guard !state.sensorIdentity.isDeleted else {
+                logMessage = "stage=broadcast event=rejected reason=deleted"
+                return
+            }
+            guard state.state.connectionMode == .broadcast else {
+                logMessage = "stage=broadcast event=rejected reason=notBroadcastMode"
+                return
+            }
+            guard let latestRecord = broadcastReading.latestRecord else {
+                logMessage = "stage=broadcast event=rejected reason=noRecords"
+                return
+            }
+
+            let glucoseMgdl = latestRecord.glucose
+            guard (40...400).contains(glucoseMgdl) else {
+                logMessage = "stage=broadcast event=rejected reason=invalidGlucose value=\(glucoseMgdl)"
+                return
+            }
+
+            guard let sensorSerial = Self.broadcastSensorSerial(from: advertisement, currentState: state.state) else {
+                logMessage = "stage=broadcast event=rejected reason=missingSerial"
+                return
+            }
+
+            if let existingSerial = state.state.sensorSerial,
+               !existingSerial.isEmpty,
+               existingSerial != sensorSerial
+            {
+                logMessage = "stage=broadcast event=rejected reason=serialMismatch serial=\(sensorSerial) saved=\(existingSerial)"
+                return
+            }
+
+            if let filterStartDate, advertisement.discoveredAt < filterStartDate {
+                logMessage = "stage=broadcast event=rejected reason=beforeStartDate at=\(advertisement.discoveredAt) startDate=\(filterStartDate)"
+                return
+            }
+
+            let sampleNumber = Int(latestRecord.timeOffset)
+            if state.state.sensorSerial == sensorSerial,
+               let latestSampleNumber = state.state.latestSampleNumber,
+               Self.isSampleNumber(sampleNumber, notNewerThan: latestSampleNumber)
+            {
+                logMessage = "stage=broadcast event=rejected reason=duplicateOrOld serial=\(sensorSerial) sample=\(sampleNumber) latest=\(latestSampleNumber)"
+                return
+            }
+
+            let deviceName = advertisement.deviceName ?? state.state.deviceName ?? "LinX-\(sensorSerial)"
+            let reading = MicroTechGlucoseReading(
+                sensorSerial: sensorSerial,
+                sampleNumber: sampleNumber,
+                glucoseMgdl: glucoseMgdl,
+                trend: broadcastReading.trend,
+                receivedAt: advertisement.discoveredAt,
+                status: Int(broadcastReading.status),
+                quality: Int(latestRecord.quality),
+                rawBytes: broadcastReading.rawManufacturerPayload
+            )
+
+            state.sensorIdentity.activeSensor = nil
+            state.sensorIdentity.activeIdentifier = nil
+            state.sensorIdentity.activeSensorConnectedAt = nil
+            state.sensorIdentity.consecutiveSensorErrorCount = 0
+            state.sensorIdentity.savedIdentifierFailureCount = 0
+            state.sensorIdentity.pendingReconnectRecoveryReason = nil
+            state.sensorIdentity.resetHistoryTracking()
+            state.state.connectionMode = .broadcast
+            state.state.remoteIdentifier = advertisement.identifier
+            state.state.deviceName = deviceName
+            state.state.sensorSerial = sensorSerial
+            state.state.lastReadingDate = advertisement.discoveredAt
+            state.state.latestReading = reading
+            state.state.latestSampleNumber = sampleNumber
+            state.state.hasConnectedSensorSession = true
+            state.state.lastConnectionErrorDescription = nil
+            sample = makeSample(
+                sensorSerial: sensorSerial,
+                sampleNumber: sampleNumber,
+                glucoseMgdl: glucoseMgdl,
+                date: advertisement.discoveredAt,
+                state: state.state
+            )
+            logMessage = "stage=broadcast event=accepted serial=\(sensorSerial) sample=\(sampleNumber) value=\(glucoseMgdl) quality=\(latestRecord.quality) rawHex=\(broadcastReading.rawManufacturerPayload.microTechHexadecimalString)"
+        }
+
+        notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+        if let logMessage {
+            logDeviceCommunication("MicroTech LinX \(logMessage)", type: sample == nil ? .connection : .receive)
+        }
         return sample
     }
 
@@ -1003,6 +1147,27 @@ public final class MicroTechCGMManager: CGMManager {
         return serial
     }
 
+    private static func broadcastSensorSerial(
+        from advertisement: MicroTechBroadcastAdvertisement,
+        currentState: MicroTechCGMManagerState
+    ) -> String? {
+        for name in [advertisement.localName, advertisement.peripheralName, currentState.deviceName] {
+            guard let name,
+                  let serial = advertisedSensorSerial(from: name)
+            else {
+                continue
+            }
+            return serial
+        }
+
+        if let sensorSerial = currentState.sensorSerial,
+           !sensorSerial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
+            return sensorSerial
+        }
+        return nil
+    }
+
     private static func failedRemoteIdentifier(from error: MicroTechBluetoothManagerError) -> UUID? {
         switch error {
         case .connectTimeout(let identifier):
@@ -1128,6 +1293,20 @@ extension MicroTechCGMManager: MicroTechBluetoothManagerDelegate {
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDisconnect session: MicroTechPeripheralSession) {
+    }
+
+    public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDiscoverBroadcast advertisement: MicroTechBroadcastAdvertisement) {
+        do {
+            let sample = try acceptBroadcastAdvertisement(advertisement)
+            notifyDelegateOfReadingResult(sample.map { .newData([$0]) } ?? .noData)
+        } catch {
+            let advertisementDescription = MicroTechBluetoothManager.advertisementDescription(advertisement.advertisementData)
+            logDeviceCommunication(
+                "MicroTech LinX stage=broadcast event=rejected reason=parseError error=\(String(describing: error)) advertisement=\(advertisementDescription)",
+                type: .receive
+            )
+            notifyDelegateOfReadingResult(.noData)
+        }
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didFailWith error: Error) {

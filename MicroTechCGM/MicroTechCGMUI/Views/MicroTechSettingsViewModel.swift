@@ -10,6 +10,7 @@ final class MicroTechSettingsViewModel: ObservableObject {
     @Published private(set) var lastGlucoseString: String
     @Published private(set) var isScanning: Bool
     @Published private(set) var scanButtonTitle: String
+    @Published private(set) var dataModeDescription: String
     @Published private(set) var connectionErrorDescription: String?
     @Published var uploadReadings: Bool {
         didSet {
@@ -33,6 +34,7 @@ final class MicroTechSettingsViewModel: ObservableObject {
         self.lastGlucoseString = LocalizedString("--", comment: "No glucose value placeholder")
         self.isScanning = cgmManager.isScanning
         self.scanButtonTitle = LocalizedString("Scan for Sensor", comment: "MicroTech settings scan button label")
+        self.dataModeDescription = Self.dataModeDescription(for: cgmManager.state.connectionMode)
         self.uploadReadings = cgmManager.state.uploadReadings
 
         refresh()
@@ -51,8 +53,13 @@ final class MicroTechSettingsViewModel: ObservableObject {
         uploadReadings = state.uploadReadings
         isScanning = cgmManager.isScanning
         scanButtonTitle = LocalizedString("Scan for Sensor", comment: "MicroTech settings scan button label")
+        dataModeDescription = Self.dataModeDescription(for: state.connectionMode)
         connectionErrorDescription = state.lastConnectionErrorDescription
-        lastGlucoseString = Self.glucoseString(from: state.latestReading, displayGlucosePreference: displayGlucosePreference)
+        lastGlucoseString = Self.glucoseString(
+            from: state.latestReading,
+            connectionMode: state.connectionMode,
+            displayGlucosePreference: displayGlucosePreference
+        )
     }
 
     func scanForSensor() {
@@ -60,8 +67,15 @@ final class MicroTechSettingsViewModel: ObservableObject {
         refresh()
     }
 
-    private static func glucoseString(from reading: MicroTechGlucoseReading?, displayGlucosePreference: DisplayGlucosePreference) -> String {
-        guard let reading = reading, reading.isValidForTherapy, let quantity = reading.glucoseQuantity else {
+    private static func glucoseString(
+        from reading: MicroTechGlucoseReading?,
+        connectionMode: MicroTechCGMConnectionMode,
+        displayGlucosePreference: DisplayGlucosePreference
+    ) -> String {
+        guard let reading,
+              (reading.isValidForTherapy || (connectionMode == .broadcast && (40...400).contains(reading.glucoseMgdl))),
+              let quantity = reading.glucoseQuantity
+        else {
             return LocalizedString("--", comment: "No glucose value placeholder")
         }
 
@@ -72,6 +86,15 @@ final class MicroTechSettingsViewModel: ObservableObject {
             return LocalizedString("HIGH", comment: "String displayed instead of a glucose value above the CGM range")
         default:
             return displayGlucosePreference.formatter.string(from: quantity) ?? LocalizedString("--", comment: "No glucose value placeholder")
+        }
+    }
+
+    private static func dataModeDescription(for connectionMode: MicroTechCGMConnectionMode) -> String {
+        switch connectionMode {
+        case .direct:
+            return LocalizedString("Direct Connection", comment: "MicroTech settings direct connection data mode")
+        case .broadcast:
+            return LocalizedString("Broadcast Data", comment: "MicroTech settings broadcast data mode")
         }
     }
 }

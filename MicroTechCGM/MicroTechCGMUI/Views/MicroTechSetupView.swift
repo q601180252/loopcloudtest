@@ -1,12 +1,14 @@
 import Foundation
 import SwiftUI
 import LoopKitUI
+import MicroTechCGM
 
 struct MicroTechSetupView: View {
-    var didContinue: (() -> Void)?
+    var didContinue: ((MicroTechCGMConnectionMode) -> Void)?
     var didCancel: (() -> Void)?
 
     @Environment(\.appName) private var appName
+    @State private var connectionMode: MicroTechCGMConnectionMode = .direct
 
     var body: some View {
         VStack(alignment: .center, spacing: 20) {
@@ -21,9 +23,18 @@ struct MicroTechSetupView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .foregroundColor(.secondary)
 
+            Picker(LocalizedString("Connection Mode", comment: "Picker label for MicroTech connection mode"), selection: $connectionMode) {
+                Text(LocalizedString("直接连接", comment: "Direct MicroTech LinX connection mode"))
+                    .tag(MicroTechCGMConnectionMode.direct)
+                Text(LocalizedString("广播数据", comment: "Broadcast MicroTech LinX data mode"))
+                    .tag(MicroTechCGMConnectionMode.broadcast)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .accessibilityIdentifier("microtech.setup.connectionMode")
+
             Spacer()
 
-            Button(action: { didContinue?() }) {
+            Button(action: { didContinue?(connectionMode) }) {
                 Text(LocalizedString("Search Nearby Devices", comment: "Button title for starting nearby MicroTech device search"))
                     .actionButtonStyle(.primary)
             }

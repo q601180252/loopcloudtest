@@ -27,6 +27,8 @@ struct MicroTechSettingsView: View {
             }
 
             Section(LocalizedString("Configuration", comment: "MicroTech settings configuration section title")) {
+                LabeledValueView(label: LocalizedString("Data Mode", comment: "MicroTech settings data mode label"),
+                                 value: viewModel.dataModeDescription)
                 Toggle(LocalizedString("Upload Readings", comment: "MicroTech settings upload toggle label"),
                        isOn: $viewModel.uploadReadings)
             }
