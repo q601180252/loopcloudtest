@@ -66,6 +66,29 @@ final class ChartsManagerTests: XCTestCase {
         assertXAxisLabelInterval(.hours(4), isPreservedForDuration: .hours(24))
     }
 
+    func testNonIntegralRangeEndsExactlyWithoutDuplicateOrOverflow() {
+        let start = unalignedStartDate
+        let duration = TimeInterval.hours(6) + .minutes(30)
+        let end = start.addingTimeInterval(duration)
+        let manager = makeManager(xAxisLabelInterval: .hours(1))
+        setRange(on: manager, start: start, duration: duration)
+
+        manager.prerender()
+
+        let dateValues = manager.xAxisValues?.compactMap { $0 as? ChartAxisValueDate } ?? []
+        XCTAssertEqual(dateValues.count, 8)
+        XCTAssertEqual(dateValues.first?.date, start)
+        XCTAssertEqual(dateValues.last?.date, end)
+        XCTAssertTrue(dateValues.allSatisfy { $0.date >= start && $0.date <= end })
+        XCTAssertEqual(Set(dateValues.map(\.scalar)).count, dateValues.count)
+
+        let spacings = zip(dateValues, dateValues.dropFirst()).map { $1.date.timeIntervalSince($0.date) }
+        for spacing in spacings.dropLast() {
+            XCTAssertEqual(spacing, .hours(1), accuracy: 0.001)
+        }
+        XCTAssertEqual(spacings.last ?? 0, .minutes(30), accuracy: 0.001)
+    }
+
     private func makeManager() -> ChartsManager {
         return ChartsManager(
             colors: colors,
@@ -92,18 +115,24 @@ final class ChartsManagerTests: XCTestCase {
     }
 
     private func assertXAxisLabelInterval(_ interval: TimeInterval, isPreservedForDuration duration: TimeInterval) {
-        let start = Date(timeIntervalSinceReferenceDate: 0)
-            .addingTimeInterval(.hours(7))
-            .addingTimeInterval(.minutes(30))
+        let start = unalignedStartDate
         let manager = makeManager(xAxisLabelInterval: interval)
         setRange(on: manager, start: start, duration: duration)
 
         manager.prerender()
 
         let dateValues = manager.xAxisValues?.compactMap { $0 as? ChartAxisValueDate } ?? []
-        XCTAssertGreaterThan(dateValues.count, 1)
+        XCTAssertEqual(dateValues.count, 7)
+        XCTAssertEqual(dateValues.first?.date, start)
+        XCTAssertEqual(dateValues.last?.date, start.addingTimeInterval(duration))
         for (current, next) in zip(dateValues, dateValues.dropFirst()) {
             XCTAssertEqual(next.date.timeIntervalSince(current.date), interval, accuracy: 0.001)
         }
+    }
+
+    private var unalignedStartDate: Date {
+        return Date(timeIntervalSinceReferenceDate: 0)
+            .addingTimeInterval(.hours(7))
+            .addingTimeInterval(.minutes(45))
     }
 }

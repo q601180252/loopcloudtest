@@ -182,32 +182,24 @@ open class ChartsManager {
             updateEndDate(endDate)
         }
 
-        let points = [
-            ChartPoint(
-                x: ChartAxisValueDate(date: startDate, formatter: timeFormatter),
-                y: ChartAxisValue(scalar: 0)
-            ),
-            ChartPoint(
-                x: ChartAxisValueDate(date: endDate, formatter: timeFormatter),
-                y: ChartAxisValue(scalar: 0)
+        let axisValueForDate: (Date) -> ChartAxisValueDate = {
+            ChartAxisValueDate(
+                date: $0,
+                formatter: self.timeFormatter,
+                labelSettings: self.axisLabelSettings
             )
-        ]
+        }
 
-        let segments = ceil(endDate.timeIntervalSince(startDate) / xAxisLabelInterval)
+        var xAxisValues: [ChartAxisValue] = [axisValueForDate(startDate)]
+        var date = startDate.addingTimeInterval(xAxisLabelInterval)
+        while date < endDate {
+            xAxisValues.append(axisValueForDate(date))
+            date = date.addingTimeInterval(xAxisLabelInterval)
+        }
+        if endDate > startDate {
+            xAxisValues.append(axisValueForDate(endDate))
+        }
 
-        let xAxisValues = ChartAxisValuesStaticGenerator.generateXAxisValuesWithChartPoints(points,
-            minSegmentCount: segments - 1,
-            maxSegmentCount: segments + 2,
-            multiple: xAxisLabelInterval,
-            axisValueGenerator: {
-                ChartAxisValueDate(
-                    date: ChartAxisValueDate.dateFromScalar($0),
-                    formatter: timeFormatter,
-                    labelSettings: self.axisLabelSettings
-                )
-            },
-            addPaddingSegmentIfEdge: false
-        )
         xAxisValues.first?.hidden = true
         xAxisValues.last?.hidden = true
 
