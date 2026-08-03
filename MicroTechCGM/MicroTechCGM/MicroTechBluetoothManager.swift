@@ -195,6 +195,11 @@ protocol MicroTechBluetoothManaging: AnyObject {
         logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
         remoteIdentifier: UUID?
     )
+    func activateBroadcastScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    )
     func configureConnectionMode(_ mode: MicroTechCGMConnectionMode)
     func scan(remoteIdentifier: UUID?)
     func scanForBroadcast(remoteIdentifier: UUID?)
@@ -214,6 +219,17 @@ extension MicroTechBluetoothManaging {
         self.logHandler = logHandler
         configureConnectionMode(.direct)
         scan(remoteIdentifier: remoteIdentifier)
+    }
+
+    func activateBroadcastScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    ) {
+        self.delegate = delegate
+        self.logHandler = logHandler
+        configureConnectionMode(.broadcast)
+        scanForBroadcast(remoteIdentifier: remoteIdentifier)
     }
 
     func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {}
@@ -437,7 +453,26 @@ public final class MicroTechBluetoothManager: NSObject {
             self.logHandler = logHandler
             self.connectionMode = .direct
             self.activeRemoteIdentifier = remoteIdentifier
-            self.logBluetooth("direct recovery scan activated, remoteIdentifier \(String(describing: remoteIdentifier))")
+            self.logBluetooth("direct scan activated, remoteIdentifier \(String(describing: remoteIdentifier))")
+            self.scanIfReady()
+        }
+    }
+
+    public func activateBroadcastScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    ) {
+        managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
+            self.delegate = delegate
+            self.logHandler = logHandler
+            self.connectionMode = .broadcast
+            self.activeRemoteIdentifier = remoteIdentifier
+            self.broadcastScanPhase = .filtered
+            self.logBluetooth("broadcast scan activated, remoteIdentifier \(String(describing: remoteIdentifier))")
             self.scanIfReady()
         }
     }

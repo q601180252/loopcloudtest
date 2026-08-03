@@ -4013,6 +4013,156 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(bluetoothManager.shutdownCallCount, 0)
     }
 
+    func testConfigurationTimeoutAfterHandshakeStartsNewRecoveryCycle() {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var scheduled: [(TimeInterval, () -> Void)] = []
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: { bluetoothManager },
+            reconnectRecoveryScheduler: { scheduled.append(($0, $1)) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected saved sensor delegate")
+        }
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+        XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "idle")
+
+        manager.microTechSensor(sensor, didError: MicroTechBluetoothManagerError.configureTimeout(remoteIdentifier))
+
+        XCTAssertEqual(scheduled.map(\.0), [60, 60])
+        XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "timing")
+        guard scheduled.count == 2 else {
+            return
+        }
+        scheduled[0].1()
+        XCTAssertEqual(bluetoothManager.shutdownCallCount, 0)
+        scheduled[1].1()
+        XCTAssertEqual(bluetoothManager.shutdownCallCount, 1)
+        XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "shuttingDown")
+    }
+
+    func testQueuedDiscoveredSensorStartIsRejectedAfterRecoveryTimeout() {
+        assertQueuedDiscoveredSensorStartIsRejected { manager, scheduled in
+            scheduled[0].1()
+        }
+    }
+
+    func testQueuedDiscoveredSensorStartIsRejectedAfterDelete() {
+        assertQueuedDiscoveredSensorStartIsRejected { manager, _ in
+            manager.delete {}
+        }
+    }
+
+    func testQueuedDiscoveredSensorStartIsRejectedAfterBroadcastModeChange() {
+        assertQueuedDiscoveredSensorStartIsRejected { manager, _ in
+            XCTAssertTrue(manager.configureConnectionMode(.broadcast))
+        }
+    }
+
+    func testOrdinaryDirectScanCannotRebindCallbacksAfterShutdownStarts() {
+        let bluetoothManager = ShutdownDuringBindingMicroTechBluetoothManager()
+        var manager: MicroTechCGMManager!
+        manager = MicroTechCGMManager(
+            state: MicroTechCGMManagerState(),
+            bluetoothManagerFactory: { bluetoothManager }
+        )
+        bluetoothManager.onBindingAttempt = {
+            manager.delete {}
+        }
+
+        _ = manager.scanForSensor()
+
+        XCTAssertEqual(bluetoothManager.shutdownCallCount, 1)
+        XCTAssertNil(bluetoothManager.delegate)
+        XCTAssertNil(bluetoothManager.logHandler)
+        XCTAssertFalse(bluetoothManager.isScanning)
+    }
+
+    func testInitialScanFactoryRunsOutsideStateLockAndDiscardsCandidateAfterDelete() {
+        let candidate = FakeMicroTechBluetoothManager()
+        let factoryEntered = DispatchSemaphore(value: 0)
+        let releaseFactory = DispatchSemaphore(value: 0)
+        let deletionReturned = DispatchSemaphore(value: 0)
+        let scanReturned = DispatchSemaphore(value: 0)
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: {
+                factoryEntered.signal()
+                releaseFactory.wait()
+                return candidate
+            }
+        )
+
+        DispatchQueue.global().async {
+            _ = manager.scanForSensor()
+            scanReturned.signal()
+        }
+        XCTAssertEqual(factoryEntered.wait(timeout: .now() + 1), .success)
+        DispatchQueue.global().async {
+            manager.delete {}
+            deletionReturned.signal()
+        }
+
+        let deletionResult = deletionReturned.wait(timeout: .now() + 0.2)
+        releaseFactory.signal()
+        XCTAssertEqual(scanReturned.wait(timeout: .now() + 1), .success)
+
+        XCTAssertEqual(deletionResult, .success)
+        XCTAssertEqual(candidate.shutdownCallCount, 1)
+        XCTAssertNil(candidate.delegate)
+        XCTAssertNil(candidate.logHandler)
+        XCTAssertTrue(candidate.scanRemoteIdentifiers.isEmpty)
+    }
+
+    func testReplacementFactoryRunsOutsideStateLockAndDiscardsCandidateAfterDelete() {
+        let first = FakeMicroTechBluetoothManager()
+        let candidate = FakeMicroTechBluetoothManager()
+        let factoryEntered = DispatchSemaphore(value: 0)
+        let releaseFactory = DispatchSemaphore(value: 0)
+        let deletionReturned = DispatchSemaphore(value: 0)
+        let shutdownCompletionReturned = DispatchSemaphore(value: 0)
+        var factoryCalls = 0
+        var scheduled: [(TimeInterval, () -> Void)] = []
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: {
+                factoryCalls += 1
+                guard factoryCalls > 1 else {
+                    return first
+                }
+                factoryEntered.signal()
+                releaseFactory.wait()
+                return candidate
+            },
+            reconnectRecoveryScheduler: { scheduled.append(($0, $1)) }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        scheduled[0].1()
+        DispatchQueue.global().async {
+            first.completeShutdown()
+            shutdownCompletionReturned.signal()
+        }
+        XCTAssertEqual(factoryEntered.wait(timeout: .now() + 1), .success)
+        DispatchQueue.global().async {
+            manager.delete {}
+            deletionReturned.signal()
+        }
+
+        let deletionResult = deletionReturned.wait(timeout: .now() + 0.2)
+        releaseFactory.signal()
+        XCTAssertEqual(shutdownCompletionReturned.wait(timeout: .now() + 1), .success)
+
+        XCTAssertEqual(deletionResult, .success)
+        XCTAssertEqual(candidate.shutdownCallCount, 1)
+        XCTAssertNil(candidate.delegate)
+        XCTAssertNil(candidate.logHandler)
+        XCTAssertTrue(candidate.activatedRemoteIdentifiers.isEmpty)
+    }
+
     func testRecoveryTimeoutWaitsForShutdownBeforeCreatingReplacementManager() {
         let first = FakeMicroTechBluetoothManager()
         let second = FakeMicroTechBluetoothManager()
@@ -4731,6 +4881,38 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(second.shutdownCallCount, 1, file: file, line: line)
     }
 
+    private func assertQueuedDiscoveredSensorStartIsRejected(
+        after action: (MicroTechCGMManager, [(TimeInterval, () -> Void)]) -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var scheduledRecoveries: [(TimeInterval, () -> Void)] = []
+        var scheduledStarts: [() -> Void] = []
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: { bluetoothManager },
+            reconnectRecoveryScheduler: { scheduledRecoveries.append(($0, $1)) },
+            sensorStartScheduler: { scheduledStarts.append($0) }
+        )
+        let peripheral = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(),
+            deviceName: "LinX-ABC123",
+            f002Challenge: Data(),
+            failurePoint: .read,
+            subscriptionFailures: [MicroTechAidexProfile.f001UUID]
+        )
+
+        XCTAssertTrue(manager.scanForSensor(), file: file, line: line)
+        manager.handleBluetoothReady(from: bluetoothManager, peripheralSession: peripheral)
+        XCTAssertEqual(scheduledStarts.count, 1, file: file, line: line)
+
+        action(manager, scheduledRecoveries)
+        scheduledStarts[0]()
+
+        XCTAssertEqual(peripheral.calls, [.disconnect], file: file, line: line)
+    }
+
     private func makeReconnectState() -> MicroTechCGMManagerState {
         var state = MicroTechCGMManagerState()
         state.remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
@@ -5134,9 +5316,15 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
             }
             self.delegate = delegate
             self.logHandler = logHandler
-            self.isScanning = true
             self.activatedRemoteIdentifiers.append(remoteIdentifier)
+            guard !self.isScanning, !self.storedIsConnected else {
+                return
+            }
+            self.isScanning = true
             self.scanRemoteIdentifiers.append(remoteIdentifier)
+            if let scanLog = self.scanLog {
+                self.logHandler?(scanLog.message, scanLog.type)
+            }
         }
         if deferActivations {
             deferredActivations.append(activation)
@@ -5215,6 +5403,66 @@ private final class ReentrantLogHandlerMicroTechBluetoothManager: MicroTechBluet
 
     func completeShutdown(at index: Int = 0) {
         shutdownCompletions.remove(at: index)()
+    }
+}
+
+private final class ShutdownDuringBindingMicroTechBluetoothManager: MicroTechBluetoothManaging {
+    private weak var storedDelegate: MicroTechBluetoothManagerDelegate?
+    private var storedLogHandler: ((String, MicroTechBluetoothLogType) -> Void)?
+    private var isShutdown = false
+
+    var onBindingAttempt: (() -> Void)?
+    var delegate: MicroTechBluetoothManagerDelegate? {
+        get { storedDelegate }
+        set { storedDelegate = newValue }
+    }
+    var logHandler: ((String, MicroTechBluetoothLogType) -> Void)? {
+        get { storedLogHandler }
+        set {
+            if newValue != nil {
+                let action = onBindingAttempt
+                onBindingAttempt = nil
+                action?()
+            }
+            storedLogHandler = newValue
+        }
+    }
+    private(set) var isScanning = false
+    var isConnected = false
+    private(set) var shutdownCallCount = 0
+
+    func activateDirectScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    ) {
+        let action = onBindingAttempt
+        onBindingAttempt = nil
+        action?()
+        guard !isShutdown else {
+            return
+        }
+        storedDelegate = delegate
+        storedLogHandler = logHandler
+        isScanning = true
+    }
+
+    func scan(remoteIdentifier: UUID?) {
+        isScanning = true
+    }
+
+    func refreshConnectedPeripheral() {}
+    func disconnect() {}
+    func forgetPeripheral() {}
+
+    func shutdown(completion: @escaping () -> Void) {
+        shutdownCallCount += 1
+        isShutdown = true
+        isScanning = false
+        isConnected = false
+        storedDelegate = nil
+        storedLogHandler = nil
+        completion()
     }
 }
 
