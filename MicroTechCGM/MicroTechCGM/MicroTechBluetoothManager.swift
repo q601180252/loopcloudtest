@@ -293,6 +293,8 @@ public final class MicroTechBluetoothManager: NSObject {
     private var restoredPeripherals: [UUID: MicroTechRestoredPeripheralReference] = [:]
     private var configuringPeripheralIDs: Set<UUID> = []
     private var isShutdown = false
+    private var shutdownCleanupCompleted = false
+    private var shutdownCompletions: [() -> Void] = []
     private var connectionMode: MicroTechCGMConnectionMode
     private var broadcastScanPhase: MicroTechBroadcastScanPhase = .filtered
     private var activePeripheralManager: MicroTechManagedPeripheral? {
@@ -478,8 +480,12 @@ public final class MicroTechBluetoothManager: NSObject {
 
     public func shutdown(completion: @escaping () -> Void) {
         managerQueue.async {
-            guard !self.isShutdown else {
+            if self.shutdownCleanupCompleted {
                 completion()
+                return
+            }
+            self.shutdownCompletions.append(completion)
+            guard !self.isShutdown else {
                 return
             }
 
@@ -496,8 +502,14 @@ public final class MicroTechBluetoothManager: NSObject {
             self.restoredPeripherals.removeAll()
             self.configuringPeripheralIDs.removeAll()
             self.delegate = nil
-            self.logHandler = nil
-            completion()
+            self.bluetoothLogQueue.clearHandler {
+                self.managerQueue.async {
+                    self.shutdownCleanupCompleted = true
+                    let completions = self.shutdownCompletions
+                    self.shutdownCompletions.removeAll()
+                    completions.forEach { $0() }
+                }
+            }
         }
     }
 

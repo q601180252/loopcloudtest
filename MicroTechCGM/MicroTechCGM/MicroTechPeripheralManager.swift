@@ -174,6 +174,13 @@ final class MicroTechGattLogQueue {
         syncOnQueue {}
     }
 
+    func clearHandler(completion: @escaping () -> Void) {
+        queue.async {
+            self.storedHandler = nil
+            completion()
+        }
+    }
+
     private func deliver(_ entries: [MicroTechGattLogEntry]) {
         guard let handler = storedHandler else {
             guard preHandlerBufferCapacity > 0 else {

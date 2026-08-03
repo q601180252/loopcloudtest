@@ -3470,22 +3470,6 @@ final class MicroTechCGMManagerTests: XCTestCase {
         wait(for: [fired, cancelled], timeout: 0.2)
     }
 
-    func testBluetoothManagerShutdownCompletionIsExplicit() {
-        let bluetoothManager = FakeMicroTechBluetoothManager()
-        var didComplete = false
-
-        bluetoothManager.shutdown {
-            didComplete = true
-        }
-
-        XCTAssertEqual(bluetoothManager.shutdownCallCount, 1)
-        XCTAssertFalse(didComplete)
-
-        bluetoothManager.completeShutdown()
-
-        XCTAssertTrue(didComplete)
-    }
-
     func testRealBluetoothManagerShutdownClearsCallbacksBeforeCompletion() {
         let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         let connectionTimeouts = SpyMicroTechConnectionTimeoutController(scheduledIdentifiers: [identifier])
@@ -3558,20 +3542,115 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
     func testConnectionTimeoutControllerCancelAllInvalidatesScheduledHandlers() {
         let queue = DispatchQueue(label: "MicroTechCGMManagerTests.connectionTimeout.cancelAll")
-        let controller = MicroTechConnectionTimeoutController(timeout: 0.01, queue: queue)
-        let timeoutFired = expectation(description: "cancelled timeouts did not fire")
-        timeoutFired.isInverted = true
+        queue.suspend()
+        let controller = MicroTechConnectionTimeoutController(timeout: 0.001, queue: queue)
+        let lock = NSLock()
+        var firedIdentifiers: [UUID] = []
+        let queueDrained = expectation(description: "controlled timeout queue drained")
 
-        controller.schedule(identifier: UUID()) { _ in
-            timeoutFired.fulfill()
+        controller.schedule(identifier: UUID()) { identifier in
+            lock.lock()
+            firedIdentifiers.append(identifier)
+            lock.unlock()
         }
-        controller.schedule(identifier: UUID()) { _ in
-            timeoutFired.fulfill()
+        controller.schedule(identifier: UUID()) { identifier in
+            lock.lock()
+            firedIdentifiers.append(identifier)
+            lock.unlock()
         }
 
         controller.cancelAll()
+        queue.async {
+            queueDrained.fulfill()
+        }
+        queue.resume()
 
-        wait(for: [timeoutFired], timeout: 0.1)
+        wait(for: [queueDrained], timeout: 1)
+        lock.lock()
+        let recordedIdentifiers = firedIdentifiers
+        lock.unlock()
+        XCTAssertTrue(recordedIdentifiers.isEmpty)
+    }
+
+    func testShutdownReleasesManagerQueueWhileLogHandlerIsBlockedAndWaitsAllCompletions() {
+        let cleanupStarted = expectation(description: "Bluetooth resource cleanup started")
+        let connectionTimeouts = SpyMicroTechConnectionTimeoutController(onCancelAll: {
+            cleanupStarted.fulfill()
+        })
+        let bluetoothManager = MicroTechBluetoothManager(
+            initialConnectionMode: .direct,
+            centralManagerOptions: nil,
+            connectionTimeouts: connectionTimeouts,
+            configurationTimeouts: SpyMicroTechConnectionTimeoutController()
+        )
+        let centralStateObserved = expectation(description: "initial central state observed")
+        bluetoothManager.whenCentralStateObservedForTesting {
+            centralStateObserved.fulfill()
+        }
+        wait(for: [centralStateObserved], timeout: 1)
+
+        bluetoothManager.logHandler = { _, _ in }
+        bluetoothManager.flushLogsForTesting()
+
+        let logHandlerEntered = expectation(description: "blocking log handler entered")
+        let releaseLogHandler = DispatchSemaphore(value: 0)
+        bluetoothManager.logHandler = { _, _ in
+            logHandlerEntered.fulfill()
+            releaseLogHandler.wait()
+        }
+        bluetoothManager.handleDidConnect(identifier: UUID())
+        wait(for: [logHandlerEntered], timeout: 1)
+
+        let completionLock = NSLock()
+        var completionCount = 0
+        var completionRanBeforeRelease = false
+        var mayComplete = false
+        let allShutdownsCompleted = expectation(description: "all shutdown requests completed")
+        allShutdownsCompleted.expectedFulfillmentCount = 2
+        let recordCompletion = {
+            completionLock.lock()
+            completionCount += 1
+            completionRanBeforeRelease = completionRanBeforeRelease || !mayComplete
+            completionLock.unlock()
+            allShutdownsCompleted.fulfill()
+        }
+
+        bluetoothManager.shutdown(completion: recordCompletion)
+        bluetoothManager.shutdown(completion: recordCompletion)
+        wait(for: [cleanupStarted], timeout: 1)
+
+        let stateReadCompleted = expectation(description: "manager queue remains available")
+        let stateLock = NSLock()
+        var statesWhileLogHandlerBlocked: (isScanning: Bool, isConnected: Bool)?
+        DispatchQueue.global(qos: .userInitiated).async {
+            let states = (bluetoothManager.isScanning, bluetoothManager.isConnected)
+            stateLock.lock()
+            statesWhileLogHandlerBlocked = states
+            stateLock.unlock()
+            stateReadCompleted.fulfill()
+        }
+
+        wait(for: [stateReadCompleted], timeout: 0.5)
+        completionLock.lock()
+        XCTAssertEqual(completionCount, 0)
+        mayComplete = true
+        completionLock.unlock()
+
+        releaseLogHandler.signal()
+        wait(for: [allShutdownsCompleted], timeout: 1)
+
+        stateLock.lock()
+        let recordedStates = statesWhileLogHandlerBlocked
+        stateLock.unlock()
+        completionLock.lock()
+        let recordedCompletionCount = completionCount
+        let recordedEarlyCompletion = completionRanBeforeRelease
+        completionLock.unlock()
+        XCTAssertEqual(recordedStates?.isScanning, false)
+        XCTAssertEqual(recordedStates?.isConnected, false)
+        XCTAssertEqual(recordedCompletionCount, 2)
+        XCTAssertFalse(recordedEarlyCompletion)
+        XCTAssertNil(bluetoothManager.logHandler)
     }
 
     func testShutdownManagerIgnoresLateCallbacksAndCannotRestartScanning() {
@@ -4286,9 +4365,11 @@ private final class SpyMicroTechConnectionTimeoutController: MicroTechConnection
     private(set) var scheduledIdentifiers: Set<UUID>
     private(set) var cancelCallCount = 0
     private(set) var cancelAllCallCount = 0
+    private let onCancelAll: (() -> Void)?
 
-    init(scheduledIdentifiers: Set<UUID> = []) {
+    init(scheduledIdentifiers: Set<UUID> = [], onCancelAll: (() -> Void)? = nil) {
         self.scheduledIdentifiers = scheduledIdentifiers
+        self.onCancelAll = onCancelAll
     }
 
     func schedule(identifier: UUID, handler: @escaping (UUID) -> Void) {
@@ -4303,6 +4384,7 @@ private final class SpyMicroTechConnectionTimeoutController: MicroTechConnection
     func cancelAll() {
         cancelAllCallCount += 1
         scheduledIdentifiers.removeAll()
+        onCancelAll?()
     }
 }
 
