@@ -190,6 +190,11 @@ protocol MicroTechBluetoothManaging: AnyObject {
     var isScanning: Bool { get }
     var isConnected: Bool { get }
 
+    func activateDirectScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    )
     func configureConnectionMode(_ mode: MicroTechCGMConnectionMode)
     func scan(remoteIdentifier: UUID?)
     func scanForBroadcast(remoteIdentifier: UUID?)
@@ -200,6 +205,17 @@ protocol MicroTechBluetoothManaging: AnyObject {
 }
 
 extension MicroTechBluetoothManaging {
+    func activateDirectScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    ) {
+        self.delegate = delegate
+        self.logHandler = logHandler
+        configureConnectionMode(.direct)
+        scan(remoteIdentifier: remoteIdentifier)
+    }
+
     func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {}
     func scanForBroadcast(remoteIdentifier: UUID?) {
         scan(remoteIdentifier: remoteIdentifier)
@@ -405,6 +421,24 @@ public final class MicroTechBluetoothManager: NSObject {
                 return
             }
             self.connectionMode = mode
+        }
+    }
+
+    public func activateDirectScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    ) {
+        managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
+            self.delegate = delegate
+            self.logHandler = logHandler
+            self.connectionMode = .direct
+            self.activeRemoteIdentifier = remoteIdentifier
+            self.logBluetooth("direct recovery scan activated, remoteIdentifier \(String(describing: remoteIdentifier))")
+            self.scanIfReady()
         }
     }
 

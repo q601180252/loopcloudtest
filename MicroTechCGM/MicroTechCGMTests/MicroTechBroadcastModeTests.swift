@@ -245,6 +245,17 @@ private final class BroadcastFakeMicroTechBluetoothManager: MicroTechBluetoothMa
     private(set) var shutdownCallCount = 0
     private var shutdownCompletions: [() -> Void] = []
 
+    func activateDirectScan(
+        delegate: MicroTechBluetoothManagerDelegate,
+        logHandler: @escaping (String, MicroTechBluetoothLogType) -> Void,
+        remoteIdentifier: UUID?
+    ) {
+        self.delegate = delegate
+        self.logHandler = logHandler
+        configuredModes.append(.direct)
+        scan(remoteIdentifier: remoteIdentifier)
+    }
+
     func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {
         configuredModes.append(mode)
     }

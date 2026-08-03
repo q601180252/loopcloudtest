@@ -19,6 +19,7 @@ public final class MicroTechCGMManager: CGMManager {
     private let delegateQueueSpecificValue = UUID()
     private let bluetoothManagerFactory: () -> MicroTechBluetoothManaging
     private let bluetoothRetryScheduler: (@escaping () -> Void) -> Void
+    private let reconnectRecoveryScheduler: (TimeInterval, @escaping () -> Void) -> Void
     private let staleConnectionScheduler: (TimeInterval, @escaping () -> Void) -> Void
     private let dateProvider: () -> Date
     private let resumeScanWhenDelegateQueueConfigured: Bool
@@ -96,15 +97,13 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public var isScanning: Bool {
-        readProtectedState { state in
-            state.bluetoothManager?.isScanning == true
-        }
+        let manager = readProtectedState { $0.bluetoothManager?.manager }
+        return manager?.isScanning == true
     }
 
     public var isConnected: Bool {
-        readProtectedState { state in
-            state.bluetoothManager?.isConnected == true
-        }
+        let manager = readProtectedState { $0.bluetoothManager?.manager }
+        return manager?.isConnected == true
     }
 
     public var glucoseDisplay: GlucoseDisplayable? {
@@ -125,6 +124,9 @@ public final class MicroTechCGMManager: CGMManager {
         bluetoothRetryScheduler = { retry in
             DispatchQueue.global(qos: .utility).async(execute: retry)
         }
+        reconnectRecoveryScheduler = { delay, recovery in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: recovery)
+        }
         staleConnectionScheduler = { delay, watchdog in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: watchdog)
         }
@@ -140,6 +142,9 @@ public final class MicroTechCGMManager: CGMManager {
         bluetoothRetryScheduler: @escaping (@escaping () -> Void) -> Void = { retry in
             DispatchQueue.global(qos: .utility).async(execute: retry)
         },
+        reconnectRecoveryScheduler: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, recovery in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: recovery)
+        },
         staleConnectionScheduler: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, watchdog in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: watchdog)
         },
@@ -150,6 +155,7 @@ public final class MicroTechCGMManager: CGMManager {
             MicroTechBluetoothManager(initialConnectionMode: state.connectionMode)
         }
         self.bluetoothRetryScheduler = bluetoothRetryScheduler
+        self.reconnectRecoveryScheduler = reconnectRecoveryScheduler
         self.staleConnectionScheduler = staleConnectionScheduler
         self.dateProvider = dateProvider
         self.resumeScanWhenDelegateQueueConfigured = resumeScanWhenDelegateQueueConfigured
@@ -164,6 +170,9 @@ public final class MicroTechCGMManager: CGMManager {
         }
         bluetoothRetryScheduler = { retry in
             DispatchQueue.global(qos: .utility).async(execute: retry)
+        }
+        reconnectRecoveryScheduler = { delay, recovery in
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: recovery)
         }
         staleConnectionScheduler = { delay, watchdog in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: watchdog)
@@ -198,6 +207,8 @@ public final class MicroTechCGMManager: CGMManager {
         }
 
         let normalizedDeviceName = deviceName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var retiredSensor: MicroTechSensor?
+        var cancelledRecoveryIdentifier: UUID?
         let stateChange = mutateProtectedState { protectedState in
             let isNewSensor = protectedState.state.sensorSerial != normalizedSerial
             let deviceNameChanged = protectedState.state.deviceName != normalizedDeviceName
@@ -206,29 +217,60 @@ public final class MicroTechCGMManager: CGMManager {
                 protectedState.state.remoteIdentifier = nil
             }
             if isNewSensor {
+                retiredSensor = protectedState.sensorIdentity.activeSensor
+                switch protectedState.reconnectRecoveryState {
+                case .idle:
+                    break
+                case .timing(let identifier), .shuttingDown(let identifier):
+                    cancelledRecoveryIdentifier = identifier
+                }
+                protectedState.reconnectRecoveryState = .idle
                 protectedState.state.activationTime = nil
                 protectedState.state.lastReadingDate = nil
                 protectedState.state.latestReading = nil
                 protectedState.state.latestSampleNumber = nil
                 protectedState.state.hasConnectedSensorSession = false
                 protectedState.state.lastConnectionErrorDescription = nil
-                protectedState.sensorIdentity = MicroTechSensorIdentityState()
+                var newIdentity = MicroTechSensorIdentityState()
+                newIdentity.isDeleted = protectedState.sensorIdentity.isDeleted
+                if let activeIdentifier = protectedState.sensorIdentity.activeIdentifier {
+                    newIdentity.retiredIdentifiers.insert(activeIdentifier)
+                }
+                protectedState.sensorIdentity = newIdentity
             }
 
             protectedState.state.deviceName = normalizedDeviceName
             protectedState.state.sensorSerial = normalizedSerial
         }
+        retiredSensor?.stop()
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+        if let cancelledRecoveryIdentifier {
+            logDeviceCommunication(
+                "MicroTech LinX reconnect recovery cancelled id=\(cancelledRecoveryIdentifier) reason=sensor changed",
+                type: .connection
+            )
+        }
         return true
     }
 
     @discardableResult
     public func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) -> Bool {
         var bluetoothManager: MicroTechBluetoothManaging?
+        var managerToShutdown: MicroTechBluetoothManaging?
         let stateChange = mutateProtectedState { protectedState in
+            let changedMode = protectedState.state.connectionMode != mode
             protectedState.state.connectionMode = mode
-            bluetoothManager = protectedState.bluetoothManager
+            if changedMode, mode != .direct {
+                managerToShutdown = protectedState.bluetoothManager?.manager
+                protectedState.bluetoothManager = nil
+                protectedState.reconnectRecoveryState = .idle
+            } else {
+                bluetoothManager = protectedState.bluetoothManager?.manager
+            }
             if mode == .broadcast {
+                if let activeIdentifier = protectedState.sensorIdentity.activeIdentifier {
+                    protectedState.sensorIdentity.retiredIdentifiers.insert(activeIdentifier)
+                }
                 protectedState.sensorIdentity.activeSensor = nil
                 protectedState.sensorIdentity.activeIdentifier = nil
                 protectedState.sensorIdentity.activeSensorConnectedAt = nil
@@ -236,6 +278,7 @@ public final class MicroTechCGMManager: CGMManager {
             }
         }
 
+        managerToShutdown?.shutdown {}
         bluetoothManager?.configureConnectionMode(mode)
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
         return true
@@ -277,12 +320,10 @@ public final class MicroTechCGMManager: CGMManager {
 
     @discardableResult
     private func scanForSensor(clearingConnectionError: Bool) -> Bool {
-        let currentState = state
-        let connectionMode = currentState.connectionMode
-
-        var bluetoothManager: MicroTechBluetoothManaging?
-        var shouldStartScan = false
-        var shouldRefreshConnectedPeripheral = false
+        var generation: MicroTechBluetoothManagerGeneration?
+        var scanDelegate: MicroTechBluetoothManagerDelegate?
+        var connectionMode: MicroTechCGMConnectionMode = .direct
+        var remoteIdentifier: UUID?
         var scanLogMessage: String?
 
         let stateChange = mutateProtectedState { protectedState in
@@ -290,73 +331,90 @@ public final class MicroTechCGMManager: CGMManager {
                 scanLogMessage = "MicroTech LinX scan ignored because CGM was deleted"
                 return
             }
+            guard case .shuttingDown = protectedState.reconnectRecoveryState else {
+                if clearingConnectionError {
+                    protectedState.state.lastConnectionErrorDescription = nil
+                }
 
-            if clearingConnectionError {
-                protectedState.state.lastConnectionErrorDescription = nil
-                protectedState.sensorIdentity.pendingReconnectRecoveryReason = nil
+                connectionMode = protectedState.state.connectionMode
+                remoteIdentifier = protectedState.state.remoteIdentifier
+                let currentGeneration = protectedState.bluetoothManager ?? MicroTechBluetoothManagerGeneration(
+                    id: UUID(),
+                    manager: bluetoothManagerFactory()
+                )
+                protectedState.bluetoothManager = currentGeneration
+                generation = currentGeneration
+
+                if connectionMode == .broadcast {
+                    scanDelegate = self
+                    scanLogMessage = "MicroTech LinX broadcast scan started"
+                } else if let sensorSerial = protectedState.state.sensorSerial, !sensorSerial.isEmpty,
+                          let activeSensor = protectedState.sensorIdentity.activeSensor
+                {
+                    scanDelegate = activeSensor
+                    scanLogMessage = "MicroTech LinX scan using active sensor serial \(sensorSerial)"
+                } else if let sensorSerial = protectedState.state.sensorSerial, !sensorSerial.isEmpty {
+                    let session = MicroTechAidexSession(
+                        remoteIdentifier: protectedState.state.remoteIdentifier ?? UUID(),
+                        deviceName: protectedState.state.deviceName ?? "LinX-\(sensorSerial)",
+                        sensorSerial: sensorSerial
+                    )
+                    let sensor = MicroTechSensor(
+                        session: session,
+                        peripheralSession: MicroTechPendingPeripheralSession(session: session)
+                    )
+                    sensor.delegate = self
+                    scanDelegate = sensor
+                    protectedState.sensorIdentity.activeSensor = sensor
+                    protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
+                    scanLogMessage = "MicroTech LinX scan using saved sensor serial \(sensorSerial)"
+                } else {
+                    scanDelegate = self
+                    scanLogMessage = "MicroTech LinX nearby scan started without saved sensor"
+                }
+                return
             }
 
-            let manager = protectedState.bluetoothManager ?? bluetoothManagerFactory()
-            protectedState.bluetoothManager = manager
-            manager.configureConnectionMode(connectionMode)
-
-            if connectionMode == .broadcast {
-                manager.delegate = self
-                scanLogMessage = "MicroTech LinX broadcast scan started"
-                shouldRefreshConnectedPeripheral = false
-                shouldStartScan = !manager.isScanning
-            } else if let sensorSerial = currentState.sensorSerial, !sensorSerial.isEmpty,
-               let activeSensor = protectedState.sensorIdentity.activeSensor
-            {
-                manager.delegate = activeSensor
-                scanLogMessage = "MicroTech LinX scan using active sensor serial \(sensorSerial)"
-            } else if let sensorSerial = currentState.sensorSerial, !sensorSerial.isEmpty {
-                let session = MicroTechAidexSession(
-                    remoteIdentifier: currentState.remoteIdentifier ?? UUID(),
-                    deviceName: currentState.deviceName ?? "LinX-\(sensorSerial)",
-                    sensorSerial: sensorSerial
-                )
-                let sensor = MicroTechSensor(
-                    session: session,
-                    peripheralSession: MicroTechPendingPeripheralSession(session: session)
-                )
-                sensor.delegate = self
-                manager.delegate = sensor
-                protectedState.sensorIdentity.activeSensor = sensor
-                protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
-                scanLogMessage = "MicroTech LinX scan using saved sensor serial \(sensorSerial)"
-            } else {
-                manager.delegate = self
-                scanLogMessage = "MicroTech LinX nearby scan started without saved sensor"
-            }
-
-            bluetoothManager = manager
-            shouldRefreshConnectedPeripheral = manager.isConnected
-            shouldStartScan = !(manager.isScanning || manager.isConnected)
-        }
-        bluetoothManager?.logHandler = { [weak self] message, type in
-            self?.logDeviceCommunication(message, type: type.deviceLogEntryType)
+            scanLogMessage = "MicroTech LinX scan ignored while Bluetooth manager is shutting down"
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
 
-        guard let bluetoothManager else {
+        guard let generation, let scanDelegate else {
             if let scanLogMessage {
                 logDeviceCommunication(scanLogMessage, type: .connection)
             }
             return false
         }
 
-        if shouldStartScan {
+        startReconnectRecoveryIfNeeded(reason: clearingConnectionError ? "user scan" : "scan")
+        guard isCurrentBluetoothManager(generation.manager, generationID: generation.id) else {
+            return false
+        }
+
+        let bluetoothManager = generation.manager
+        bluetoothManager.logHandler = { [weak self] message, type in
+            self?.logDeviceCommunication(message, type: type.deviceLogEntryType)
+        }
+        bluetoothManager.delegate = scanDelegate
+        bluetoothManager.configureConnectionMode(connectionMode)
+
+        guard isCurrentBluetoothManager(bluetoothManager, generationID: generation.id) else {
+            return false
+        }
+        let isConnected = bluetoothManager.isConnected
+        let isScanning = bluetoothManager.isScanning
+
+        if !(isScanning || isConnected) {
             switch connectionMode {
             case .direct:
-                bluetoothManager.scan(remoteIdentifier: currentState.remoteIdentifier)
+                bluetoothManager.scan(remoteIdentifier: remoteIdentifier)
             case .broadcast:
-                bluetoothManager.scanForBroadcast(remoteIdentifier: currentState.remoteIdentifier)
+                bluetoothManager.scanForBroadcast(remoteIdentifier: remoteIdentifier)
             }
             if let scanLogMessage {
-                logDeviceCommunication("\(scanLogMessage), remoteIdentifier \(String(describing: currentState.remoteIdentifier))", type: .connection)
+                logDeviceCommunication("\(scanLogMessage), remoteIdentifier \(String(describing: remoteIdentifier))", type: .connection)
             }
-        } else if shouldRefreshConnectedPeripheral {
+        } else if isConnected {
             bluetoothManager.refreshConnectedPeripheral()
             logDeviceCommunication("MicroTech LinX refreshing connected Bluetooth session", type: .connection)
         } else {
@@ -370,7 +428,7 @@ public final class MicroTechCGMManager: CGMManager {
         var bluetoothManagerToDisconnect: MicroTechBluetoothManaging?
         let stateChange = mutateProtectedState { protectedState in
             sensorToStop = protectedState.sensorIdentity.activeSensor
-            bluetoothManagerToDisconnect = protectedState.bluetoothManager
+            bluetoothManagerToDisconnect = protectedState.bluetoothManager?.manager
             if let activeIdentifier = protectedState.sensorIdentity.activeIdentifier {
                 protectedState.sensorIdentity.retiredIdentifiers.insert(activeIdentifier)
             }
@@ -378,6 +436,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.sensorIdentity.activeIdentifier = nil
             protectedState.sensorIdentity.isDeleted = true
             protectedState.bluetoothManager = nil
+            protectedState.reconnectRecoveryState = .idle
 
             protectedState.state.remoteIdentifier = nil
             protectedState.state.deviceName = nil
@@ -390,8 +449,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.state.lastConnectionErrorDescription = nil
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
-        bluetoothManagerToDisconnect?.disconnect()
-        bluetoothManagerToDisconnect?.forgetPeripheral()
+        bluetoothManagerToDisconnect?.shutdown {}
         sensorToStop?.stop()
         notifyDelegateOfDeletion(completion: completion)
     }
@@ -660,7 +718,7 @@ public final class MicroTechCGMManager: CGMManager {
                 if state.sensorIdentity.savedIdentifierFailureCount >= Self.savedIdentifierFallbackFailureThreshold {
                     state.sensorIdentity.savedIdentifierFailureCount = 0
                     state.state.remoteIdentifier = nil
-                    bluetoothManagerToRestart = state.bluetoothManager
+                    bluetoothManagerToRestart = state.bluetoothManager?.manager
                     shouldRestartForNearbySerialScan = true
                     return
                 }
@@ -671,6 +729,7 @@ public final class MicroTechCGMManager: CGMManager {
             }
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+        startReconnectRecoveryIfNeeded(reason: "Bluetooth failure")
         logDeviceCommunication("MicroTech LinX Bluetooth failed: \(String(describing: error))", type: .error)
         if shouldRestartForNearbySerialScan {
             logDeviceCommunication("MicroTech LinX clearing saved Bluetooth identifier after \(fallbackFailureCount) failures and scanning by sensor serial", type: .connection)
@@ -710,6 +769,253 @@ public final class MicroTechCGMManager: CGMManager {
 
         logDeviceCommunication("MicroTech LinX scan accepted advertised device \(deviceName), identifier \(identifier)", type: .connection)
         return true
+    }
+
+    static func isReconnectRecoveryEligible(
+        hasConnectedSensorSession: Bool,
+        sensorSerial: String?,
+        connectionMode: MicroTechCGMConnectionMode,
+        isDeleted: Bool,
+        hasCurrentHandshake: Bool
+    ) -> Bool {
+        !isDeleted &&
+            connectionMode == .direct &&
+            hasConnectedSensorSession &&
+            sensorSerial?.isEmpty == false &&
+            !hasCurrentHandshake
+    }
+
+    private func isReconnectRecoveryEligible(_ state: MicroTechCGMManagerProtectedState) -> Bool {
+        Self.isReconnectRecoveryEligible(
+            hasConnectedSensorSession: state.state.hasConnectedSensorSession,
+            sensorSerial: state.state.sensorSerial,
+            connectionMode: state.state.connectionMode,
+            isDeleted: state.sensorIdentity.isDeleted,
+            hasCurrentHandshake: state.sensorIdentity.activeSensorConnectedAt != nil
+        )
+    }
+
+    private func startReconnectRecoveryIfNeeded(reason: String) {
+        let identifier = UUID()
+        var shouldSchedule = false
+        _ = mutateProtectedState { state in
+            guard isReconnectRecoveryEligible(state),
+                  case .idle = state.reconnectRecoveryState
+            else {
+                return
+            }
+            state.reconnectRecoveryState = .timing(id: identifier)
+            if state.sensorIdentity.pendingReconnectRecoveryReason == nil {
+                state.sensorIdentity.pendingReconnectRecoveryReason = reason
+            }
+            shouldSchedule = true
+        }
+
+        guard shouldSchedule else {
+            return
+        }
+        logDeviceCommunication(
+            "MicroTech LinX reconnect recovery started id=\(identifier) reason=\(reason) timeout=60",
+            type: .connection
+        )
+        reconnectRecoveryScheduler(Self.reconnectRecoveryInterval) { [weak self] in
+            self?.runReconnectRecoveryTimeout(identifier: identifier)
+        }
+    }
+
+    private func cancelReconnectRecovery(reason: String) {
+        var cancelledIdentifier: UUID?
+        _ = mutateProtectedState { state in
+            switch state.reconnectRecoveryState {
+            case .idle:
+                return
+            case .timing(let identifier), .shuttingDown(let identifier):
+                cancelledIdentifier = identifier
+                state.reconnectRecoveryState = .idle
+            }
+        }
+        if let cancelledIdentifier {
+            logDeviceCommunication(
+                "MicroTech LinX reconnect recovery cancelled id=\(cancelledIdentifier) reason=\(reason)",
+                type: .connection
+            )
+        }
+    }
+
+    private func runReconnectRecoveryTimeout(identifier: UUID) {
+        var generation: MicroTechBluetoothManagerGeneration?
+        var sensorToStop: MicroTechSensor?
+        let stateChange = mutateProtectedState { state in
+            guard case .timing(let currentIdentifier) = state.reconnectRecoveryState,
+                  currentIdentifier == identifier,
+                  isReconnectRecoveryEligible(state),
+                  let currentGeneration = state.bluetoothManager
+            else {
+                return
+            }
+
+            state.reconnectRecoveryState = .shuttingDown(id: identifier)
+            generation = currentGeneration
+            state.bluetoothManager = nil
+            state.state.remoteIdentifier = nil
+            sensorToStop = retireActiveSensor(in: &state.sensorIdentity)
+            state.sensorIdentity.clearPendingHistoryRequest()
+        }
+        notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+
+        guard let generation else {
+            return
+        }
+        logDeviceCommunication(
+            "MicroTech LinX reconnect recovery timeout id=\(identifier) after=60 action=rebuild",
+            type: .connection
+        )
+        sensorToStop?.stop()
+        generation.manager.shutdown { [weak self] in
+            self?.completeBluetoothManagerShutdown(recoveryIdentifier: identifier)
+        }
+    }
+
+    private func completeBluetoothManagerShutdown(recoveryIdentifier: UUID) {
+        var replacement: MicroTechBluetoothManagerGeneration?
+        var replacementRecoveryIdentifier: UUID?
+        let stateChange = mutateProtectedState { state in
+            guard case .shuttingDown(let currentIdentifier) = state.reconnectRecoveryState,
+                  currentIdentifier == recoveryIdentifier,
+                  isReconnectRecoveryEligible(state)
+            else {
+                if case .shuttingDown(let currentIdentifier) = state.reconnectRecoveryState,
+                   currentIdentifier == recoveryIdentifier
+                {
+                    state.reconnectRecoveryState = .idle
+                }
+                return
+            }
+
+            let manager = bluetoothManagerFactory()
+            let generation = MicroTechBluetoothManagerGeneration(id: UUID(), manager: manager)
+            let nextRecoveryIdentifier = UUID()
+            guard let sensor = makePendingSensor(for: state.state) else {
+                state.reconnectRecoveryState = .idle
+                return
+            }
+            state.bluetoothManager = generation
+            state.reconnectRecoveryState = .timing(id: nextRecoveryIdentifier)
+            state.sensorIdentity.retiredIdentifiers.remove(ObjectIdentifier(sensor))
+            state.sensorIdentity.activeSensor = sensor
+            state.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
+            replacement = generation
+            replacementRecoveryIdentifier = nextRecoveryIdentifier
+        }
+        notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
+
+        guard let replacement, let replacementRecoveryIdentifier else {
+            return
+        }
+        logDeviceCommunication(
+            "MicroTech LinX Bluetooth shutdown completed id=\(recoveryIdentifier); rebuilding scan by serial",
+            type: .connection
+        )
+        reconnectRecoveryScheduler(Self.reconnectRecoveryInterval) { [weak self] in
+            self?.runReconnectRecoveryTimeout(identifier: replacementRecoveryIdentifier)
+        }
+        activateReplacementManager(
+            replacement.manager,
+            generationID: replacement.id,
+            recoveryIdentifier: replacementRecoveryIdentifier
+        )
+    }
+
+    private func activateReplacementManager(
+        _ manager: MicroTechBluetoothManaging,
+        generationID: UUID,
+        recoveryIdentifier: UUID
+    ) {
+        let delegate = readProtectedState { state -> MicroTechBluetoothManagerDelegate? in
+            guard state.bluetoothManager?.id == generationID,
+                  state.bluetoothManager?.manager === manager,
+                  case .timing(let currentIdentifier) = state.reconnectRecoveryState,
+                  currentIdentifier == recoveryIdentifier,
+                  state.state.connectionMode == .direct,
+                  !state.sensorIdentity.isDeleted
+            else {
+                return nil
+            }
+            return state.sensorIdentity.activeSensor
+        }
+        guard let delegate else {
+            manager.shutdown {}
+            return
+        }
+        manager.activateDirectScan(
+            delegate: delegate,
+            logHandler: { [weak self] message, type in
+                self?.logDeviceCommunication(message, type: type.deviceLogEntryType)
+            },
+            remoteIdentifier: nil
+        )
+    }
+
+    private func makePendingSensor(for state: MicroTechCGMManagerState) -> MicroTechSensor? {
+        guard let sensorSerial = state.sensorSerial, !sensorSerial.isEmpty else {
+            return nil
+        }
+        let session = MicroTechAidexSession(
+            remoteIdentifier: UUID(),
+            deviceName: state.deviceName ?? "LinX-\(sensorSerial)",
+            sensorSerial: sensorSerial
+        )
+        let sensor = MicroTechSensor(
+            session: session,
+            peripheralSession: MicroTechPendingPeripheralSession(session: session)
+        )
+        sensor.delegate = self
+        return sensor
+    }
+
+    private func retireActiveSensor(in state: inout MicroTechSensorIdentityState) -> MicroTechSensor? {
+        let sensor = state.activeSensor
+        if let activeIdentifier = state.activeIdentifier {
+            state.retiredIdentifiers.insert(activeIdentifier)
+        }
+        state.activeSensor = nil
+        state.activeIdentifier = nil
+        state.activeSensorConnectedAt = nil
+        state.staleConnectionWatchdogIdentifier = UUID()
+        return sensor
+    }
+
+    private func isCurrentBluetoothManager(
+        _ manager: MicroTechBluetoothManaging,
+        generationID: UUID? = nil
+    ) -> Bool {
+        readProtectedState { state in
+            guard let current = state.bluetoothManager,
+                  current.manager === manager,
+                  !state.sensorIdentity.isDeleted
+            else {
+                return false
+            }
+            return generationID == nil || generationID == current.id
+        }
+    }
+
+    var reconnectRecoveryPhaseForTesting: String {
+        readProtectedState { state in
+            switch state.reconnectRecoveryState {
+            case .idle: return "idle"
+            case .timing: return "timing"
+            case .shuttingDown: return "shuttingDown"
+            }
+        }
+    }
+
+    var emittedHistorySamplesForTesting: Set<Int> {
+        readProtectedState { $0.sensorIdentity.emittedHistorySampleNumbers }
+    }
+
+    var pendingHistoryRequestForTesting: Int? {
+        readProtectedState { $0.sensorIdentity.historyBackfillRequestedFrom }
     }
 
     private func isCurrentSensor(_ sensor: MicroTechSensor, in state: MicroTechSensorIdentityState) -> Bool {
@@ -808,24 +1114,23 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     private func resumeSavedSensorScanIfNeeded(reason: String) {
-        var shouldScan = false
-        lockedManagerState.mutate { state in
+        let generation = readProtectedState { state -> MicroTechBluetoothManagerGeneration? in
             guard !state.sensorIdentity.isDeleted,
                   state.state.sensorSerial?.isEmpty == false,
-                  state.bluetoothManager?.isScanning != true,
-                  state.bluetoothManager?.isConnected != true
+                  !state.reconnectRecoveryState.isShuttingDown
             else {
-                return
+                return nil
             }
-
-            state.sensorIdentity.pendingReconnectRecoveryReason = reason
-            shouldScan = true
+            return state.bluetoothManager
         }
 
-        guard shouldScan else {
+        if let generation,
+           (generation.manager.isScanning || generation.manager.isConnected)
+        {
             return
         }
 
+        startReconnectRecoveryIfNeeded(reason: reason)
         logDeviceCommunication("MicroTech LinX resume scan after \(reason)", type: .connection)
         scanForSensor(clearingConnectionError: false)
     }
@@ -905,13 +1210,17 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     private func disconnectStaleConnectedSensorIfNeeded() -> Bool {
+        let generation = readProtectedState { $0.bluetoothManager }
+        guard let generation, generation.manager.isConnected else {
+            return false
+        }
+
         var bluetoothManager: MicroTechBluetoothManaging?
         var disconnectReason = "stale reading"
         let now = dateProvider()
         let shouldDisconnect = readProtectedState { state in
             guard state.state.sensorSerial?.isEmpty == false,
-                  let manager = state.bluetoothManager,
-                  manager.isConnected else
+                  state.bluetoothManager?.id == generation.id else
             {
                 return false
             }
@@ -930,7 +1239,7 @@ public final class MicroTechCGMManager: CGMManager {
                 return false
             }
 
-            bluetoothManager = manager
+            bluetoothManager = generation.manager
             return true
         }
 
@@ -1233,6 +1542,7 @@ public final class MicroTechCGMManager: CGMManager {
     private static let historyCaughtUpDistance = 2
     private static let historyRetrySampleDistance = 5
     private static let staleReadingReconnectInterval: TimeInterval = 15 * 60
+    private static let reconnectRecoveryInterval: TimeInterval = 60
     private static let consecutiveSensorErrorReconnectThreshold = 3
     private static let savedIdentifierFallbackFailureThreshold = 2
     private static let maxHistoryRejectionDetailsPerReason = 3
@@ -1279,9 +1589,10 @@ public final class MicroTechCGMManager: CGMManager {
             }
 
             shouldStartSensor = true
+            protectedState.sensorIdentity.retiredIdentifiers.remove(ObjectIdentifier(sensor))
             protectedState.sensorIdentity.activeSensor = sensor
             protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
-            protectedState.sensorIdentity.activeSensorConnectedAt = self.dateProvider()
+            protectedState.sensorIdentity.activeSensorConnectedAt = nil
             protectedState.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
             protectedState.sensorIdentity.consecutiveSensorErrorCount = 0
             protectedState.sensorIdentity.savedIdentifierFailureCount = 0
@@ -1289,7 +1600,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.state.deviceName = session.deviceName
             protectedState.state.sensorSerial = session.sensorSerial
             protectedState.state.lastConnectionErrorDescription = nil
-            protectedState.bluetoothManager?.delegate = sensor
+            // Delegate assignment is performed after the protected state is released.
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
 
@@ -1299,6 +1610,11 @@ public final class MicroTechCGMManager: CGMManager {
             return
         }
 
+        let generation = readProtectedState { $0.bluetoothManager }
+        if let generation, isCurrentBluetoothManager(generation.manager, generationID: generation.id) {
+            generation.manager.delegate = sensor
+        }
+
         DispatchQueue.global(qos: .utility).async {
             do {
                 try sensor.start()
@@ -1306,6 +1622,79 @@ public final class MicroTechCGMManager: CGMManager {
                 self.logDeviceCommunication("MicroTech LinX sensor start failed: \(String(describing: error))", type: .error)
             }
         }
+    }
+
+    func handleBluetoothShouldConnect(
+        from manager: MicroTechBluetoothManaging,
+        deviceName: String,
+        identifier: UUID
+    ) -> Bool {
+        guard isCurrentBluetoothManager(manager) else {
+            logDeviceCommunication("MicroTech LinX ignored callback=shouldConnect reason=retiredBluetoothManager", type: .connection)
+            return false
+        }
+        return shouldConnectToMicroTechDevice(deviceName: deviceName, identifier: identifier)
+    }
+
+    func handleBluetoothReady(
+        from manager: MicroTechBluetoothManaging,
+        peripheralSession: MicroTechPeripheralSession
+    ) {
+        guard isCurrentBluetoothManager(manager) else {
+            logDeviceCommunication("MicroTech LinX ignored callback=ready reason=retiredBluetoothManager", type: .connection)
+            peripheralSession.disconnect()
+            return
+        }
+        connectDiscoveredSensor(peripheralSession: peripheralSession)
+    }
+
+    func handleBluetoothData(
+        from manager: MicroTechBluetoothManaging,
+        value: Data,
+        characteristic: CBUUID,
+        session: MicroTechPeripheralSession
+    ) {
+        guard isCurrentBluetoothManager(manager) else {
+            logDeviceCommunication("MicroTech LinX ignored callback=data reason=retiredBluetoothManager", type: .connection)
+            return
+        }
+    }
+
+    func handleBluetoothDisconnect(
+        from manager: MicroTechBluetoothManaging,
+        session: MicroTechPeripheralSession
+    ) {
+        guard isCurrentBluetoothManager(manager) else {
+            logDeviceCommunication("MicroTech LinX ignored callback=disconnect reason=retiredBluetoothManager", type: .connection)
+            return
+        }
+        startReconnectRecoveryIfNeeded(reason: "Bluetooth disconnect")
+        scheduleResumeSavedSensorScanIfNeeded(reason: "Bluetooth disconnect")
+    }
+
+    func handleBluetoothBroadcast(
+        from manager: MicroTechBluetoothManaging,
+        advertisement: MicroTechBroadcastAdvertisement
+    ) {
+        guard isCurrentBluetoothManager(manager) else {
+            logDeviceCommunication("MicroTech LinX ignored callback=broadcast reason=retiredBluetoothManager", type: .connection)
+            return
+        }
+        do {
+            let sample = try acceptBroadcastAdvertisement(advertisement)
+            notifyDelegateOfReadingResult(sample.map { .newData([$0]) } ?? .noData)
+        } catch {
+            logBroadcastParseError(error, advertisement: advertisement)
+            notifyDelegateOfReadingResult(.noData)
+        }
+    }
+
+    func handleBluetoothFailure(from manager: MicroTechBluetoothManaging, error: Error) {
+        guard isCurrentBluetoothManager(manager) else {
+            logDeviceCommunication("MicroTech LinX ignored callback=failure reason=retiredBluetoothManager", type: .connection)
+            return
+        }
+        recordBluetoothFailure(error)
     }
 }
 
@@ -1317,31 +1706,27 @@ private enum MicroTechDeviceLogDestination {
 
 extension MicroTechCGMManager: MicroTechBluetoothManagerDelegate {
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, shouldConnectToDeviceName deviceName: String, identifier: UUID) -> Bool {
-        shouldConnectToMicroTechDevice(deviceName: deviceName, identifier: identifier)
+        handleBluetoothShouldConnect(from: manager, deviceName: deviceName, identifier: identifier)
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didReady peripheralSession: MicroTechPeripheralSession) {
-        connectDiscoveredSensor(peripheralSession: peripheralSession)
+        handleBluetoothReady(from: manager, peripheralSession: peripheralSession)
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didReceive value: Data, for characteristic: CBUUID, session: MicroTechPeripheralSession) {
+        handleBluetoothData(from: manager, value: value, characteristic: characteristic, session: session)
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDisconnect session: MicroTechPeripheralSession) {
+        handleBluetoothDisconnect(from: manager, session: session)
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didDiscoverBroadcast advertisement: MicroTechBroadcastAdvertisement) {
-        do {
-            let sample = try acceptBroadcastAdvertisement(advertisement)
-            notifyDelegateOfReadingResult(sample.map { .newData([$0]) } ?? .noData)
-        } catch {
-            logBroadcastParseError(error, advertisement: advertisement)
-            notifyDelegateOfReadingResult(.noData)
-        }
+        handleBluetoothBroadcast(from: manager, advertisement: advertisement)
     }
 
     public func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didFailWith error: Error) {
-        recordBluetoothFailure(error)
+        handleBluetoothFailure(from: manager, error: error)
     }
 }
 
@@ -1360,6 +1745,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             return
         }
 
+        cancelReconnectRecovery(reason: "handshake")
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
         scheduleStaleConnectionWatchdogIfNeeded(reason: "sensor connect")
         if shouldStartSensor {
@@ -1594,16 +1980,20 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
     }
 
     public func microTechSensor(_ sensor: MicroTechSensor, didActivateAt activationTime: Date) {
+        var didAccept = false
         let stateChange = mutateProtectedState { state in
             guard isCurrentSensor(sensor, in: state.sensorIdentity) else {
                 return
             }
+            didAccept = true
             state.state.activationTime = activationTime
             state.state.lastConnectionErrorDescription = nil
             state.sensorIdentity.consecutiveSensorErrorCount = 0
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
-        logDeviceCommunication("MicroTech LinX sensor activation time \(activationTime)", type: .connection)
+        if didAccept {
+            logDeviceCommunication("MicroTech LinX sensor activation time \(activationTime)", type: .connection)
+        }
     }
 
     public func microTechSensor(_ sensor: MicroTechSensor, didIgnorePacketType packetType: UInt8, length: Int, hexPrefix rawHex: String) {
@@ -1623,7 +2013,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
 
     public func microTechSensor(_ sensor: MicroTechSensor, didLog message: String, type: MicroTechSensorLogType) {
         let shouldLog = readProtectedState { state in
-            isCurrentSensor(sensor, in: state.sensorIdentity) || state.sensorIdentity.activeSensor == nil
+            isCurrentSensor(sensor, in: state.sensorIdentity)
         }
 
         guard shouldLog else {
@@ -1658,7 +2048,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             state.sensorIdentity.consecutiveSensorErrorCount += 1
             consecutiveErrorCount = state.sensorIdentity.consecutiveSensorErrorCount
             if consecutiveErrorCount >= Self.consecutiveSensorErrorReconnectThreshold {
-                bluetoothManager = state.bluetoothManager
+                bluetoothManager = state.bluetoothManager?.manager
                 state.sensorIdentity.consecutiveSensorErrorCount = 0
             }
         }
@@ -1737,7 +2127,28 @@ private struct MicroTechHistoryRequest {
 private struct MicroTechCGMManagerProtectedState {
     var state: MicroTechCGMManagerState
     var sensorIdentity = MicroTechSensorIdentityState()
-    var bluetoothManager: MicroTechBluetoothManaging?
+    var bluetoothManager: MicroTechBluetoothManagerGeneration?
+    var reconnectRecoveryState: MicroTechReconnectRecoveryState = .idle
+}
+
+private struct MicroTechBluetoothManagerGeneration {
+    let id: UUID
+    let manager: MicroTechBluetoothManaging
+}
+
+private enum MicroTechReconnectRecoveryState {
+    case idle
+    case timing(id: UUID)
+    case shuttingDown(id: UUID)
+}
+
+private extension MicroTechReconnectRecoveryState {
+    var isShuttingDown: Bool {
+        if case .shuttingDown = self {
+            return true
+        }
+        return false
+    }
 }
 
 private struct MicroTechSensorIdentityState {
