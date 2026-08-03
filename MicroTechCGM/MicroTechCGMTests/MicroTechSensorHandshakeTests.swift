@@ -3,6 +3,135 @@ import XCTest
 @testable import MicroTechCGM
 
 final class MicroTechSensorHandshakeTests: XCTestCase {
+    func testF001ReportsRawPacketBeforePairingResponseReturns() {
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: Data()
+        )
+        let observer = ReadingObserver()
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake,
+            pairingKeyTimeout: 0
+        )
+        let receivedAt = Date(timeIntervalSince1970: 1_700_000_001)
+        sensor.delegate = observer
+
+        sensor.handleNotification(
+            characteristic: MicroTechAidexProfile.f001UUID,
+            value: Data(repeating: 0xAB, count: 16),
+            receivedAt: receivedAt
+        )
+        observer.notificationEvents.append("pairing-return")
+
+        XCTAssertEqual(observer.notificationEvents, ["packet:F001", "pairing-return"])
+        XCTAssertEqual(observer.packetNotifications.count, 1)
+        XCTAssertEqual(observer.packetNotifications.single?.characteristic, MicroTechAidexProfile.f001UUID)
+        XCTAssertEqual(observer.packetNotifications.single?.receivedAt, receivedAt)
+    }
+
+    func testF002ReportsRawPacketBeforeDecryptFailure() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let observer = ReadingObserver()
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake,
+            pairingKeyTimeout: 0,
+            commandScheduler: nil,
+            notificationDecrypter: { _, _ in
+                observer.notificationEvents.append("decrypt")
+                throw MicroTechSensorHandshakeTestError.forcedFailure
+            }
+        )
+        sensor.delegate = observer
+        try sensor.start()
+
+        sensor.handleNotification(
+            characteristic: MicroTechAidexProfile.f002UUID,
+            value: Data([0x01]),
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_002)
+        )
+
+        XCTAssertEqual(observer.notificationEvents, ["packet:F002", "decrypt", "error"])
+        XCTAssertEqual(observer.packetNotifications.map(\.characteristic), [MicroTechAidexProfile.f002UUID])
+    }
+
+    func testF003ReportsRawPacketBeforeParseFailure() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let observer = ReadingObserver()
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake,
+            pairingKeyTimeout: 0
+        )
+        sensor.delegate = observer
+        try sensor.start()
+        let invalidPlain = MicroTechAidexCrypto.appendingCRC(to: Data([0x03]))
+        let encrypted = try MicroTechAidexCrypto.encryptCfb128(
+            key: material.key,
+            iv: material.iv,
+            plain: invalidPlain
+        )
+
+        sensor.handleNotification(
+            characteristic: MicroTechAidexProfile.f003UUID,
+            value: encrypted,
+            receivedAt: Date(timeIntervalSince1970: 1_700_000_003)
+        )
+
+        XCTAssertEqual(observer.notificationEvents, ["packet:F003", "error"])
+        XCTAssertEqual(observer.packetNotifications.map(\.characteristic), [MicroTechAidexProfile.f003UUID])
+    }
+
+    func testUnrelatedCharacteristicDoesNotReportRawPacket() throws {
+        let material = MicroTechAidexKeyMaterial.derive(serial: "ABC123")
+        let fake = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(uuidString: "00000000-0000-0000-0000-000000000123")!,
+            deviceName: "LinX-ABC123",
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let observer = ReadingObserver()
+        let sensor = MicroTechSensor(
+            session: MicroTechAidexSession(
+                remoteIdentifier: fake.deviceIdentifier,
+                deviceName: fake.deviceName,
+                sensorSerial: "ABC123"
+            ),
+            peripheralSession: fake,
+            pairingKeyTimeout: 0
+        )
+        sensor.delegate = observer
+        try sensor.start()
+
+        sensor.handleNotification(characteristic: CBUUID(string: "180D"), value: Data([0x01]))
+
+        XCTAssertTrue(observer.packetNotifications.isEmpty)
+        XCTAssertTrue(observer.notificationEvents.isEmpty)
+    }
+
     func testPeripheralOperationTimeoutLeavesRoomForRestoredConnectionHandshake() {
         XCTAssertGreaterThanOrEqual(MicroTechPeripheralManager.defaultOperationTimeout, 8)
     }
@@ -1082,6 +1211,28 @@ final class ReadingObserver: MicroTechSensorDelegate {
     private(set) var connectedSessions: [MicroTechAidexSession] = []
     private(set) var activationTimes: [Date] = []
     private(set) var disconnectCount = 0
+    private(set) var packetNotifications: [(characteristic: CBUUID, receivedAt: Date)] = []
+    var notificationEvents: [String] = []
+
+    func microTechSensor(
+        _ sensor: MicroTechSensor,
+        didReceivePacketFor characteristic: CBUUID,
+        receivedAt: Date
+    ) {
+        packetNotifications.append((characteristic: characteristic, receivedAt: receivedAt))
+        let name: String
+        switch characteristic {
+        case MicroTechAidexProfile.f001UUID:
+            name = "F001"
+        case MicroTechAidexProfile.f002UUID:
+            name = "F002"
+        case MicroTechAidexProfile.f003UUID:
+            name = "F003"
+        default:
+            name = characteristic.uuidString
+        }
+        notificationEvents.append("packet:\(name)")
+    }
 
     func microTechSensor(_ sensor: MicroTechSensor, didRead reading: MicroTechGlucoseReading) {
         readings.append(reading)
@@ -1105,6 +1256,7 @@ final class ReadingObserver: MicroTechSensorDelegate {
 
     func microTechSensor(_ sensor: MicroTechSensor, didError error: Error) {
         errors.append(error)
+        notificationEvents.append("error")
     }
 
     func microTechSensorDidConnect(_ sensor: MicroTechSensor, session: MicroTechAidexSession) {

@@ -9,6 +9,11 @@ public enum MicroTechSensorLogType {
 }
 
 public protocol MicroTechSensorDelegate: AnyObject {
+    func microTechSensor(
+        _ sensor: MicroTechSensor,
+        didReceivePacketFor characteristic: CBUUID,
+        receivedAt: Date
+    )
     func microTechSensor(_ sensor: MicroTechSensor, didRead reading: MicroTechGlucoseReading)
     func microTechSensor(_ sensor: MicroTechSensor, didReadHistory history: MicroTechAidexHistoryPacket)
     func microTechSensor(_ sensor: MicroTechSensor, didActivateAt activationTime: Date)
@@ -17,6 +22,14 @@ public protocol MicroTechSensorDelegate: AnyObject {
     func microTechSensor(_ sensor: MicroTechSensor, didError error: Error)
     func microTechSensorDidConnect(_ sensor: MicroTechSensor, session: MicroTechAidexSession)
     func microTechSensorDidDisconnect(_ sensor: MicroTechSensor)
+}
+
+public extension MicroTechSensorDelegate {
+    func microTechSensor(
+        _ sensor: MicroTechSensor,
+        didReceivePacketFor characteristic: CBUUID,
+        receivedAt: Date
+    ) {}
 }
 
 public struct MicroTechAidexSession: Equatable {
@@ -188,13 +201,22 @@ public final class MicroTechSensor {
     }
 
     public func handleNotification(characteristic: CBUUID, value: Data, receivedAt: Date = Date()) {
+        let isPacketCharacteristic = characteristic == MicroTechAidexProfile.f001UUID ||
+            characteristic == MicroTechAidexProfile.f002UUID ||
+            characteristic == MicroTechAidexProfile.f003UUID
+        guard isPacketCharacteristic else {
+            return
+        }
+        delegate?.microTechSensor(
+            self,
+            didReceivePacketFor: characteristic,
+            receivedAt: receivedAt
+        )
+
         if characteristic == MicroTechAidexProfile.f001UUID {
             storePairingKey(value)
             return
         }
-        let isF002 = characteristic == MicroTechAidexProfile.f002UUID
-        let isF003 = characteristic == MicroTechAidexProfile.f003UUID
-        guard isF002 || isF003 else { return }
         let characteristicName = Self.name(for: characteristic)
         logSensor(
             "stage=packet event=received characteristic=\(characteristicName) encryptedLen=\(value.count) encryptedHex=\(value.microTechHexadecimalString)",
