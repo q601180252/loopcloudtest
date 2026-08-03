@@ -4185,6 +4185,29 @@ final class MicroTechCGMManagerTests: XCTestCase {
         assertRealBluetoothManagerRepeatedDirectActivation(hasConnectedPeripheral: true)
     }
 
+    func testManagerQueueIdentityRejectsDifferentInstanceWhenSpecificKeyIsReused() {
+        let sharedKey = DispatchSpecificKey<UUID>()
+        let firstIdentity = MicroTechDispatchQueueIdentity(
+            key: sharedKey,
+            value: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        )
+        let replacementIdentity = MicroTechDispatchQueueIdentity(
+            key: sharedKey,
+            value: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+        )
+        let firstQueue = DispatchQueue(label: "com.loopkit.MicroTechCGM.managerQueueIdentity.first")
+        firstIdentity.install(on: firstQueue)
+        let checked = expectation(description: "queue identity checked")
+
+        firstQueue.async {
+            XCTAssertTrue(firstIdentity.isCurrentQueue)
+            XCTAssertFalse(replacementIdentity.isCurrentQueue)
+            checked.fulfill()
+        }
+
+        wait(for: [checked], timeout: 1)
+    }
+
     func testOrdinaryDirectScanCannotRebindCallbacksAfterShutdownStarts() {
         let bluetoothManager = ShutdownDuringBindingMicroTechBluetoothManager()
         var manager: MicroTechCGMManager!

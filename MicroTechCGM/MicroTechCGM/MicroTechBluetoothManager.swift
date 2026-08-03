@@ -291,6 +291,27 @@ struct MicroTechBluetoothManagerStateSnapshot: Equatable {
     let scanIfReadyCallCount: Int
 }
 
+final class MicroTechDispatchQueueIdentity {
+    private let key: DispatchSpecificKey<UUID>
+    private let value: UUID
+
+    init(
+        key: DispatchSpecificKey<UUID> = DispatchSpecificKey<UUID>(),
+        value: UUID = UUID()
+    ) {
+        self.key = key
+        self.value = value
+    }
+
+    var isCurrentQueue: Bool {
+        DispatchQueue.getSpecific(key: key) == value
+    }
+
+    func install(on queue: DispatchQueue) {
+        queue.setSpecific(key: key, value: value)
+    }
+}
+
 public final class MicroTechBluetoothManager: NSObject {
     enum SavedPeripheralSource: String {
         case coreBluetoothRestore = "CoreBluetooth restore"
@@ -314,7 +335,7 @@ public final class MicroTechBluetoothManager: NSObject {
     )
 
     private let managerQueue: DispatchQueue
-    private let managerQueueSpecificKey = DispatchSpecificKey<Bool>()
+    private let managerQueueIdentity = MicroTechDispatchQueueIdentity()
     private let connectionTimeouts: MicroTechConnectionTimeoutControlling
     private let configurationTimeouts: MicroTechConnectionTimeoutControlling
     private var scanTimeoutWorkItem: DispatchWorkItem?
@@ -365,7 +386,7 @@ public final class MicroTechBluetoothManager: NSObject {
         connectionMode = initialConnectionMode
         super.init()
 
-        managerQueue.setSpecific(key: managerQueueSpecificKey, value: true)
+        managerQueueIdentity.install(on: managerQueue)
         managerQueue.sync {
             centralManager = CBCentralManager(
                 delegate: observesCentralManagerState ? self : nil,
@@ -724,7 +745,7 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func syncOnManagerQueue<Value>(_ work: () -> Value) -> Value {
-        if DispatchQueue.getSpecific(key: managerQueueSpecificKey) == true {
+        if managerQueueIdentity.isCurrentQueue {
             return work()
         }
 
