@@ -288,6 +288,7 @@ struct MicroTechBluetoothManagerStateSnapshot: Equatable {
     let restoredPeripheralCount: Int
     let configuringPeripheralCount: Int
     let hasScanTimeout: Bool
+    let scanIfReadyCallCount: Int
 }
 
 public final class MicroTechBluetoothManager: NSObject {
@@ -317,6 +318,7 @@ public final class MicroTechBluetoothManager: NSObject {
     private let connectionTimeouts: MicroTechConnectionTimeoutControlling
     private let configurationTimeouts: MicroTechConnectionTimeoutControlling
     private var scanTimeoutWorkItem: DispatchWorkItem?
+    private var scanIfReadyCallCount = 0
     private var centralManager: CBCentralManager!
     private var lastCentralState: CBManagerState?
     private var centralStateObserversForTesting: [() -> Void] = []
@@ -380,7 +382,8 @@ public final class MicroTechBluetoothManager: NSObject {
                 managedPeripheralCount: managedPeripherals.count,
                 restoredPeripheralCount: restoredPeripherals.count,
                 configuringPeripheralCount: configuringPeripheralIDs.count,
-                hasScanTimeout: scanTimeoutWorkItem != nil
+                hasScanTimeout: scanTimeoutWorkItem != nil,
+                scanIfReadyCallCount: scanIfReadyCallCount
             )
         }
     }
@@ -453,6 +456,12 @@ public final class MicroTechBluetoothManager: NSObject {
             self.logHandler = logHandler
             self.connectionMode = .direct
             self.activeRemoteIdentifier = remoteIdentifier
+            let isConnected = self.activePeripheralManager?.isConnected == true
+            let isScanning = self.centralManager.isScanning || self.scanTimeoutWorkItem != nil
+            guard !isConnected, !isScanning else {
+                self.logBluetooth("direct scan binding refreshed without restarting")
+                return
+            }
             self.logBluetooth("direct scan activated, remoteIdentifier \(String(describing: remoteIdentifier))")
             self.scanIfReady()
         }
@@ -587,6 +596,7 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func scanIfReady() {
+        scanIfReadyCallCount += 1
         guard !isShutdown else {
             return
         }

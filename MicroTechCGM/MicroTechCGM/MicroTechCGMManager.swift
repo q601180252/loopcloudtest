@@ -22,6 +22,7 @@ public final class MicroTechCGMManager: CGMManager {
     private let reconnectRecoveryScheduler: (TimeInterval, @escaping () -> Void) -> Void
     private let staleConnectionScheduler: (TimeInterval, @escaping () -> Void) -> Void
     private let sensorStartScheduler: (@escaping () -> Void) -> Void
+    private let beforeSensorStart: () -> Void
     private let callbackProcessingBarrier: () -> Void
     private let dateProvider: () -> Date
     private let resumeScanWhenDelegateQueueConfigured: Bool
@@ -135,6 +136,7 @@ public final class MicroTechCGMManager: CGMManager {
         sensorStartScheduler = { start in
             DispatchQueue.global(qos: .utility).async(execute: start)
         }
+        beforeSensorStart = {}
         callbackProcessingBarrier = {}
         dateProvider = { Date() }
         resumeScanWhenDelegateQueueConfigured = false
@@ -157,6 +159,7 @@ public final class MicroTechCGMManager: CGMManager {
         sensorStartScheduler: @escaping (@escaping () -> Void) -> Void = { start in
             DispatchQueue.global(qos: .utility).async(execute: start)
         },
+        beforeSensorStart: @escaping () -> Void = {},
         resumeScanWhenDelegateQueueConfigured: Bool = false,
         dateProvider: @escaping () -> Date = { Date() },
         callbackProcessingBarrier: @escaping () -> Void = {}
@@ -168,6 +171,7 @@ public final class MicroTechCGMManager: CGMManager {
         self.reconnectRecoveryScheduler = reconnectRecoveryScheduler
         self.staleConnectionScheduler = staleConnectionScheduler
         self.sensorStartScheduler = sensorStartScheduler
+        self.beforeSensorStart = beforeSensorStart
         self.callbackProcessingBarrier = callbackProcessingBarrier
         self.dateProvider = dateProvider
         self.resumeScanWhenDelegateQueueConfigured = resumeScanWhenDelegateQueueConfigured
@@ -192,6 +196,7 @@ public final class MicroTechCGMManager: CGMManager {
         sensorStartScheduler = { start in
             DispatchQueue.global(qos: .utility).async(execute: start)
         }
+        beforeSensorStart = {}
         callbackProcessingBarrier = {}
         dateProvider = { Date() }
         resumeScanWhenDelegateQueueConfigured = restoredState.sensorSerial?.isEmpty == false
@@ -253,7 +258,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.state.deviceName = normalizedDeviceName
             protectedState.state.sensorSerial = normalizedSerial
         }
-        retiredSensor?.stop()
+        retiredSensor?.retire()
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
         if let cancelledRecoveryIdentifier {
             logDeviceCommunication(
@@ -268,6 +273,7 @@ public final class MicroTechCGMManager: CGMManager {
     public func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) -> Bool {
         var bluetoothManager: MicroTechBluetoothManaging?
         var managerToShutdown: MicroTechBluetoothManaging?
+        var sensorToRetire: MicroTechSensor?
         let stateChange = mutateProtectedState { protectedState in
             let changedMode = protectedState.state.connectionMode != mode
             protectedState.state.connectionMode = mode
@@ -279,6 +285,7 @@ public final class MicroTechCGMManager: CGMManager {
                 bluetoothManager = protectedState.bluetoothManager?.manager
             }
             if mode == .broadcast {
+                sensorToRetire = protectedState.sensorIdentity.activeSensor
                 protectedState.sensorIdentity.retireActiveSensor()
                 protectedState.sensorIdentity.activeSensor = nil
                 protectedState.sensorIdentity.activeSensorConnectedAt = nil
@@ -286,6 +293,7 @@ public final class MicroTechCGMManager: CGMManager {
             }
         }
 
+        sensorToRetire?.retire()
         managerToShutdown?.shutdown {}
         bluetoothManager?.configureConnectionMode(mode)
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
@@ -508,7 +516,7 @@ public final class MicroTechCGMManager: CGMManager {
         }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
         bluetoothManagerToDisconnect?.shutdown {}
-        sensorToStop?.stop()
+        sensorToStop?.retire()
         notifyDelegateOfDeletion(completion: completion)
     }
 
@@ -1006,7 +1014,7 @@ public final class MicroTechCGMManager: CGMManager {
             "MicroTech LinX reconnect recovery timeout id=\(identifier) after=60 action=rebuild",
             type: .connection
         )
-        sensorToStop?.stop()
+        sensorToStop?.retire()
         generation.manager.shutdown { [weak self] in
             self?.completeBluetoothManagerShutdown(recoveryIdentifier: identifier)
         }
@@ -1177,16 +1185,19 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     func registerSensorForTesting(_ sensor: MicroTechSensor) {
+        var sensorToRetire: MicroTechSensor?
         _ = mutateProtectedState { state in
             guard !state.sensorIdentity.isDeleted,
                   state.sensorIdentity.activeSensor !== sensor
             else {
                 return
             }
+            sensorToRetire = state.sensorIdentity.activeSensor
             state.sensorIdentity.retireActiveSensor()
             state.sensorIdentity.restore(sensor)
             state.sensorIdentity.activeSensor = sensor
         }
+        sensorToRetire?.retire()
     }
 
     private func isCurrentSensor(_ sensor: MicroTechSensor, in state: MicroTechSensorIdentityState) -> Bool {
@@ -1776,6 +1787,7 @@ public final class MicroTechCGMManager: CGMManager {
 
         var shouldStartSensor = false
         var startEligibilityIdentifier: UUID?
+        var sensorToRetire: MicroTechSensor?
         let stateChange = mutateProtectedState { protectedState in
             if let expectedManager,
                !isCurrentBluetoothManager(expectedManager, in: protectedState)
@@ -1787,6 +1799,7 @@ public final class MicroTechCGMManager: CGMManager {
             }
 
             let isNewSensor = protectedState.state.sensorSerial != sensorSerial
+            sensorToRetire = protectedState.sensorIdentity.activeSensor
             protectedState.sensorIdentity.retireActiveSensor()
             if isNewSensor {
                 protectedState.state.activationTime = nil
@@ -1814,6 +1827,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.state.lastConnectionErrorDescription = nil
             // Delegate assignment is performed after the protected state is released.
         }
+        sensorToRetire?.retire()
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
 
         guard shouldStartSensor, let startEligibilityIdentifier else {
@@ -1847,7 +1861,7 @@ public final class MicroTechCGMManager: CGMManager {
 
         sensorStartScheduler { [weak self] in
             guard let self else {
-                peripheralSession.disconnect()
+                sensor.retire()
                 return
             }
             let isEligible = self.readProtectedState { state in
@@ -1859,9 +1873,10 @@ public final class MicroTechCGMManager: CGMManager {
                     !state.reconnectRecoveryState.isShuttingDown
             }
             guard isEligible else {
-                peripheralSession.disconnect()
+                sensor.retire()
                 return
             }
+            self.beforeSensorStart()
             do {
                 try sensor.start()
             } catch {

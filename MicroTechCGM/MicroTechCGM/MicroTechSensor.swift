@@ -46,9 +46,11 @@ public final class MicroTechSensor {
     private let commandScheduler: (@escaping () -> Void) -> Void
     private let notificationDecrypter: (MicroTechAidexCommandBuilder, Data) throws -> Data
     private let startSchedulingLock = NSLock()
+    private let retirementLock = NSLock()
     private let pairingKeyCondition = NSCondition()
     private var isStarted = false
     private var startScheduled = false
+    private var isRetired = false
     private var activeSession: MicroTechAidexSession?
     private var commandBuilder: MicroTechAidexCommandBuilder?
     private var pendingPairingKey: Data?
@@ -93,6 +95,14 @@ public final class MicroTechSensor {
     }
 
     public func start() throws {
+        retirementLock.lock()
+        let canStart = !isRetired
+        retirementLock.unlock()
+        guard canStart else {
+            logSensor("handshake rejected because sensor is retired", type: .connection)
+            throw MicroTechSensorError.inactiveSession
+        }
+
         guard !(isStarted && commandBuilder != nil && activeSession != nil) else {
             logSensor("handshake skipped because session is already active", type: .connection)
             return
@@ -306,6 +316,24 @@ public final class MicroTechSensor {
         cmd10ResponseSeen = false
         autoStartSequenceActive = false
         delegate?.microTechSensorDidDisconnect(self)
+    }
+
+    func retire() {
+        retirementLock.lock()
+        guard !isRetired else {
+            retirementLock.unlock()
+            return
+        }
+        isRetired = true
+        retirementLock.unlock()
+
+        isStarted = false
+        peripheralSession.disconnect()
+        commandBuilder = nil
+        activeSession = nil
+        pendingStartTime = nil
+        cmd10ResponseSeen = false
+        autoStartSequenceActive = false
     }
 
     private func resetPairingKey() {

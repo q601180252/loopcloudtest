@@ -4062,6 +4062,105 @@ final class MicroTechCGMManagerTests: XCTestCase {
         }
     }
 
+    func testRetiredSensorCannotStartAfterEligibilityCheckPassed() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var scheduledRecoveries: [(TimeInterval, () -> Void)] = []
+        var scheduledStarts: [() -> Void] = []
+        let eligibilityPassed = DispatchSemaphore(value: 0)
+        let releaseStart = DispatchSemaphore(value: 0)
+        let startReturned = DispatchSemaphore(value: 0)
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: { bluetoothManager },
+            reconnectRecoveryScheduler: { scheduledRecoveries.append(($0, $1)) },
+            sensorStartScheduler: { scheduledStarts.append($0) },
+            beforeSensorStart: {
+                eligibilityPassed.signal()
+                releaseStart.wait()
+            }
+        )
+        let peripheral = FakeMicroTechPeripheralSession(
+            deviceIdentifier: UUID(),
+            deviceName: "LinX-ABC123",
+            f002Challenge: Data(),
+            failurePoint: .read,
+            subscriptionFailures: [MicroTechAidexProfile.f001UUID]
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        manager.handleBluetoothReady(from: bluetoothManager, peripheralSession: peripheral)
+        XCTAssertEqual(scheduledStarts.count, 1)
+        DispatchQueue.global().async {
+            scheduledStarts[0]()
+            startReturned.signal()
+        }
+        XCTAssertEqual(eligibilityPassed.wait(timeout: .now() + 1), .success)
+
+        scheduledRecoveries[0].1()
+        releaseStart.signal()
+        XCTAssertEqual(startReturned.wait(timeout: .now() + 1), .success)
+
+        XCTAssertEqual(peripheral.calls, [.disconnect])
+    }
+
+    func testRealBluetoothManagerRepeatedDirectActivationDoesNotReenterScanWhenConnectedOrScanning() {
+        for hasConnectedPeripheral in [false, true] {
+            let bluetoothManager = MicroTechBluetoothManager(
+                initialConnectionMode: .direct,
+                centralManagerOptions: nil
+            )
+            let firstDelegate = ShutdownBluetoothManagerDelegate()
+            let replacementDelegate = ShutdownBluetoothManagerDelegate()
+            var firstLogHandlerCalled = false
+            var replacementLogHandlerCalled = false
+            let centralStateObserved = expectation(description: "central state observed")
+            bluetoothManager.whenCentralStateObservedForTesting {
+                centralStateObserved.fulfill()
+            }
+            wait(for: [centralStateObserved], timeout: 1)
+            let peripheral = FakeManagedMicroTechPeripheralManager(
+                deviceIdentifier: UUID(),
+                deviceName: "LinX-ABC123",
+                isConnected: hasConnectedPeripheral
+            )
+            bluetoothManager.injectStateForTesting(
+                activePeripheralManager: hasConnectedPeripheral ? peripheral : nil,
+                managedPeripherals: hasConnectedPeripheral ? [peripheral] : [],
+                restoredPeripherals: [],
+                configuringPeripheralIDs: [],
+                hasScanTimeout: !hasConnectedPeripheral
+            )
+            let before = bluetoothManager.stateSnapshotForTesting()
+
+            bluetoothManager.activateDirectScan(
+                delegate: firstDelegate,
+                logHandler: { _, _ in firstLogHandlerCalled = true },
+                remoteIdentifier: UUID()
+            )
+            _ = bluetoothManager.stateSnapshotForTesting()
+            bluetoothManager.flushLogsForTesting()
+            firstLogHandlerCalled = false
+            bluetoothManager.activateDirectScan(
+                delegate: replacementDelegate,
+                logHandler: { _, _ in replacementLogHandlerCalled = true },
+                remoteIdentifier: UUID()
+            )
+            let after = bluetoothManager.stateSnapshotForTesting()
+            bluetoothManager.flushLogsForTesting()
+            bluetoothManager.logHandler?("binding check", .connection)
+
+            XCTAssertEqual(after.scanIfReadyCallCount, before.scanIfReadyCallCount)
+            XCTAssertTrue((bluetoothManager.delegate as AnyObject?) === replacementDelegate)
+            XCTAssertFalse(firstLogHandlerCalled)
+            XCTAssertTrue(replacementLogHandlerCalled)
+            XCTAssertEqual(after.hasScanTimeout, before.hasScanTimeout)
+
+            let shutdownCompleted = expectation(description: "real manager shutdown")
+            bluetoothManager.shutdown { shutdownCompleted.fulfill() }
+            wait(for: [shutdownCompleted], timeout: 1)
+        }
+    }
+
     func testOrdinaryDirectScanCannotRebindCallbacksAfterShutdownStarts() {
         let bluetoothManager = ShutdownDuringBindingMicroTechBluetoothManager()
         var manager: MicroTechCGMManager!
