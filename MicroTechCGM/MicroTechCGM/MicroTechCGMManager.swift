@@ -961,25 +961,6 @@ public final class MicroTechCGMManager: CGMManager {
         }
     }
 
-    private func cancelReconnectRecovery(reason: String) {
-        var cancelledIdentifier: UUID?
-        _ = mutateProtectedState { state in
-            switch state.reconnectRecoveryState {
-            case .idle:
-                return
-            case .timing(let identifier), .shuttingDown(let identifier):
-                cancelledIdentifier = identifier
-                state.reconnectRecoveryState = .idle
-            }
-        }
-        if let cancelledIdentifier {
-            logDeviceCommunication(
-                "MicroTech LinX reconnect recovery cancelled id=\(cancelledIdentifier) reason=\(reason)",
-                type: .connection
-            )
-        }
-    }
-
     private func runReconnectRecoveryTimeout(identifier: UUID) {
         var generation: MicroTechBluetoothManagerGeneration?
         var sensorToStop: MicroTechSensor?
@@ -1409,6 +1390,10 @@ public final class MicroTechCGMManager: CGMManager {
             let elapsed = now.timeIntervalSince(lastPacketAt)
             guard elapsed >= Self.packetSilenceInterval else {
                 remainingDelay = Self.packetSilenceInterval - elapsed
+                return
+            }
+            guard case .idle = state.reconnectRecoveryState else {
+                state.packetWatchdogState = .idle
                 return
             }
 
@@ -2046,6 +2031,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         var didAccept = false
         var shouldStartSensor = false
         var packetWatchdogIdentifier: UUID?
+        var cancelledRecoveryIdentifier: UUID?
         let stateChange = mutateProtectedState { state in
             didAccept = acceptSensorConnection(sensor, session: session, in: &state)
             shouldStartSensor = didAccept &&
@@ -2056,13 +2042,27 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             {
                 packetWatchdogIdentifier = identifier
             }
+            if didAccept {
+                switch state.reconnectRecoveryState {
+                case .idle:
+                    break
+                case .timing(let identifier), .shuttingDown(let identifier):
+                    cancelledRecoveryIdentifier = identifier
+                    state.reconnectRecoveryState = .idle
+                }
+            }
         }
 
         guard didAccept else {
             return
         }
 
-        cancelReconnectRecovery(reason: "handshake")
+        if let cancelledRecoveryIdentifier {
+            logDeviceCommunication(
+                "MicroTech LinX reconnect recovery cancelled id=\(cancelledRecoveryIdentifier) reason=handshake",
+                type: .connection
+            )
+        }
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
         if let packetWatchdogIdentifier {
             schedulePacketSilenceWatchdog(identifier: packetWatchdogIdentifier)

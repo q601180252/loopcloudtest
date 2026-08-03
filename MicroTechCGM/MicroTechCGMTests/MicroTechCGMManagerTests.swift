@@ -1835,7 +1835,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
     func testHandshakeStartsFiveMinutePacketSilenceWatchdog() throws {
         let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-        var now = Date(timeIntervalSince1970: 1_700_000_000)
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
         var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
         var state = MicroTechCGMManagerState()
         state.remoteIdentifier = remoteIdentifier
@@ -1974,14 +1974,22 @@ final class MicroTechCGMManagerTests: XCTestCase {
     }
 
     func testRetiredSensorPacketDoesNotRefreshCurrentWatchdog() {
-        let harness = makePacketWatchdogHarness()
-        let replacement = makeSensor(session: makeSession())
+        let harness = makeProductionReplacementPacketWatchdogHarness()
+        let watchdogCount = harness.scheduledWatchdogs.count
 
-        harness.manager.registerSensorForTesting(replacement)
-        harness.manager.microTechSensor(harness.sensor, didReceivePacketFor: MicroTechAidexProfile.f003UUID, receivedAt: Date())
+        harness.manager.microTechSensor(
+            harness.oldSensor,
+            didReceivePacketFor: MicroTechAidexProfile.f003UUID,
+            receivedAt: harness.now.value.addingTimeInterval(60)
+        )
 
-        XCTAssertEqual(harness.scheduledWatchdogs.count, 1)
-        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "idle")
+        XCTAssertEqual(harness.scheduledWatchdogs.count, watchdogCount)
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "monitoring")
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.scheduledWatchdogs[0].1()
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 0)
+        harness.scheduledWatchdogs[watchdogCount - 1].1()
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 1)
     }
 
     func testPacketAtDeadlineWinsWhenItClaimsStateFirst() {
@@ -2052,16 +2060,45 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.packetWatchdogPhaseForTesting, "idle")
     }
 
-    func testPacketSilenceReusesExistingSixtySecondRecoveryCycle() {
+    func testBluetoothFailureInvalidatesPacketWatchdogBeforeStartingSixtySecondRecovery() {
         let harness = makePacketWatchdogHarness()
+        let watchdogCount = harness.scheduledWatchdogs.count
 
+        harness.manager.recordBluetoothFailure(
+            MicroTechBluetoothManagerError.scanTimeout(harness.remoteIdentifier),
+            expectedManager: harness.bluetoothManager
+        )
         harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
         harness.scheduledWatchdogs[0].1()
-        let firstRecovery = harness.scheduledRecoveries.first
-        harness.scheduledWatchdogs[0].1()
 
+        XCTAssertEqual(harness.scheduledWatchdogs.count, watchdogCount)
         XCTAssertEqual(harness.scheduledRecoveries.count, 1)
-        XCTAssertEqual(firstRecovery?.0, 60)
+        XCTAssertEqual(harness.scheduledRecoveries.first?.0, 60)
+        XCTAssertEqual(harness.manager.reconnectRecoveryPhaseForTesting, "timing")
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "idle")
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 0)
+    }
+
+    func testPacketAfterSilenceTimeoutCannotRestartWatchdog() {
+        let harness = makeProductionReplacementPacketWatchdogHarness()
+        let watchdogCount = harness.scheduledWatchdogs.count
+
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.scheduledWatchdogs[watchdogCount - 1].1()
+        harness.manager.microTechSensor(
+            harness.newSensor,
+            didReceivePacketFor: MicroTechAidexProfile.f002UUID,
+            receivedAt: harness.now.value
+        )
+        harness.manager.microTechSensor(
+            harness.oldSensor,
+            didReceivePacketFor: MicroTechAidexProfile.f003UUID,
+            receivedAt: harness.now.value
+        )
+
+        XCTAssertEqual(harness.scheduledWatchdogs.count, watchdogCount)
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "recovering")
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 1)
     }
 
     func testPacketWatchdogNeverReadsBluetoothConnectionStateWhileHoldingManagerStateLock() {
@@ -5075,6 +5112,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
         let manager = MicroTechCGMManager(
             state: state,
             bluetoothManagerFactory: { bluetoothManager },
+            bluetoothRetryScheduler: { _ in },
             reconnectRecoveryScheduler: { schedules.recoveries.append(($0, $1)) },
             packetSilenceScheduler: { schedules.watchdogs.append(($0, $1)) },
             dateProvider: { now.value }
@@ -5102,6 +5140,62 @@ final class MicroTechCGMManagerTests: XCTestCase {
             bluetoothManager: bluetoothManager,
             manager: manager,
             sensor: sensor
+        )
+    }
+
+    private func makeProductionReplacementPacketWatchdogHarness(
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> ProductionReplacementPacketWatchdogHarness {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let now = MutableTestDate(Date(timeIntervalSince1970: 1_700_000_000))
+        let schedules = PacketWatchdogSchedules()
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        state.activationTime = Date(timeIntervalSince1970: 1_699_900_000)
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            reconnectRecoveryScheduler: { schedules.recoveries.append(($0, $1)) },
+            packetSilenceScheduler: { schedules.watchdogs.append(($0, $1)) },
+            sensorStartScheduler: { _ in },
+            dateProvider: { now.value }
+        )
+
+        XCTAssertTrue(manager.scanForSensor(), file: file, line: line)
+        guard let oldSensor = bluetoothManager.delegate as? MicroTechSensor else {
+            fatalError("Expected old sensor", file: (file), line: line)
+        }
+        bluetoothManager.isConnected = true
+        manager.microTechSensorDidConnect(oldSensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+
+        let replacementSession = FakeMicroTechPeripheralSession(
+            deviceIdentifier: remoteIdentifier,
+            deviceName: "LinX-ABC123",
+            f002Challenge: Data(),
+            failurePoint: .read
+        )
+        manager.connectDiscoveredSensor(
+            peripheralSession: replacementSession,
+            expectedManager: bluetoothManager
+        )
+        guard let newSensor = bluetoothManager.delegate as? MicroTechSensor,
+              newSensor !== oldSensor
+        else {
+            fatalError("Expected replacement sensor", file: (file), line: line)
+        }
+        manager.microTechSensorDidConnect(newSensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+
+        return ProductionReplacementPacketWatchdogHarness(
+            now: now,
+            schedules: schedules,
+            bluetoothManager: bluetoothManager,
+            manager: manager,
+            oldSensor: oldSensor,
+            newSensor: newSensor
         )
     }
 
@@ -5340,6 +5434,17 @@ private struct PacketWatchdogHarness {
 
     var scheduledWatchdogs: [(TimeInterval, () -> Void)] { schedules.watchdogs }
     var scheduledRecoveries: [(TimeInterval, () -> Void)] { schedules.recoveries }
+}
+
+private struct ProductionReplacementPacketWatchdogHarness {
+    let now: MutableTestDate
+    let schedules: PacketWatchdogSchedules
+    let bluetoothManager: FakeMicroTechBluetoothManager
+    let manager: MicroTechCGMManager
+    let oldSensor: MicroTechSensor
+    let newSensor: MicroTechSensor
+
+    var scheduledWatchdogs: [(TimeInterval, () -> Void)] { schedules.watchdogs }
 }
 
 private final class TestCGMManagerDelegate: CGMManagerDelegate {
