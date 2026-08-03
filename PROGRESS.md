@@ -11,9 +11,23 @@
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 193 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新完整 App 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 当前 MicroTech LinX 新添加流程固定使用直接连接；添加页不再显示 `直接连接 / 广播数据` 选择，点击搜索后只进入原有蓝牙直连流程。
 - LinX 底层广播解析、状态兼容、诊断日志和测试仍保留，用于历史排障，但新添加页已没有广播入口。
+- 当前已确认 LinX 重连采用单一 60 秒恢复周期：已完成过握手的直连 LinX 在 60 秒内未再次完成握手时，按顺序关闭旧蓝牙管理器、保留传感器配置、清除旧蓝牙标识并创建新管理器继续扫描；设计已确认，代码实现待完成。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (66)` 已完成 App Store Connect 处理并分发给内部测试人员，Actions run `30621494193` 显示 `Successfully finished processing the build 3.9.1 - 66 for IOS`；发布源提交为 `7ee9b15`，IPA 内包含 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM`，签名与 watchOS `11.6` 兼容检查通过，`Loop.app` 最低 iOS 为 `15.1`。
 
 ## 进展日志
+
+### 2026-08-03 043 - 明确 LinX 60 秒重连恢复设计
+
+- **任务**：解决 LinX 断线后长期停留在 `peripheralDisconnecting`、持续发现设备却无法重新连接的问题。
+- **核心交付**：
+  1. 新增 `docs/superpowers/specs/2026-08-03-linx-60-second-reconnect-recovery-design.md`，明确使用一个连续的 60 秒恢复周期，不再按连续两次 30 秒失败判断。
+  2. 只有已经完成过握手的直连 LinX 使用恢复周期；首次添加、广播兼容和其他 CGM 不受影响。
+  3. 定义 `idle -> timing(id) -> shuttingDown(id) -> timing(newID)` 状态转换，关闭旧管理器期间禁止扫描、刷新或排队重试抢先创建新管理器。
+  4. 明确旧蓝牙管理器关闭契约、旧管理器和旧传感器回调隔离、传感器配置与历史状态保留边界，以及可检索日志和测试标准。
+- **验证结果**：设计经过三轮独立审查后通过；未修改代码的 `MicroTechCGMTests` 基线 193 项通过、0 失败；完整 `LoopWorkspace` 基线构建在本机因缺少未纳入仓库的 `LibreTransmitter/LibreTransmitter/NotificationHelperOverride.swift` 被阻断，未写成通过；`git diff --check` 通过。
+- **决策结论**：从重连开始只计一个 60 秒周期，只有完成 LinX 握手才算成功；到期仍未成功时，先完成旧蓝牙管理器内部关闭，再创建新管理器按原传感器序列号继续扫描。
+- **commit hash**：`fec0581`。
+- **push 状态**：待推送到 `origin/main`。
 
 ### 2026-07-31 042 - 修改 LinX 添加流程固定直连
 
