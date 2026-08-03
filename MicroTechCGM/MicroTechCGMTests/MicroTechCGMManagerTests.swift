@@ -3487,27 +3487,73 @@ final class MicroTechCGMManagerTests: XCTestCase {
     }
 
     func testRealBluetoothManagerShutdownClearsCallbacksBeforeCompletion() {
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let connectionTimeouts = SpyMicroTechConnectionTimeoutController(scheduledIdentifiers: [identifier])
+        let configurationTimeouts = SpyMicroTechConnectionTimeoutController(scheduledIdentifiers: [identifier])
         let bluetoothManager = MicroTechBluetoothManager(
             initialConnectionMode: .direct,
-            centralManagerOptions: nil
+            centralManagerOptions: nil,
+            connectionTimeouts: connectionTimeouts,
+            configurationTimeouts: configurationTimeouts
         )
         let delegate = ShutdownBluetoothManagerDelegate()
-        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let peripheralDelegate = ShutdownPeripheralManagerDelegate()
+        let peripheralManager = FakeManagedMicroTechPeripheralManager(
+            deviceIdentifier: identifier,
+            deviceName: "LinX-ABC123",
+            isConnected: true
+        )
+        let restoredPeripheral = FakeRestoredMicroTechPeripheralReference(
+            identifier: identifier,
+            name: "LinX-ABC123"
+        )
         let shutdownCompleted = expectation(description: "Bluetooth manager shutdown completed")
+        let centralStateObserved = expectation(description: "initial central state observed")
+        bluetoothManager.whenCentralStateObservedForTesting {
+            centralStateObserved.fulfill()
+        }
+        wait(for: [centralStateObserved], timeout: 1)
+        peripheralManager.delegate = peripheralDelegate
         bluetoothManager.delegate = delegate
         bluetoothManager.logHandler = { _, _ in }
-        bluetoothManager.scan(remoteIdentifier: remoteIdentifier)
+        bluetoothManager.injectStateForTesting(
+            activePeripheralManager: peripheralManager,
+            managedPeripherals: [peripheralManager],
+            restoredPeripherals: [restoredPeripheral],
+            configuringPeripheralIDs: [identifier],
+            hasScanTimeout: true
+        )
+
+        let stateBeforeShutdown = bluetoothManager.stateSnapshotForTesting()
+        XCTAssertEqual(stateBeforeShutdown.activeRemoteIdentifier, identifier)
+        XCTAssertEqual(stateBeforeShutdown.managedPeripheralCount, 1)
+        XCTAssertEqual(stateBeforeShutdown.restoredPeripheralCount, 1)
+        XCTAssertEqual(stateBeforeShutdown.configuringPeripheralCount, 1)
+        XCTAssertTrue(stateBeforeShutdown.hasScanTimeout)
+        XCTAssertTrue(bluetoothManager.isConnected)
 
         bluetoothManager.shutdown {
+            let stateAfterShutdown = bluetoothManager.stateSnapshotForTesting()
             XCTAssertNil(bluetoothManager.delegate)
             XCTAssertNil(bluetoothManager.logHandler)
-            XCTAssertNil(bluetoothManager.activeRemoteIdentifier)
+            XCTAssertTrue(stateAfterShutdown.isShutdown)
+            XCTAssertNil(stateAfterShutdown.activeRemoteIdentifier)
+            XCTAssertEqual(stateAfterShutdown.managedPeripheralCount, 0)
+            XCTAssertEqual(stateAfterShutdown.restoredPeripheralCount, 0)
+            XCTAssertEqual(stateAfterShutdown.configuringPeripheralCount, 0)
+            XCTAssertFalse(stateAfterShutdown.hasScanTimeout)
             XCTAssertFalse(bluetoothManager.isScanning)
             XCTAssertFalse(bluetoothManager.isConnected)
             shutdownCompleted.fulfill()
         }
 
         wait(for: [shutdownCompleted], timeout: 1)
+        XCTAssertEqual(connectionTimeouts.cancelAllCallCount, 1)
+        XCTAssertEqual(configurationTimeouts.cancelAllCallCount, 1)
+        XCTAssertTrue(connectionTimeouts.scheduledIdentifiers.isEmpty)
+        XCTAssertTrue(configurationTimeouts.scheduledIdentifiers.isEmpty)
+        XCTAssertEqual(peripheralManager.disconnectCallCount, 1)
+        XCTAssertNil(peripheralManager.delegate)
     }
 
     func testConnectionTimeoutControllerCancelAllInvalidatesScheduledHandlers() {
@@ -3529,15 +3575,55 @@ final class MicroTechCGMManagerTests: XCTestCase {
     }
 
     func testShutdownManagerIgnoresLateCallbacksAndCannotRestartScanning() {
+        let connectionTimeouts = SpyMicroTechConnectionTimeoutController()
+        let configurationTimeouts = SpyMicroTechConnectionTimeoutController()
         let bluetoothManager = MicroTechBluetoothManager(
             initialConnectionMode: .direct,
-            centralManagerOptions: nil
+            centralManagerOptions: nil,
+            connectionTimeouts: connectionTimeouts,
+            configurationTimeouts: configurationTimeouts
         )
         let initialShutdownCompleted = expectation(description: "initial shutdown completed")
         bluetoothManager.shutdown {
             initialShutdownCompleted.fulfill()
         }
         wait(for: [initialShutdownCompleted], timeout: 1)
+
+        let repeatedShutdownCompleted = expectation(description: "repeated shutdown completed")
+        bluetoothManager.shutdown {
+            repeatedShutdownCompleted.fulfill()
+        }
+        wait(for: [repeatedShutdownCompleted], timeout: 1)
+
+        bluetoothManager.logHandler = { _, _ in }
+        bluetoothManager.flushLogsForTesting()
+
+        let identifier = UUID(uuidString: "00000000-0000-0000-0000-000000000456")!
+        let peripheralManager = FakeManagedMicroTechPeripheralManager(
+            deviceIdentifier: identifier,
+            deviceName: "LinX-XYZ789",
+            isConnected: true
+        )
+        let restoredPeripheral = FakeRestoredMicroTechPeripheralReference(
+            identifier: identifier,
+            name: "LinX-XYZ789"
+        )
+        let delegate = ShutdownBluetoothManagerDelegate()
+        let peripheralDelegate = ShutdownPeripheralManagerDelegate()
+        let callbackLogs = ThreadSafeMessages()
+        peripheralManager.delegate = peripheralDelegate
+        bluetoothManager.delegate = delegate
+        bluetoothManager.logHandler = { message, _ in
+            callbackLogs.append(message)
+        }
+        bluetoothManager.injectStateForTesting(
+            activePeripheralManager: peripheralManager,
+            managedPeripherals: [peripheralManager],
+            restoredPeripherals: [restoredPeripheral],
+            configuringPeripheralIDs: [identifier],
+            hasScanTimeout: true
+        )
+        let stateBeforeLateWork = bluetoothManager.stateSnapshotForTesting()
 
         let lateCentralManager = CBCentralManager(delegate: nil, queue: nil)
         bluetoothManager.centralManagerDidUpdateState(lateCentralManager)
@@ -3546,16 +3632,65 @@ final class MicroTechCGMManagerTests: XCTestCase {
         bluetoothManager.scan(remoteIdentifier: UUID())
         bluetoothManager.scanForBroadcast(remoteIdentifier: UUID())
         bluetoothManager.refreshConnectedPeripheral()
+        bluetoothManager.stopScanning()
+        bluetoothManager.disconnect()
+        bluetoothManager.forgetPeripheral()
 
-        let repeatedShutdownCompleted = expectation(description: "repeated shutdown completed")
-        bluetoothManager.shutdown {
-            XCTAssertNil(bluetoothManager.activeRemoteIdentifier)
-            XCTAssertFalse(bluetoothManager.isScanning)
-            XCTAssertFalse(bluetoothManager.isConnected)
-            repeatedShutdownCompleted.fulfill()
+        var discoveryConnectCallCount = 0
+        bluetoothManager.handleDiscoveredPeripheral(
+            identifier: identifier,
+            peripheralName: "LinX-XYZ789",
+            advertisementData: [:],
+            rssi: -60
+        ) {
+            discoveryConnectCallCount += 1
         }
+        bluetoothManager.handleDidConnect(identifier: identifier)
+        bluetoothManager.handleDidFailToConnect(identifier: identifier, error: ShutdownTestError.forcedFailure)
+        bluetoothManager.handleDidDisconnect(identifier: identifier, error: ShutdownTestError.forcedFailure)
+        var connectionEventConnectCallCount = 0
+        bluetoothManager.handleConnectionEvent(
+            .peerConnected,
+            identifier: identifier,
+            peripheralName: "LinX-XYZ789"
+        ) {
+            connectionEventConnectCallCount += 1
+        }
+        bluetoothManager.handleConnectionEvent(
+            .peerDisconnected,
+            identifier: identifier,
+            peripheralName: "LinX-XYZ789",
+            connectIfNeeded: {}
+        )
+        bluetoothManager.handlePeripheralValue(
+            Data([0x01]),
+            characteristic: MicroTechAidexProfile.f001UUID,
+            session: peripheralManager
+        )
+        bluetoothManager.handlePeripheralDisconnect(peripheralManager, error: ShutdownTestError.forcedFailure)
 
-        wait(for: [repeatedShutdownCompleted], timeout: 1)
+        let stateAfterLateWork = bluetoothManager.stateSnapshotForTesting()
+        bluetoothManager.flushLogsForTesting()
+
+        XCTAssertEqual(stateAfterLateWork, stateBeforeLateWork)
+        XCTAssertTrue(stateAfterLateWork.isShutdown)
+        XCTAssertEqual(stateAfterLateWork.activeRemoteIdentifier, identifier)
+        XCTAssertEqual(stateAfterLateWork.managedPeripheralCount, 1)
+        XCTAssertEqual(stateAfterLateWork.restoredPeripheralCount, 1)
+        XCTAssertEqual(stateAfterLateWork.configuringPeripheralCount, 1)
+        XCTAssertTrue(stateAfterLateWork.hasScanTimeout)
+        XCTAssertEqual(discoveryConnectCallCount, 0)
+        XCTAssertEqual(connectionEventConnectCallCount, 0)
+        XCTAssertEqual(peripheralManager.configureCallCount, 0)
+        XCTAssertEqual(peripheralManager.disconnectCallCount, 0)
+        XCTAssertEqual(peripheralManager.didDisconnectCallCount, 0)
+        XCTAssertEqual(delegate.callbackCount, 0)
+        XCTAssertEqual(peripheralDelegate.callbackCount, 0)
+        XCTAssertTrue(callbackLogs.values.isEmpty)
+        XCTAssertEqual(connectionTimeouts.cancelCallCount, 0)
+        XCTAssertEqual(configurationTimeouts.cancelCallCount, 0)
+        XCTAssertFalse(bluetoothManager.isScanning)
+        XCTAssertFalse(bluetoothManager.isConnected)
     }
 
     func testPeripheralConnectionTimeoutIsOnlyScheduledForConnectableStates() {
@@ -4081,37 +4216,146 @@ private final class ReentrantLogHandlerMicroTechBluetoothManager: MicroTechBluet
 }
 
 private final class ShutdownBluetoothManagerDelegate: MicroTechBluetoothManagerDelegate {
+    private(set) var callbackCount = 0
+
     func microTechBluetoothManager(
         _ manager: MicroTechBluetoothManager,
         shouldConnectToDeviceName deviceName: String,
         identifier: UUID
     ) -> Bool {
-        true
+        callbackCount += 1
+        return true
     }
 
     func microTechBluetoothManager(
         _ manager: MicroTechBluetoothManager,
         didReady peripheralSession: MicroTechPeripheralSession
-    ) {}
+    ) {
+        callbackCount += 1
+    }
 
     func microTechBluetoothManager(
         _ manager: MicroTechBluetoothManager,
         didReceive value: Data,
         for characteristic: CBUUID,
         session: MicroTechPeripheralSession
-    ) {}
+    ) {
+        callbackCount += 1
+    }
 
     func microTechBluetoothManager(
         _ manager: MicroTechBluetoothManager,
         didDisconnect session: MicroTechPeripheralSession
-    ) {}
+    ) {
+        callbackCount += 1
+    }
 
     func microTechBluetoothManager(
         _ manager: MicroTechBluetoothManager,
         didDiscoverBroadcast advertisement: MicroTechBroadcastAdvertisement
-    ) {}
+    ) {
+        callbackCount += 1
+    }
 
-    func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didFailWith error: Error) {}
+    func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didFailWith error: Error) {
+        callbackCount += 1
+    }
+}
+
+private final class ShutdownPeripheralManagerDelegate: MicroTechPeripheralManagerDelegate {
+    private(set) var callbackCount = 0
+
+    func microTechPeripheralManager(
+        _ manager: MicroTechPeripheralManager,
+        didUpdateValue value: Data,
+        for characteristic: CBUUID
+    ) {
+        callbackCount += 1
+    }
+
+    func microTechPeripheralManager(_ manager: MicroTechPeripheralManager, didDisconnectWith error: Error?) {
+        callbackCount += 1
+    }
+}
+
+private enum ShutdownTestError: Error {
+    case forcedFailure
+}
+
+private final class SpyMicroTechConnectionTimeoutController: MicroTechConnectionTimeoutControlling {
+    private(set) var scheduledIdentifiers: Set<UUID>
+    private(set) var cancelCallCount = 0
+    private(set) var cancelAllCallCount = 0
+
+    init(scheduledIdentifiers: Set<UUID> = []) {
+        self.scheduledIdentifiers = scheduledIdentifiers
+    }
+
+    func schedule(identifier: UUID, handler: @escaping (UUID) -> Void) {
+        scheduledIdentifiers.insert(identifier)
+    }
+
+    func cancel(identifier: UUID) {
+        cancelCallCount += 1
+        scheduledIdentifiers.remove(identifier)
+    }
+
+    func cancelAll() {
+        cancelAllCallCount += 1
+        scheduledIdentifiers.removeAll()
+    }
+}
+
+private final class FakeManagedMicroTechPeripheralManager: MicroTechManagedPeripheral {
+    weak var delegate: MicroTechPeripheralManagerDelegate?
+    var willCancelConnection: ((UUID) -> Void)?
+    let deviceIdentifier: UUID
+    private(set) var deviceName: String
+    var isConnected: Bool
+    private(set) var configureCallCount = 0
+    private(set) var disconnectCallCount = 0
+    private(set) var didDisconnectCallCount = 0
+
+    init(deviceIdentifier: UUID, deviceName: String, isConnected: Bool) {
+        self.deviceIdentifier = deviceIdentifier
+        self.deviceName = deviceName
+        self.isConnected = isConnected
+    }
+
+    func updateAdvertisedName(_ advertisedName: String?) {
+        if let advertisedName {
+            deviceName = advertisedName
+        }
+    }
+
+    func configure() throws {
+        configureCallCount += 1
+    }
+
+    func subscribe(_ characteristic: CBUUID) throws {}
+    func write(_ value: Data, to characteristic: CBUUID) throws {}
+    func read(_ characteristic: CBUUID) throws -> Data { Data() }
+
+    func disconnect() {
+        disconnectCallCount += 1
+        isConnected = false
+    }
+
+    func didDisconnect(error: Error?) {
+        didDisconnectCallCount += 1
+        isConnected = false
+    }
+}
+
+private final class FakeRestoredMicroTechPeripheralReference: MicroTechRestoredPeripheralReference {
+    let identifier: UUID
+    let name: String?
+    var peripheral: CBPeripheral? { nil }
+
+    init(identifier: UUID, name: String?) {
+        self.identifier = identifier
+        self.name = name
+    }
 }
 
 private final class ThreadSafeMessages {
