@@ -29,7 +29,7 @@ final class MicroTechSensorHandshakeTests: XCTestCase {
         )
         observer.notificationEvents.append("pairing-return")
 
-        XCTAssertEqual(observer.notificationEvents, ["packet:F001", "pairing-return"])
+        XCTAssertEqual(observer.notificationEvents, ["packet:F001", "pairing-store", "pairing-return"])
         XCTAssertEqual(observer.packetNotifications.count, 1)
         XCTAssertEqual(observer.packetNotifications.single?.characteristic, MicroTechAidexProfile.f001UUID)
         XCTAssertEqual(observer.packetNotifications.single?.receivedAt, receivedAt)
@@ -1252,6 +1252,9 @@ final class ReadingObserver: MicroTechSensorDelegate {
 
     func microTechSensor(_ sensor: MicroTechSensor, didLog message: String, type: MicroTechSensorLogType) {
         logMessages.append((message: message, type: type))
+        if message.contains("stage=handshake event=pairing_key_received characteristic=F001") {
+            notificationEvents.append("pairing-store")
+        }
     }
 
     func microTechSensor(_ sensor: MicroTechSensor, didError error: Error) {
