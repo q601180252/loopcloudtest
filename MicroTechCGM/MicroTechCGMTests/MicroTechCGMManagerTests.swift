@@ -1833,247 +1833,278 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(bluetoothManager.isScanning)
     }
 
-    func testFetchDisconnectsStaleConnectedSensorSoBluetoothCanReconnect() {
+    func testHandshakeStartsFiveMinutePacketSilenceWatchdog() throws {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        var now = Date(timeIntervalSince1970: 1_700_000_000)
+        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            packetSilenceScheduler: { delay, watchdog in
+                scheduledWatchdogs.append((delay, watchdog))
+            },
+            dateProvider: { now }
+        )
+
+        XCTAssertTrue(manager.scanForSensor())
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+        }
+        bluetoothManager.isConnected = true
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+
+        XCTAssertEqual(scheduledWatchdogs.count, 1)
+        XCTAssertEqual(try XCTUnwrap(scheduledWatchdogs.first?.0), 5 * 60, accuracy: 0.001)
+        XCTAssertEqual(manager.packetWatchdogPhaseForTesting, "monitoring")
+    }
+
+    func testFetchDoesNotDisconnectBasedOnLastReadingDate() {
         let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
         var state = MicroTechCGMManagerState()
         state.remoteIdentifier = remoteIdentifier
         state.deviceName = "LinX-ABC123"
         state.sensorSerial = "ABC123"
-        state.lastReadingDate = Date(timeIntervalSinceNow: -16 * 60)
+        state.lastReadingDate = Date(timeIntervalSinceNow: -60 * 60)
         let bluetoothManager = FakeMicroTechBluetoothManager()
         bluetoothManager.isConnected = true
         let manager = MicroTechCGMManager(
             state: state,
             bluetoothManagerFactory: { bluetoothManager }
         )
-        let fetchCompleted = expectation(description: "fetch completed")
-
-        XCTAssertTrue(manager.scanForSensor())
-        manager.fetchNewDataIfNeeded { result in
-            if case .noData = result {
-                fetchCompleted.fulfill()
-            } else {
-                XCTFail("Expected stale reconnect fetch to report no data")
-            }
-        }
-
-        wait(for: [fetchCompleted], timeout: 1)
-        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
-        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier])
-    }
-
-    func testFetchDisconnectsConnectedSensorWhenNoReadingArrivesAfterConnectTimeout() {
-        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-        var now = Date(timeIntervalSince1970: 1_700_000_000)
-        var state = MicroTechCGMManagerState()
-        state.remoteIdentifier = remoteIdentifier
-        state.deviceName = "LinX-ABC123"
-        state.sensorSerial = "ABC123"
-        let bluetoothManager = FakeMicroTechBluetoothManager()
-        let manager = MicroTechCGMManager(
-            state: state,
-            bluetoothManagerFactory: { bluetoothManager },
-            dateProvider: { now }
-        )
-        let fetchCompleted = expectation(description: "fetch completed")
-
-        XCTAssertTrue(manager.scanForSensor())
-        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
-            return XCTFail("Expected scan to install a MicroTechSensor delegate")
-        }
-        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
-        bluetoothManager.isConnected = true
-        now = now.addingTimeInterval(16 * 60)
 
         manager.fetchNewDataIfNeeded { result in
-            if case .noData = result {
-                fetchCompleted.fulfill()
-            } else {
-                XCTFail("Expected no-reading reconnect fetch to report no data")
+            guard case .noData = result else {
+                return XCTFail("Expected fetch to report no data")
             }
         }
-
-        wait(for: [fetchCompleted], timeout: 1)
-        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
-        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
-    }
-
-    func testConnectedSensorWatchdogReconnectsWithoutFetchWhenNoReadingArrives() throws {
-        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-        var now = Date(timeIntervalSince1970: 1_700_000_000)
-        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
-        var state = MicroTechCGMManagerState()
-        state.remoteIdentifier = remoteIdentifier
-        state.deviceName = "LinX-ABC123"
-        state.sensorSerial = "ABC123"
-        let bluetoothManager = FakeMicroTechBluetoothManager()
-        let manager = MicroTechCGMManager(
-            state: state,
-            bluetoothManagerFactory: { bluetoothManager },
-            staleConnectionScheduler: { delay, watchdog in
-                scheduledWatchdogs.append((delay, watchdog))
-            },
-            dateProvider: { now }
-        )
-
-        XCTAssertTrue(manager.scanForSensor())
-        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
-            return XCTFail("Expected scan to install a MicroTechSensor delegate")
-        }
-        bluetoothManager.isConnected = true
-        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
-
-        XCTAssertEqual(scheduledWatchdogs.count, 1)
-        XCTAssertEqual(try XCTUnwrap(scheduledWatchdogs.first?.0), 15 * 60, accuracy: 0.001)
-
-        now = now.addingTimeInterval(16 * 60)
-        scheduledWatchdogs[0].1()
-
-        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
-        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
-    }
-
-    func testCurrentReadingRefreshesConnectedSensorWatchdog() throws {
-        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-        var now = Date(timeIntervalSince1970: 1_700_000_000)
-        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
-        var state = MicroTechCGMManagerState()
-        state.remoteIdentifier = remoteIdentifier
-        state.deviceName = "LinX-ABC123"
-        state.sensorSerial = "ABC123"
-        let bluetoothManager = FakeMicroTechBluetoothManager()
-        let manager = MicroTechCGMManager(
-            state: state,
-            bluetoothManagerFactory: { bluetoothManager },
-            staleConnectionScheduler: { delay, watchdog in
-                scheduledWatchdogs.append((delay, watchdog))
-            },
-            dateProvider: { now }
-        )
-
-        XCTAssertTrue(manager.scanForSensor())
-        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
-            return XCTFail("Expected scan to install a MicroTechSensor delegate")
-        }
-        bluetoothManager.isConnected = true
-        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
-        now = now.addingTimeInterval(60)
-        manager.microTechSensor(sensor, didRead: makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: now))
-
-        XCTAssertEqual(scheduledWatchdogs.count, 2)
-        now = Date(timeIntervalSince1970: 1_700_000_000 + 16 * 60)
-        scheduledWatchdogs[0].1()
 
         XCTAssertEqual(bluetoothManager.disconnectCallCount, 0)
-
-        now = now.addingTimeInterval(60)
-        scheduledWatchdogs[1].1()
-
-        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
-        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
+        XCTAssertEqual(bluetoothManager.refreshConnectedPeripheralCallCount, 1)
     }
 
-    func testStaleWatchdogReconnectsAndLogsRecoveredCurrentReading() throws {
+    func testNoPacketForFiveMinutesDisconnectsAndStartsRecovery() {
+        let harness = makePacketWatchdogHarness()
+
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 1)
+        XCTAssertEqual(harness.bluetoothManager.scanRemoteIdentifiers, [harness.remoteIdentifier, harness.remoteIdentifier])
+        XCTAssertEqual(harness.scheduledRecoveries.map(\.0), [60])
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "recovering")
+        XCTAssertEqual(harness.manager.reconnectRecoveryPhaseForTesting, "timing")
+    }
+
+    func testAnyPacketRefreshesWatchdogWithoutChangingLastReadingDate() {
+        let lastReadingDate = Date(timeIntervalSince1970: 1_699_999_000)
+        let harness = makePacketWatchdogHarness(lastReadingDate: lastReadingDate)
+
+        harness.now.value = harness.now.value.addingTimeInterval(60)
+        harness.manager.microTechSensor(
+            harness.sensor,
+            didReceivePacketFor: MicroTechAidexProfile.f001UUID,
+            receivedAt: harness.now.value
+        )
+
+        XCTAssertEqual(harness.scheduledWatchdogs.count, 2)
+        XCTAssertEqual(harness.manager.state.lastReadingDate, lastReadingDate)
+    }
+
+    func testDecryptAndParseFailurePacketsRefreshWatchdog() {
+        let harness = makePacketWatchdogHarness()
+
+        harness.now.value = harness.now.value.addingTimeInterval(30)
+        harness.manager.microTechSensor(
+            harness.sensor,
+            didReceivePacketFor: MicroTechAidexProfile.f002UUID,
+            receivedAt: harness.now.value
+        )
+        harness.now.value = harness.now.value.addingTimeInterval(30)
+        harness.manager.microTechSensor(
+            harness.sensor,
+            didReceivePacketFor: MicroTechAidexProfile.f003UUID,
+            receivedAt: harness.now.value
+        )
+
+        XCTAssertEqual(harness.scheduledWatchdogs.count, 3)
+    }
+
+    func testOldWatchdogCannotDisconnectAfterCurrentPacket() {
+        let harness = makePacketWatchdogHarness()
+
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.manager.microTechSensor(
+            harness.sensor,
+            didReceivePacketFor: MicroTechAidexProfile.f003UUID,
+            receivedAt: harness.now.value
+        )
+        harness.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 0)
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "monitoring")
+    }
+
+    func testPreHandshakePacketDoesNotStartOrRefreshWatchdog() {
         let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-        var now = Date(timeIntervalSince1970: 1_700_000_000)
-        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
         var state = MicroTechCGMManagerState()
         state.remoteIdentifier = remoteIdentifier
         state.deviceName = "LinX-ABC123"
         state.sensorSerial = "ABC123"
         let bluetoothManager = FakeMicroTechBluetoothManager()
+        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
         let manager = MicroTechCGMManager(
             state: state,
             bluetoothManagerFactory: { bluetoothManager },
-            staleConnectionScheduler: { delay, watchdog in
-                scheduledWatchdogs.append((delay, watchdog))
-            },
-            dateProvider: { now }
+            packetSilenceScheduler: { scheduledWatchdogs.append(($0, $1)) }
         )
-        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 2)
-        manager.delegateQueue = .main
-        manager.cgmManagerDelegate = delegate
 
         XCTAssertTrue(manager.scanForSensor())
         guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
-            return XCTFail("Expected scan to install a MicroTechSensor delegate")
+            return XCTFail("Expected current sensor")
         }
-        bluetoothManager.isConnected = true
-        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+        manager.microTechSensor(sensor, didReceivePacketFor: MicroTechAidexProfile.f003UUID, receivedAt: Date())
 
-        now = now.addingTimeInterval(60)
-        manager.microTechSensor(
-            sensor,
-            didRead: makeReading(sampleNumber: 42, glucoseMgdl: 123, receivedAt: now)
-        )
-
-        XCTAssertEqual(scheduledWatchdogs.count, 2)
-        now = now.addingTimeInterval(16 * 60)
-        scheduledWatchdogs[1].1()
-
-        XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
-        XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [remoteIdentifier, remoteIdentifier])
-
-        let reconnectedSensor = makeSensor(session: makeSession(remoteIdentifier: remoteIdentifier))
-        bluetoothManager.isConnected = true
-        now = now.addingTimeInterval(10)
-        manager.registerSensorForTesting(reconnectedSensor)
-        manager.microTechSensorDidConnect(reconnectedSensor, session: makeSession(remoteIdentifier: remoteIdentifier))
-        manager.microTechSensor(
-            reconnectedSensor,
-            didRead: makeReading(sampleNumber: 43, glucoseMgdl: 124, receivedAt: now)
-        )
-
-        wait(for: [delegate.readingResultsExpectation], timeout: 1)
-        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-42", "ABC123-43"])
-        XCTAssertTrue(delegate.loggedEvents.contains { event in
-            event.type == .connection &&
-                event.message.contains("disconnecting stale connection") &&
-                event.message.contains("reason=stale reading")
-        })
-        XCTAssertTrue(delegate.loggedEvents.contains { event in
-            event.type == .receive &&
-                event.message.contains("current accepted serial=ABC123 sample=43") &&
-                event.message.contains("recoveredAfterReconnect reason=stale reading")
-        })
+        XCTAssertTrue(scheduledWatchdogs.isEmpty)
+        XCTAssertEqual(manager.packetWatchdogPhaseForTesting, "idle")
     }
 
-    func testCurrentReadingWatchdogSchedulingDoesNotReadBluetoothConnectionState() throws {
-        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
-        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
+    func testRetiredSensorPacketDoesNotRefreshCurrentWatchdog() {
+        let harness = makePacketWatchdogHarness()
+        let replacement = makeSensor(session: makeSession())
+
+        harness.manager.registerSensorForTesting(replacement)
+        harness.manager.microTechSensor(harness.sensor, didReceivePacketFor: MicroTechAidexProfile.f003UUID, receivedAt: Date())
+
+        XCTAssertEqual(harness.scheduledWatchdogs.count, 1)
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "idle")
+    }
+
+    func testPacketAtDeadlineWinsWhenItClaimsStateFirst() {
+        let harness = makePacketWatchdogHarness()
+
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.manager.microTechSensor(
+            harness.sensor,
+            didReceivePacketFor: MicroTechAidexProfile.f002UUID,
+            receivedAt: harness.now.value
+        )
+        harness.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 0)
+        XCTAssertEqual(harness.scheduledRecoveries.count, 0)
+    }
+
+    func testDeleteModeChangeAndSensorReplacementInvalidatePacketWatchdog() {
+        let deleted = makePacketWatchdogHarness()
+        deleted.manager.delete {}
+        deleted.now.value = deleted.now.value.addingTimeInterval(5 * 60)
+        deleted.scheduledWatchdogs[0].1()
+
+        let changedMode = makePacketWatchdogHarness()
+        XCTAssertTrue(changedMode.manager.configureConnectionMode(.broadcast))
+        changedMode.now.value = changedMode.now.value.addingTimeInterval(5 * 60)
+        changedMode.scheduledWatchdogs[0].1()
+
+        let replaced = makePacketWatchdogHarness()
+        replaced.manager.registerSensorForTesting(makeSensor(session: makeSession()))
+        replaced.now.value = replaced.now.value.addingTimeInterval(5 * 60)
+        replaced.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(deleted.bluetoothManager.disconnectCallCount, 0)
+        XCTAssertEqual(changedMode.bluetoothManager.disconnectCallCount, 0)
+        XCTAssertEqual(replaced.bluetoothManager.disconnectCallCount, 0)
+    }
+
+    func testNormalSensorDisconnectInvalidatesPacketWatchdog() {
+        let harness = makePacketWatchdogHarness()
+
+        harness.manager.microTechSensorDidDisconnect(harness.sensor)
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(harness.manager.packetWatchdogPhaseForTesting, "idle")
+        XCTAssertEqual(harness.bluetoothManager.disconnectCallCount, 0)
+    }
+
+    func testBroadcastModeNeverStartsPacketWatchdog() {
         var state = MicroTechCGMManagerState()
-        state.remoteIdentifier = remoteIdentifier
-        state.deviceName = "LinX-ABC123"
         state.sensorSerial = "ABC123"
+        state.connectionMode = .broadcast
         let bluetoothManager = FakeMicroTechBluetoothManager()
+        var scheduledWatchdogs: [(TimeInterval, () -> Void)] = []
         let manager = MicroTechCGMManager(
             state: state,
             bluetoothManagerFactory: { bluetoothManager },
-            staleConnectionScheduler: { delay, watchdog in
-                scheduledWatchdogs.append((delay, watchdog))
-            }
+            packetSilenceScheduler: { scheduledWatchdogs.append(($0, $1)) }
         )
+        let sensor = makeSensor(session: makeSession())
+        manager.registerSensorForTesting(sensor)
 
-        XCTAssertTrue(manager.scanForSensor())
-        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
-            return XCTFail("Expected scan to install a MicroTechSensor delegate")
-        }
-        bluetoothManager.isConnected = true
-        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
-        scheduledWatchdogs.removeAll()
-        bluetoothManager.isConnectedReadCount = 0
+        manager.microTechSensorDidConnect(sensor, session: makeSession())
+        manager.microTechSensor(sensor, didReceivePacketFor: MicroTechAidexProfile.f003UUID, receivedAt: Date())
 
+        XCTAssertTrue(scheduledWatchdogs.isEmpty)
+        XCTAssertEqual(manager.packetWatchdogPhaseForTesting, "idle")
+    }
+
+    func testPacketSilenceReusesExistingSixtySecondRecoveryCycle() {
+        let harness = makePacketWatchdogHarness()
+
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.scheduledWatchdogs[0].1()
+        let firstRecovery = harness.scheduledRecoveries.first
+        harness.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(harness.scheduledRecoveries.count, 1)
+        XCTAssertEqual(firstRecovery?.0, 60)
+    }
+
+    func testPacketWatchdogNeverReadsBluetoothConnectionStateWhileHoldingManagerStateLock() {
+        let harness = makePacketWatchdogHarness()
+        harness.bluetoothManager.isConnectedReadCount = 0
+
+        harness.now.value = harness.now.value.addingTimeInterval(5 * 60)
+        harness.scheduledWatchdogs[0].1()
+
+        XCTAssertEqual(harness.bluetoothManager.isConnectedReadCount, 0)
+    }
+
+    func testMaintenanceHistoryInvalidAndDuplicatePacketsDoNotChangeLastReadingDate() {
+        let lastReadingDate = Date(timeIntervalSince1970: 1_700_000_000)
+        var state = makeReconnectState()
+        state.lastReadingDate = lastReadingDate
+        state.latestReading = makeReading(sampleNumber: 100, glucoseMgdl: 123, receivedAt: lastReadingDate)
+        state.latestSampleNumber = 100
+        let sensor = makeSensor(session: makeSession())
+        let manager = MicroTechCGMManager(state: state)
+        manager.registerSensorForTesting(sensor)
+        manager.microTechSensorDidConnect(sensor, session: makeSession())
+
+        manager.microTechSensor(sensor, didActivateAt: lastReadingDate.addingTimeInterval(10))
         manager.microTechSensor(
             sensor,
-            didRead: makeReading(
-                sampleNumber: 42,
-                glucoseMgdl: 123,
-                receivedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x02]),
+                startTimeOffset: 99,
+                records: [MicroTechAidexHistoryRecord(timeOffset: 99, glucose: 120, rawValue: 120)]
             )
         )
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(sampleNumber: 101, glucoseMgdl: 20, receivedAt: lastReadingDate.addingTimeInterval(60))
+        )
+        manager.microTechSensor(
+            sensor,
+            didRead: makeReading(sampleNumber: 100, glucoseMgdl: 124, receivedAt: lastReadingDate.addingTimeInterval(120))
+        )
 
-        XCTAssertEqual(scheduledWatchdogs.count, 1)
-        XCTAssertEqual(bluetoothManager.isConnectedReadCount, 0)
+        XCTAssertEqual(manager.state.lastReadingDate, lastReadingDate)
+        XCTAssertTrue(manager.emittedHistorySamplesForTesting.contains(99))
     }
 
     func testRestoredSavedSensorStartsScanWhenDelegateQueueIsConfigured() {
@@ -5026,6 +5057,54 @@ final class MicroTechCGMManagerTests: XCTestCase {
         return state
     }
 
+    private func makePacketWatchdogHarness(
+        lastReadingDate: Date? = nil,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> PacketWatchdogHarness {
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let now = MutableTestDate(Date(timeIntervalSince1970: 1_700_000_000))
+        let schedules = PacketWatchdogSchedules()
+        var state = MicroTechCGMManagerState()
+        state.remoteIdentifier = remoteIdentifier
+        state.deviceName = "LinX-ABC123"
+        state.sensorSerial = "ABC123"
+        state.activationTime = Date(timeIntervalSince1970: 1_699_900_000)
+        state.lastReadingDate = lastReadingDate
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        let manager = MicroTechCGMManager(
+            state: state,
+            bluetoothManagerFactory: { bluetoothManager },
+            reconnectRecoveryScheduler: { schedules.recoveries.append(($0, $1)) },
+            packetSilenceScheduler: { schedules.watchdogs.append(($0, $1)) },
+            dateProvider: { now.value }
+        )
+
+        XCTAssertTrue(manager.scanForSensor(), file: file, line: line)
+        guard let sensor = bluetoothManager.delegate as? MicroTechSensor else {
+            XCTFail("Expected current sensor", file: file, line: line)
+            return PacketWatchdogHarness(
+                remoteIdentifier: remoteIdentifier,
+                now: now,
+                schedules: schedules,
+                bluetoothManager: bluetoothManager,
+                manager: manager,
+                sensor: makeSensor(session: makeSession())
+            )
+        }
+        bluetoothManager.isConnected = true
+        manager.microTechSensorDidConnect(sensor, session: makeSession(remoteIdentifier: remoteIdentifier))
+
+        return PacketWatchdogHarness(
+            remoteIdentifier: remoteIdentifier,
+            now: now,
+            schedules: schedules,
+            bluetoothManager: bluetoothManager,
+            manager: manager,
+            sensor: sensor
+        )
+    }
+
     private func assertSynchronousWriteFailure(
         _ entries: [MicroTechGattLogEntry],
         payload: Data,
@@ -5236,6 +5315,31 @@ final class MicroTechCGMManagerTests: XCTestCase {
     private static let mgdlUnit = HKUnit
         .gramUnit(with: .milli)
         .unitDivided(by: .literUnit(with: .deci))
+}
+
+private final class MutableTestDate {
+    var value: Date
+
+    init(_ value: Date) {
+        self.value = value
+    }
+}
+
+private final class PacketWatchdogSchedules {
+    var watchdogs: [(TimeInterval, () -> Void)] = []
+    var recoveries: [(TimeInterval, () -> Void)] = []
+}
+
+private struct PacketWatchdogHarness {
+    let remoteIdentifier: UUID
+    let now: MutableTestDate
+    let schedules: PacketWatchdogSchedules
+    let bluetoothManager: FakeMicroTechBluetoothManager
+    let manager: MicroTechCGMManager
+    let sensor: MicroTechSensor
+
+    var scheduledWatchdogs: [(TimeInterval, () -> Void)] { schedules.watchdogs }
+    var scheduledRecoveries: [(TimeInterval, () -> Void)] { schedules.recoveries }
 }
 
 private final class TestCGMManagerDelegate: CGMManagerDelegate {

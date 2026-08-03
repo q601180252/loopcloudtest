@@ -20,7 +20,7 @@ public final class MicroTechCGMManager: CGMManager {
     private let bluetoothManagerFactory: () -> MicroTechBluetoothManaging
     private let bluetoothRetryScheduler: (@escaping () -> Void) -> Void
     private let reconnectRecoveryScheduler: (TimeInterval, @escaping () -> Void) -> Void
-    private let staleConnectionScheduler: (TimeInterval, @escaping () -> Void) -> Void
+    private let packetSilenceScheduler: (TimeInterval, @escaping () -> Void) -> Void
     private let sensorStartScheduler: (@escaping () -> Void) -> Void
     private let beforeSensorStart: () -> Void
     private let callbackProcessingBarrier: () -> Void
@@ -130,7 +130,7 @@ public final class MicroTechCGMManager: CGMManager {
         reconnectRecoveryScheduler = { delay, recovery in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: recovery)
         }
-        staleConnectionScheduler = { delay, watchdog in
+        packetSilenceScheduler = { delay, watchdog in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: watchdog)
         }
         sensorStartScheduler = { start in
@@ -153,7 +153,7 @@ public final class MicroTechCGMManager: CGMManager {
         reconnectRecoveryScheduler: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, recovery in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: recovery)
         },
-        staleConnectionScheduler: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, watchdog in
+        packetSilenceScheduler: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, watchdog in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: watchdog)
         },
         sensorStartScheduler: @escaping (@escaping () -> Void) -> Void = { start in
@@ -169,7 +169,7 @@ public final class MicroTechCGMManager: CGMManager {
         }
         self.bluetoothRetryScheduler = bluetoothRetryScheduler
         self.reconnectRecoveryScheduler = reconnectRecoveryScheduler
-        self.staleConnectionScheduler = staleConnectionScheduler
+        self.packetSilenceScheduler = packetSilenceScheduler
         self.sensorStartScheduler = sensorStartScheduler
         self.beforeSensorStart = beforeSensorStart
         self.callbackProcessingBarrier = callbackProcessingBarrier
@@ -190,7 +190,7 @@ public final class MicroTechCGMManager: CGMManager {
         reconnectRecoveryScheduler = { delay, recovery in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: recovery)
         }
-        staleConnectionScheduler = { delay, watchdog in
+        packetSilenceScheduler = { delay, watchdog in
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay, execute: watchdog)
         }
         sensorStartScheduler = { start in
@@ -246,6 +246,7 @@ public final class MicroTechCGMManager: CGMManager {
                     cancelledRecoveryIdentifier = identifier
                 }
                 protectedState.reconnectRecoveryState = .idle
+                protectedState.packetWatchdogState = .idle
                 protectedState.state.activationTime = nil
                 protectedState.state.lastReadingDate = nil
                 protectedState.state.latestReading = nil
@@ -281,6 +282,7 @@ public final class MicroTechCGMManager: CGMManager {
                 managerToShutdown = protectedState.bluetoothManager?.manager
                 protectedState.bluetoothManager = nil
                 protectedState.reconnectRecoveryState = .idle
+                protectedState.packetWatchdogState = .idle
             } else {
                 bluetoothManager = protectedState.bluetoothManager?.manager
             }
@@ -288,8 +290,7 @@ public final class MicroTechCGMManager: CGMManager {
                 sensorToRetire = protectedState.sensorIdentity.activeSensor
                 protectedState.sensorIdentity.retireActiveSensor()
                 protectedState.sensorIdentity.activeSensor = nil
-                protectedState.sensorIdentity.activeSensorConnectedAt = nil
-                protectedState.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+                protectedState.packetWatchdogState = .idle
             }
         }
 
@@ -318,13 +319,6 @@ public final class MicroTechCGMManager: CGMManager {
     }
 
     public func fetchNewDataIfNeeded(_ completion: @escaping (CGMReadingResult) -> Void) {
-        if state.connectionMode != .broadcast,
-           disconnectStaleConnectedSensorIfNeeded()
-        {
-            completion(.noData)
-            return
-        }
-
         scanForSensor(clearingConnectionError: false)
         completion(.noData)
     }
@@ -503,6 +497,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.sensorIdentity.isDeleted = true
             protectedState.bluetoothManager = nil
             protectedState.reconnectRecoveryState = .idle
+            protectedState.packetWatchdogState = .idle
 
             protectedState.state.remoteIdentifier = nil
             protectedState.state.deviceName = nil
@@ -669,7 +664,7 @@ public final class MicroTechCGMManager: CGMManager {
             )
 
             state.sensorIdentity.activeSensor = nil
-            state.sensorIdentity.activeSensorConnectedAt = nil
+            state.packetWatchdogState = .idle
             state.sensorIdentity.consecutiveSensorErrorCount = 0
             state.sensorIdentity.savedIdentifierFailureCount = 0
             state.sensorIdentity.pendingReconnectRecoveryReason = nil
@@ -797,8 +792,7 @@ public final class MicroTechCGMManager: CGMManager {
             }
 
             state.state.lastConnectionErrorDescription = "Bluetooth failed: \(String(describing: error))"
-            state.sensorIdentity.activeSensorConnectedAt = nil
-            state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+            state.packetWatchdogState = .idle
             recoveryIdentifier = claimReconnectRecoveryIfNeeded(reason: "Bluetooth failure", in: &state)
             guard let bluetoothError = error as? MicroTechBluetoothManagerError,
                   state.state.sensorSerial?.isEmpty == false,
@@ -909,7 +903,7 @@ public final class MicroTechCGMManager: CGMManager {
             sensorSerial: state.state.sensorSerial,
             connectionMode: state.state.connectionMode,
             isDeleted: state.sensorIdentity.isDeleted,
-            hasCurrentHandshake: state.sensorIdentity.activeSensorConnectedAt != nil
+            hasCurrentHandshake: state.packetWatchdogState.isMonitoring
         )
     }
 
@@ -999,6 +993,7 @@ public final class MicroTechCGMManager: CGMManager {
             }
 
             state.reconnectRecoveryState = .shuttingDown(id: identifier)
+            state.packetWatchdogState = .idle
             generation = currentGeneration
             state.bluetoothManager = nil
             state.state.remoteIdentifier = nil
@@ -1138,8 +1133,6 @@ public final class MicroTechCGMManager: CGMManager {
         let sensor = state.activeSensor
         state.retireActiveSensor()
         state.activeSensor = nil
-        state.activeSensorConnectedAt = nil
-        state.staleConnectionWatchdogIdentifier = UUID()
         return sensor
     }
 
@@ -1176,6 +1169,16 @@ public final class MicroTechCGMManager: CGMManager {
         }
     }
 
+    var packetWatchdogPhaseForTesting: String {
+        readProtectedState { state in
+            switch state.packetWatchdogState {
+            case .idle: return "idle"
+            case .monitoring: return "monitoring"
+            case .recovering: return "recovering"
+            }
+        }
+    }
+
     var emittedHistorySamplesForTesting: Set<Int> {
         readProtectedState { $0.sensorIdentity.emittedHistorySampleNumbers }
     }
@@ -1196,6 +1199,7 @@ public final class MicroTechCGMManager: CGMManager {
             state.sensorIdentity.retireActiveSensor()
             state.sensorIdentity.restore(sensor)
             state.sensorIdentity.activeSensor = sensor
+            state.packetWatchdogState = .idle
         }
         sensorToRetire?.retire()
     }
@@ -1210,6 +1214,7 @@ public final class MicroTechCGMManager: CGMManager {
         in state: inout MicroTechCGMManagerProtectedState
     ) -> Bool {
         guard !state.sensorIdentity.isDeleted,
+              state.state.connectionMode == .direct,
               state.sensorIdentity.activeSensor === sensor,
               !state.sensorIdentity.isRetired(sensor)
         else {
@@ -1227,8 +1232,16 @@ public final class MicroTechCGMManager: CGMManager {
         }
 
         state.sensorIdentity.activeSensor = sensor
-        state.sensorIdentity.activeSensorConnectedAt = dateProvider()
-        state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+        if let generation = state.bluetoothManager {
+            state.packetWatchdogState = .monitoring(
+                id: UUID(),
+                sensorID: ObjectIdentifier(sensor),
+                managerID: ObjectIdentifier(generation.manager),
+                lastPacketAt: dateProvider()
+            )
+        } else {
+            state.packetWatchdogState = .idle
+        }
         state.sensorIdentity.consecutiveSensorErrorCount = 0
         state.sensorIdentity.savedIdentifierFailureCount = 0
         state.state.remoteIdentifier = session.remoteIdentifier
@@ -1362,106 +1375,69 @@ public final class MicroTechCGMManager: CGMManager {
         resumeSavedSensorScanIfNeeded(reason: "delegate queue configured")
     }
 
-    private func scheduleStaleConnectionWatchdogIfNeeded(reason: String) {
-        let watchdogIdentifier = UUID()
-        var shouldSchedule = false
-        lockedManagerState.mutate { state in
+    private func schedulePacketSilenceWatchdog(identifier: UUID, after delay: TimeInterval = packetSilenceInterval) {
+        packetSilenceScheduler(delay) { [weak self] in
+            self?.runPacketSilenceWatchdog(identifier: identifier)
+        }
+    }
+
+    private func runPacketSilenceWatchdog(identifier: UUID) {
+        var generation: MicroTechBluetoothManagerGeneration?
+        var remoteIdentifier: UUID?
+        var recoveryIdentifier: UUID?
+        var remainingDelay: TimeInterval?
+        let now = dateProvider()
+        _ = mutateProtectedState { state in
             guard !state.sensorIdentity.isDeleted,
-                  state.state.sensorSerial?.isEmpty == false,
-                  state.sensorIdentity.activeSensorConnectedAt != nil
+                  state.state.connectionMode == .direct,
+                  let currentGeneration = state.bluetoothManager,
+                  case .monitoring(
+                    let currentIdentifier,
+                    let sensorID,
+                    let managerID,
+                    let lastPacketAt
+                  ) = state.packetWatchdogState,
+                  currentIdentifier == identifier,
+                  managerID == ObjectIdentifier(currentGeneration.manager),
+                  let activeSensor = state.sensorIdentity.activeSensor,
+                  sensorID == ObjectIdentifier(activeSensor),
+                  isCurrentSensor(activeSensor, in: state.sensorIdentity)
             else {
                 return
             }
 
-            state.sensorIdentity.staleConnectionWatchdogIdentifier = watchdogIdentifier
-            shouldSchedule = true
+            let elapsed = now.timeIntervalSince(lastPacketAt)
+            guard elapsed >= Self.packetSilenceInterval else {
+                remainingDelay = Self.packetSilenceInterval - elapsed
+                return
+            }
+
+            state.packetWatchdogState = .recovering(id: identifier, sensorID: sensorID)
+            if state.sensorIdentity.pendingReconnectRecoveryReason == nil {
+                state.sensorIdentity.pendingReconnectRecoveryReason = "packet silence"
+            }
+            recoveryIdentifier = claimReconnectRecoveryIfNeeded(reason: "packet silence", in: &state)
+            generation = currentGeneration
+            remoteIdentifier = state.state.remoteIdentifier
         }
 
-        guard shouldSchedule else {
+        if let remainingDelay {
+            schedulePacketSilenceWatchdog(identifier: identifier, after: remainingDelay)
+            return
+        }
+        guard let generation else {
             return
         }
 
-        staleConnectionScheduler(Self.staleReadingReconnectInterval) { [weak self] in
-            self?.runStaleConnectionWatchdog(identifier: watchdogIdentifier, reason: reason)
+        logDeviceCommunication(
+            "MicroTech LinX no Bluetooth packet for 300 seconds; restarting connection",
+            type: .connection
+        )
+        if let recoveryIdentifier {
+            scheduleReconnectRecovery(identifier: recoveryIdentifier, reason: "packet silence")
         }
-    }
-
-    private func runStaleConnectionWatchdog(identifier: UUID, reason: String) {
-        let shouldRun = readProtectedState { state in
-            !state.sensorIdentity.isDeleted &&
-                state.sensorIdentity.staleConnectionWatchdogIdentifier == identifier
-        }
-
-        guard shouldRun else {
-            return
-        }
-
-        if disconnectStaleConnectedSensorIfNeeded() {
-            return
-        }
-
-        scheduleStaleConnectionWatchdogIfNeeded(reason: "\(reason) refresh")
-    }
-
-    private func invalidateStaleConnectionWatchdog() {
-        lockedManagerState.mutate { state in
-            state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
-        }
-    }
-
-    private func clearConnectedSensorWatchdogState(recoveryReason: String? = nil) {
-        lockedManagerState.mutate { state in
-            state.sensorIdentity.activeSensorConnectedAt = nil
-            state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
-            if let recoveryReason {
-                state.sensorIdentity.pendingReconnectRecoveryReason = recoveryReason
-            }
-        }
-    }
-
-    private func disconnectStaleConnectedSensorIfNeeded() -> Bool {
-        let generation = readProtectedState { $0.bluetoothManager }
-        guard let generation, generation.manager.isConnected else {
-            return false
-        }
-
-        var bluetoothManager: MicroTechBluetoothManaging?
-        var disconnectReason = "stale reading"
-        let now = dateProvider()
-        let shouldDisconnect = readProtectedState { state in
-            guard state.state.sensorSerial?.isEmpty == false,
-                  state.bluetoothManager?.id == generation.id else
-            {
-                return false
-            }
-
-            let referenceDate: Date
-            if let lastReadingDate = state.state.lastReadingDate {
-                referenceDate = lastReadingDate
-            } else if let connectedAt = state.sensorIdentity.activeSensorConnectedAt {
-                referenceDate = connectedAt
-                disconnectReason = "no readings after connect"
-            } else {
-                return false
-            }
-
-            guard now.timeIntervalSince(referenceDate) >= Self.staleReadingReconnectInterval else {
-                return false
-            }
-
-            bluetoothManager = generation.manager
-            return true
-        }
-
-        guard shouldDisconnect, let bluetoothManager else {
-            return false
-        }
-
-        logDeviceCommunication("MicroTech LinX disconnecting stale connection to restart Bluetooth scan reason=\(disconnectReason)", type: .connection)
-        clearConnectedSensorWatchdogState(recoveryReason: disconnectReason)
-        bluetoothManager.disconnect()
-        scanForSensor(clearingConnectionError: false)
-        return true
+        generation.manager.disconnect()
+        generation.manager.scan(remoteIdentifier: remoteIdentifier)
     }
 
     private func scheduleHistoryBackfillIfNeeded(
@@ -1751,7 +1727,7 @@ public final class MicroTechCGMManager: CGMManager {
     private static let linxAidexWarmupMinutes = 60
     private static let historyCaughtUpDistance = 2
     private static let historyRetrySampleDistance = 5
-    private static let staleReadingReconnectInterval: TimeInterval = 15 * 60
+    private static let packetSilenceInterval: TimeInterval = 5 * 60
     private static let reconnectRecoveryInterval: TimeInterval = 60
     private static let consecutiveSensorErrorReconnectThreshold = 3
     private static let savedIdentifierFallbackFailureThreshold = 2
@@ -1817,8 +1793,7 @@ public final class MicroTechCGMManager: CGMManager {
             protectedState.sensorIdentity.activeSensor = sensor
             protectedState.sensorIdentity.startEligibilityIdentifier = UUID()
             startEligibilityIdentifier = protectedState.sensorIdentity.startEligibilityIdentifier
-            protectedState.sensorIdentity.activeSensorConnectedAt = nil
-            protectedState.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+            protectedState.packetWatchdogState = .idle
             protectedState.sensorIdentity.consecutiveSensorErrorCount = 0
             protectedState.sensorIdentity.savedIdentifierFailureCount = 0
             protectedState.state.remoteIdentifier = session.remoteIdentifier
@@ -1941,8 +1916,7 @@ public final class MicroTechCGMManager: CGMManager {
                 return
             }
             didAcceptSource = true
-            state.sensorIdentity.activeSensorConnectedAt = nil
-            state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+            state.packetWatchdogState = .idle
             recoveryIdentifier = claimReconnectRecoveryIfNeeded(reason: "Bluetooth disconnect", in: &state)
         }
         guard didAcceptSource else {
@@ -2027,15 +2001,61 @@ extension MicroTechCGMManager: MicroTechBluetoothManagerDelegate {
 }
 
 extension MicroTechCGMManager: MicroTechSensorDelegate {
+    public func microTechSensor(
+        _ sensor: MicroTechSensor,
+        didReceivePacketFor characteristic: CBUUID,
+        receivedAt: Date
+    ) {
+        callbackProcessingBarrier()
+        guard characteristic == MicroTechAidexProfile.f001UUID ||
+            characteristic == MicroTechAidexProfile.f002UUID ||
+            characteristic == MicroTechAidexProfile.f003UUID
+        else {
+            return
+        }
+
+        var replacementIdentifier: UUID?
+        _ = mutateProtectedState { state in
+            guard state.state.connectionMode == .direct,
+                  isCurrentSensor(sensor, in: state.sensorIdentity),
+                  let generation = state.bluetoothManager,
+                  case .monitoring(_, let sensorID, let managerID, _) = state.packetWatchdogState,
+                  sensorID == ObjectIdentifier(sensor),
+                  managerID == ObjectIdentifier(generation.manager)
+            else {
+                return
+            }
+
+            let identifier = UUID()
+            state.packetWatchdogState = .monitoring(
+                id: identifier,
+                sensorID: sensorID,
+                managerID: managerID,
+                lastPacketAt: receivedAt
+            )
+            replacementIdentifier = identifier
+        }
+
+        if let replacementIdentifier {
+            schedulePacketSilenceWatchdog(identifier: replacementIdentifier)
+        }
+    }
+
     public func microTechSensorDidConnect(_ sensor: MicroTechSensor, session: MicroTechAidexSession) {
         callbackProcessingBarrier()
         var didAccept = false
         var shouldStartSensor = false
+        var packetWatchdogIdentifier: UUID?
         let stateChange = mutateProtectedState { state in
             didAccept = acceptSensorConnection(sensor, session: session, in: &state)
             shouldStartSensor = didAccept &&
                 state.state.activationTime == nil &&
                 state.state.latestSampleNumber == nil
+            if didAccept,
+               case .monitoring(let identifier, _, _, _) = state.packetWatchdogState
+            {
+                packetWatchdogIdentifier = identifier
+            }
         }
 
         guard didAccept else {
@@ -2044,7 +2064,9 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
 
         cancelReconnectRecovery(reason: "handshake")
         notifyStateDidChange(from: stateChange.oldState, to: stateChange.newState)
-        scheduleStaleConnectionWatchdogIfNeeded(reason: "sensor connect")
+        if let packetWatchdogIdentifier {
+            schedulePacketSilenceWatchdog(identifier: packetWatchdogIdentifier)
+        }
         if shouldStartSensor {
             do {
                 try sensor.startSensor(at: Date())
@@ -2073,8 +2095,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
                 return
             }
 
-            state.sensorIdentity.activeSensorConnectedAt = nil
-            state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+            state.packetWatchdogState = .idle
             recoveryIdentifier = claimReconnectRecoveryIfNeeded(reason: "sensor disconnect", in: &state)
         }
 
@@ -2161,7 +2182,6 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         }
 
         if let sample {
-            scheduleStaleConnectionWatchdogIfNeeded(reason: "current reading")
             notifyDelegateOfReadingResult(.newData([sample]))
         } else if let result {
             notifyDelegateOfReadingResult(result)
@@ -2174,7 +2194,6 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         var samples: [NewGlucoseSample] = []
         var logMessage: String?
         var historyRequest: MicroTechHistoryRequest?
-        let communicationDate = Date()
         let filterStartDate = startDateToFilterNewData()
         let stateChange = mutateProtectedState { state in
             guard isCurrentSensor(sensor, in: state.sensorIdentity),
@@ -2255,7 +2274,6 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
                 state.sensorIdentity.emittedHistorySampleNumbers.insert(record.timeOffset)
             }
             if !samples.isEmpty {
-                state.state.lastReadingDate = communicationDate
                 state.state.lastConnectionErrorDescription = nil
             }
             historyRequest = scheduleNextHistoryRequestIfNeeded(
@@ -2291,7 +2309,6 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             return
         }
 
-        scheduleStaleConnectionWatchdogIfNeeded(reason: "history reading")
         notifyDelegateOfReadingResult(.newData(samples))
     }
 
@@ -2365,8 +2382,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             if consecutiveErrorCount >= Self.consecutiveSensorErrorReconnectThreshold {
                 bluetoothManager = state.bluetoothManager?.manager
                 state.sensorIdentity.consecutiveSensorErrorCount = 0
-                state.sensorIdentity.activeSensorConnectedAt = nil
-                state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
+                state.packetWatchdogState = .idle
                 recoveryIdentifier = claimReconnectRecoveryIfNeeded(
                     reason: "\(consecutiveErrorCount) consecutive sensor errors",
                     in: &state
@@ -2459,6 +2475,7 @@ private struct MicroTechCGMManagerProtectedState {
     var sensorIdentity = MicroTechSensorIdentityState()
     var bluetoothManager: MicroTechBluetoothManagerGeneration?
     var reconnectRecoveryState: MicroTechReconnectRecoveryState = .idle
+    var packetWatchdogState: MicroTechPacketWatchdogState = .idle
 }
 
 private struct MicroTechBluetoothManagerGeneration {
@@ -2481,6 +2498,26 @@ private extension MicroTechReconnectRecoveryState {
     }
 }
 
+private enum MicroTechPacketWatchdogState {
+    case idle
+    case monitoring(
+        id: UUID,
+        sensorID: ObjectIdentifier,
+        managerID: ObjectIdentifier,
+        lastPacketAt: Date
+    )
+    case recovering(id: UUID, sensorID: ObjectIdentifier)
+}
+
+private extension MicroTechPacketWatchdogState {
+    var isMonitoring: Bool {
+        if case .monitoring = self {
+            return true
+        }
+        return false
+    }
+}
+
 private struct MicroTechSensorIdentityState {
     var activeSensor: MicroTechSensor?
     var startEligibilityIdentifier = UUID()
@@ -2488,8 +2525,6 @@ private struct MicroTechSensorIdentityState {
     var emittedHistorySampleNumbers: Set<Int> = []
     var historyBackfillRequestedFrom: Int?
     var historyBackfillRequestedAtCurrentIndex: Int?
-    var activeSensorConnectedAt: Date?
-    var staleConnectionWatchdogIdentifier = UUID()
     var consecutiveSensorErrorCount = 0
     var savedIdentifierFailureCount = 0
     var pendingReconnectRecoveryReason: String?
@@ -2516,8 +2551,6 @@ private struct MicroTechSensorIdentityState {
         activeSensor = nil
         emittedHistorySampleNumbers.removeAll()
         clearPendingHistoryRequest()
-        activeSensorConnectedAt = nil
-        staleConnectionWatchdogIdentifier = UUID()
         consecutiveSensorErrorCount = 0
         savedIdentifierFailureCount = 0
         pendingReconnectRecoveryReason = nil
