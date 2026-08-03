@@ -22,7 +22,7 @@
 - [x] 旧管理器关闭完成前不会创建新管理器，旧管理器和旧传感器的迟到回调不能改变当前状态。
 - [x] 首次添加、广播兼容模式和其他 CGM 行为不变。
 - [x] 新增测试完成真实 red-green 验证，`MicroTechCGMTests` 全量通过，`LoopWorkspace` 完整构建通过。
-- [ ] 文档、`PROGRESS.md`、commit 和 `origin/main` 同步完成；真机不能稳定制造卡死时明确保留该项实机复验。
+- [x] 文档、`PROGRESS.md`、commit 和 `origin/main` 同步完成；真机不能稳定制造卡死时明确保留该项实机复验。
 
 ## 文件结构
 
@@ -609,7 +609,7 @@ git log --oneline origin/main..HEAD
 
 Expected: `git diff --check` 无输出；feature worktree 无未提交文件；所有实现、审查修复和文档提交都位于 `origin/main..HEAD`。
 
-- [ ] **Step 10: 合并到 main 并推送**
+- [x] **Step 10: 合并到 main 并推送**
 
 确认主工作区只有用户原有的 `xcuserdata`、`build/`、`log/` 变化，不纳入提交。然后：
 
