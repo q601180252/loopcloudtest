@@ -107,6 +107,7 @@ final class MicroTechGattLogQueue {
     private let queueIdentity = UUID()
     private let preHandlerBufferCapacity: Int
     private var storedHandler: Handler?
+    private var isDisabled = false
     private var preHandlerEntries: [MicroTechGattLogEntry] = []
     private var orderedStreams: [
         UUID: (
@@ -127,6 +128,10 @@ final class MicroTechGattLogQueue {
         }
         set {
             syncOnQueue {
+                guard !isDisabled else {
+                    storedHandler = nil
+                    return
+                }
                 storedHandler = newValue
                 guard newValue != nil, !preHandlerEntries.isEmpty else {
                     return
@@ -144,12 +149,18 @@ final class MicroTechGattLogQueue {
 
     func submit(_ entry: MicroTechGattLogEntry) {
         queue.async {
+            guard !self.isDisabled else {
+                return
+            }
             self.deliver([entry])
         }
     }
 
     func submit(_ batch: MicroTechGattLogBatch) {
         queue.async {
+            guard !self.isDisabled else {
+                return
+            }
             var stream = self.orderedStreams[batch.streamIdentifier] ?? (
                 nextSequence: 0,
                 pending: [:]
@@ -174,9 +185,12 @@ final class MicroTechGattLogQueue {
         syncOnQueue {}
     }
 
-    func clearHandler(completion: @escaping () -> Void) {
+    func disable(completion: @escaping () -> Void) {
         queue.async {
+            self.isDisabled = true
             self.storedHandler = nil
+            self.preHandlerEntries.removeAll()
+            self.orderedStreams.removeAll()
             completion()
         }
     }

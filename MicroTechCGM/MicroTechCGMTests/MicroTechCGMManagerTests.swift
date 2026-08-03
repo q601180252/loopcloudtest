@@ -3492,6 +3492,9 @@ final class MicroTechCGMManagerTests: XCTestCase {
             name: "LinX-ABC123"
         )
         let shutdownCompleted = expectation(description: "Bluetooth manager shutdown completed")
+        let rebindBeforeCompletionRejected = expectation(
+            description: "log handler rebind before shutdown completion rejected"
+        )
         let centralStateObserved = expectation(description: "initial central state observed")
         bluetoothManager.whenCentralStateObservedForTesting {
             centralStateObserved.fulfill()
@@ -3515,6 +3518,13 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(stateBeforeShutdown.configuringPeripheralCount, 1)
         XCTAssertTrue(stateBeforeShutdown.hasScanTimeout)
         XCTAssertTrue(bluetoothManager.isConnected)
+        bluetoothManager.willCompleteShutdownForTesting = {
+            bluetoothManager.logHandler = { _, _ in
+                XCTFail("shutdown manager must reject a replacement log handler before completion")
+            }
+            XCTAssertNil(bluetoothManager.logHandler)
+            rebindBeforeCompletionRejected.fulfill()
+        }
 
         bluetoothManager.shutdown {
             let stateAfterShutdown = bluetoothManager.stateSnapshotForTesting()
@@ -3531,19 +3541,25 @@ final class MicroTechCGMManagerTests: XCTestCase {
             shutdownCompleted.fulfill()
         }
 
-        wait(for: [shutdownCompleted], timeout: 1)
+        wait(for: [rebindBeforeCompletionRejected, shutdownCompleted], timeout: 1)
         XCTAssertEqual(connectionTimeouts.cancelAllCallCount, 1)
         XCTAssertEqual(configurationTimeouts.cancelAllCallCount, 1)
         XCTAssertTrue(connectionTimeouts.scheduledIdentifiers.isEmpty)
         XCTAssertTrue(configurationTimeouts.scheduledIdentifiers.isEmpty)
         XCTAssertEqual(peripheralManager.disconnectCallCount, 1)
         XCTAssertNil(peripheralManager.delegate)
+
+        bluetoothManager.logHandler = { _, _ in
+            XCTFail("shutdown manager must reject a replacement log handler")
+        }
+        XCTAssertNil(bluetoothManager.logHandler)
     }
 
     func testConnectionTimeoutControllerCancelAllInvalidatesScheduledHandlers() {
         let queue = DispatchQueue(label: "MicroTechCGMManagerTests.connectionTimeout.cancelAll")
         queue.suspend()
-        let controller = MicroTechConnectionTimeoutController(timeout: 0.001, queue: queue)
+        let timeout: TimeInterval = 0.01
+        let controller = MicroTechConnectionTimeoutController(timeout: timeout, queue: queue)
         let lock = NSLock()
         var firedIdentifiers: [UUID] = []
         let queueDrained = expectation(description: "controlled timeout queue drained")
@@ -3560,7 +3576,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
         }
 
         controller.cancelAll()
-        queue.async {
+        queue.asyncAfter(deadline: .now() + timeout * 10) {
             queueDrained.fulfill()
         }
         queue.resume()
@@ -3594,9 +3610,17 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
         let logHandlerEntered = expectation(description: "blocking log handler entered")
         let releaseLogHandler = DispatchSemaphore(value: 0)
+        let logHandlerLock = NSLock()
+        var isFirstLogHandlerCall = true
         bluetoothManager.logHandler = { _, _ in
-            logHandlerEntered.fulfill()
-            releaseLogHandler.wait()
+            logHandlerLock.lock()
+            let shouldBlock = isFirstLogHandlerCall
+            isFirstLogHandlerCall = false
+            logHandlerLock.unlock()
+            if shouldBlock {
+                logHandlerEntered.fulfill()
+                releaseLogHandler.wait()
+            }
         }
         bluetoothManager.handleDidConnect(identifier: UUID())
         wait(for: [logHandlerEntered], timeout: 1)

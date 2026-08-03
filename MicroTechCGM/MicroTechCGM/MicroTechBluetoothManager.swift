@@ -288,6 +288,7 @@ public final class MicroTechBluetoothManager: NSObject {
     private var centralManager: CBCentralManager!
     private var lastCentralState: CBManagerState?
     private var centralStateObserversForTesting: [() -> Void] = []
+    var willCompleteShutdownForTesting: (() -> Void)?
     private let disconnectCallbackState = MicroTechDisconnectCallbackState()
     private var managedPeripherals: [UUID: MicroTechManagedPeripheral] = [:]
     private var restoredPeripherals: [UUID: MicroTechRestoredPeripheralReference] = [:]
@@ -502,8 +503,11 @@ public final class MicroTechBluetoothManager: NSObject {
             self.restoredPeripherals.removeAll()
             self.configuringPeripheralIDs.removeAll()
             self.delegate = nil
-            self.bluetoothLogQueue.clearHandler {
+            self.bluetoothLogQueue.disable {
                 self.managerQueue.async {
+                    let willCompleteShutdown = self.willCompleteShutdownForTesting
+                    self.willCompleteShutdownForTesting = nil
+                    willCompleteShutdown?()
                     self.shutdownCleanupCompleted = true
                     let completions = self.shutdownCompletions
                     self.shutdownCompletions.removeAll()
@@ -1112,6 +1116,11 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
         guard !isShutdown else {
             return
         }
+        defer {
+            let centralStateObservers = centralStateObserversForTesting
+            centralStateObserversForTesting.removeAll()
+            centralStateObservers.forEach { $0() }
+        }
         let stoppedOperation: String?
         if central.state != .poweredOn {
             if central.isScanning || scanTimeoutWorkItem != nil {
@@ -1132,9 +1141,6 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
             stoppedOperation: stoppedOperation
         ))
         lastCentralState = central.state
-        let centralStateObservers = centralStateObserversForTesting
-        centralStateObserversForTesting.removeAll()
-        centralStateObservers.forEach { $0() }
 
         guard central.state == .poweredOn else {
             logBluetooth("central state changed to \(central.state.rawValue), stopping scan")
