@@ -2840,10 +2840,12 @@ final class MicroTechCGMManagerTests: XCTestCase {
         let bluetoothManager = FakeMicroTechBluetoothManager()
         bluetoothManager.isConnected = true
         var retryBlocks: [() -> Void] = []
+        var recoveryBlocks: [(TimeInterval, () -> Void)] = []
         let manager = MicroTechCGMManager(
             state: state,
             bluetoothManagerFactory: { bluetoothManager },
-            bluetoothRetryScheduler: { retryBlocks.append($0) }
+            bluetoothRetryScheduler: { retryBlocks.append($0) },
+            reconnectRecoveryScheduler: { recoveryBlocks.append(($0, $1)) }
         )
         let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 3)
         let viewModel = MicroTechSettingsViewModel(
@@ -2867,6 +2869,9 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(bluetoothManager.disconnectCallCount, 1)
         XCTAssertEqual(bluetoothManager.scanRemoteIdentifiers, [])
         XCTAssertEqual(retryBlocks.count, 1)
+        XCTAssertEqual(recoveryBlocks.count, 1)
+        XCTAssertEqual(try XCTUnwrap(recoveryBlocks.first?.0), 60, accuracy: 0.001)
+        XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "timing")
         XCTAssertEqual(manager.state.lastConnectionErrorDescription, "Sensor error: invalidCRC")
         XCTAssertEqual(viewModel.connectionErrorDescription, "Sensor error: invalidCRC")
         XCTAssertTrue(delegate.loggedEvents.contains { event in
@@ -4124,11 +4129,16 @@ final class MicroTechCGMManagerTests: XCTestCase {
         let second = FakeMicroTechBluetoothManager()
         var managers = [first, second]
         var scheduled: [(TimeInterval, () -> Void)] = []
+        var messages: [String] = []
         let manager = MicroTechCGMManager(
             state: makeReconnectState(),
             bluetoothManagerFactory: { managers.removeFirst() },
             reconnectRecoveryScheduler: { scheduled.append(($0, $1)) }
         )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        manager.onboardingDeviceLogHandler = { _, _, message in messages.append(message) }
         XCTAssertTrue(manager.scanForSensor())
         scheduled[0].1()
         first.completeShutdown()
@@ -4150,6 +4160,16 @@ final class MicroTechCGMManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.state, before)
         XCTAssertEqual(second.shutdownCallCount, 0)
+        wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
+        XCTAssertTrue(delegate.readingResults.isEmpty)
+        let ignoredCallbacks = ["shouldConnect", "ready", "failure", "disconnect", "data", "broadcast"]
+        for callback in ignoredCallbacks {
+            XCTAssertTrue(
+                delegate.loggedEvents.contains { $0.message.contains("callback=\(callback)") && $0.message.contains("reason=retiredBluetoothManager") } ||
+                    messages.contains { $0.contains("callback=\(callback)") && $0.contains("reason=retiredBluetoothManager") },
+                callback
+            )
+        }
     }
 
     func testOldSensorConnectDisconnectReadingHistoryActivationIgnoredAndErrorCallbacksAreIgnored() {
@@ -4157,11 +4177,16 @@ final class MicroTechCGMManagerTests: XCTestCase {
         let second = FakeMicroTechBluetoothManager()
         var managers = [first, second]
         var scheduled: [(TimeInterval, () -> Void)] = []
+        var retries: [() -> Void] = []
         let manager = MicroTechCGMManager(
             state: makeReconnectState(),
             bluetoothManagerFactory: { managers.removeFirst() },
+            bluetoothRetryScheduler: { retries.append($0) },
             reconnectRecoveryScheduler: { scheduled.append(($0, $1)) }
         )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
         XCTAssertTrue(manager.scanForSensor())
         guard let oldSensor = first.delegate as? MicroTechSensor else {
             return XCTFail("Expected saved sensor delegate")
@@ -4173,11 +4198,114 @@ final class MicroTechCGMManagerTests: XCTestCase {
         manager.microTechSensorDidConnect(oldSensor, session: makeSession())
         manager.microTechSensorDidDisconnect(oldSensor)
         manager.microTechSensor(oldSensor, didRead: makeReading(sampleNumber: 999, glucoseMgdl: 200, receivedAt: Date()))
+        manager.microTechSensor(
+            oldSensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 41,
+                records: [MicroTechAidexHistoryRecord(timeOffset: 41, glucose: 120, rawValue: 120)]
+            )
+        )
         manager.microTechSensor(oldSensor, didActivateAt: Date())
+        manager.microTechSensor(oldSensor, didIgnorePacketType: 0x04, length: 1, hexPrefix: "04")
+        manager.microTechSensor(oldSensor, didLog: "retired sensor log", type: .error)
         manager.microTechSensor(oldSensor, didError: MicroTechCGMManagerTestError.poweredOff)
 
+        wait(for: [delegate.readingResultsExpectation], timeout: 0.1)
         XCTAssertEqual(manager.state, before)
         XCTAssertEqual(scheduled.count, 2)
+        XCTAssertTrue(retries.isEmpty)
+        XCTAssertTrue(delegate.readingResults.isEmpty)
+        XCTAssertFalse(delegate.loggedEvents.contains { $0.message.contains("retired sensor log") })
+        XCTAssertFalse(delegate.loggedEvents.contains { $0.message.contains("history processed") })
+        XCTAssertFalse(delegate.loggedEvents.contains { $0.message.contains("ignored unsupported packet") })
+    }
+
+    func testOldManagerFailureBlockedBeforeMutationCannotCrossRebuild() {
+        let first = FakeMicroTechBluetoothManager()
+        let second = FakeMicroTechBluetoothManager()
+        var managers = [first, second]
+        var scheduled: [(TimeInterval, () -> Void)] = []
+        let enteredBarrier = DispatchSemaphore(value: 0)
+        let releaseBarrier = DispatchSemaphore(value: 0)
+        let callbackFinished = expectation(description: "old manager callback finished")
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: { managers.removeFirst() },
+            reconnectRecoveryScheduler: { scheduled.append(($0, $1)) },
+            callbackProcessingBarrier: {
+                enteredBarrier.signal()
+                releaseBarrier.wait()
+            }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        XCTAssertTrue(manager.scanForSensor())
+
+        DispatchQueue.global().async {
+            manager.handleBluetoothFailure(from: first, error: MicroTechCGMManagerTestError.poweredOff)
+            callbackFinished.fulfill()
+        }
+        XCTAssertEqual(enteredBarrier.wait(timeout: .now() + 1), .success)
+        scheduled[0].1()
+        first.completeShutdown()
+        let stateAfterRebuild = manager.state
+        releaseBarrier.signal()
+        wait(for: [callbackFinished], timeout: 1)
+
+        XCTAssertEqual(manager.state, stateAfterRebuild)
+        XCTAssertNil(manager.state.lastConnectionErrorDescription)
+        XCTAssertEqual(scheduled.count, 2)
+        XCTAssertTrue(delegate.readingResults.isEmpty)
+    }
+
+    func testOldSensorHistoryBlockedBeforeMutationCannotCrossRebuild() {
+        let first = FakeMicroTechBluetoothManager()
+        let second = FakeMicroTechBluetoothManager()
+        var managers = [first, second]
+        var scheduled: [(TimeInterval, () -> Void)] = []
+        let enteredBarrier = DispatchSemaphore(value: 0)
+        let releaseBarrier = DispatchSemaphore(value: 0)
+        let callbackFinished = expectation(description: "old sensor history callback finished")
+        let manager = MicroTechCGMManager(
+            state: makeReconnectState(),
+            bluetoothManagerFactory: { managers.removeFirst() },
+            reconnectRecoveryScheduler: { scheduled.append(($0, $1)) },
+            callbackProcessingBarrier: {
+                enteredBarrier.signal()
+                releaseBarrier.wait()
+            }
+        )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 0)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
+        XCTAssertTrue(manager.scanForSensor())
+        guard let oldSensor = first.delegate as? MicroTechSensor else {
+            return XCTFail("Expected saved sensor delegate")
+        }
+
+        DispatchQueue.global().async {
+            manager.microTechSensor(
+                oldSensor,
+                didReadHistory: MicroTechAidexHistoryPacket(
+                    rawBytes: Data([0x23]),
+                    startTimeOffset: 41,
+                    records: [MicroTechAidexHistoryRecord(timeOffset: 41, glucose: 120, rawValue: 120)]
+                )
+            )
+            callbackFinished.fulfill()
+        }
+        XCTAssertEqual(enteredBarrier.wait(timeout: .now() + 1), .success)
+        scheduled[0].1()
+        first.completeShutdown()
+        let stateAfterRebuild = manager.state
+        releaseBarrier.signal()
+        wait(for: [callbackFinished], timeout: 1)
+
+        XCTAssertEqual(manager.state, stateAfterRebuild)
+        XCTAssertTrue(delegate.readingResults.isEmpty)
+        XCTAssertTrue(manager.emittedHistorySamplesForTesting.isEmpty)
     }
 
     func testShuttingDownIgnoresScanFetchInternalAndQueuedRetryWithoutCallingFactory() {
@@ -4231,7 +4359,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "timing")
     }
 
-    func testRecoveryRebuildPreservesDeviceActivationLatestReadingAndHistoryDedupButClearsPendingHistory() {
+    func testRecoveryRebuildPreservesDeviceActivationLatestReadingAndHistoryDedupButClearsPendingHistory() throws {
         let first = FakeMicroTechBluetoothManager()
         let second = FakeMicroTechBluetoothManager()
         var managers = [first, second]
@@ -4243,11 +4371,26 @@ final class MicroTechCGMManagerTests: XCTestCase {
             bluetoothRetryScheduler: { $0() },
             reconnectRecoveryScheduler: { scheduled.append(($0, $1)) }
         )
+        let delegate = TestCGMManagerDelegate(expectedReadingResultCount: 4)
+        manager.delegateQueue = .main
+        manager.cgmManagerDelegate = delegate
         XCTAssertTrue(manager.scanForSensor())
-        let connectedSensor = makeSensor(session: makeSession())
-        manager.microTechSensorDidConnect(connectedSensor, session: makeSession())
+        let firstSession = makeSession()
+        let material = MicroTechAidexKeyMaterial.derive(serial: firstSession.sensorSerial)
+        let firstPeripheral = FakeMicroTechPeripheralSession(
+            deviceIdentifier: firstSession.remoteIdentifier,
+            deviceName: firstSession.deviceName,
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let firstSensor = MicroTechSensor(
+            session: firstSession,
+            peripheralSession: firstPeripheral,
+            pairingKeyTimeout: 0
+        )
+        firstSensor.delegate = manager
+        try firstSensor.start()
         manager.microTechSensor(
-            connectedSensor,
+            firstSensor,
             didRead: makeReading(
                 sampleNumber: 70,
                 glucoseMgdl: 124,
@@ -4255,7 +4398,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
             )
         )
         manager.microTechSensor(
-            connectedSensor,
+            firstSensor,
             didReadHistory: MicroTechAidexHistoryPacket(
                 rawBytes: Data([0x23]),
                 startTimeOffset: 60,
@@ -4263,13 +4406,25 @@ final class MicroTechCGMManagerTests: XCTestCase {
             )
         )
         XCTAssertEqual(manager.emittedHistorySamplesForTesting, Set([60]))
+        XCTAssertEqual(manager.pendingHistoryRequestForTesting, 61)
+        let builder = MicroTechAidexCommandBuilder(keyMaterial: material)
+        let firstContinuationWrite = FakeMicroTechPeripheralSession.Call.write(
+            try builder.cmd23(index: 61).microTechHexadecimalString,
+            MicroTechAidexProfile.f002UUID.uuidString
+        )
+        var deadline = Date(timeIntervalSinceNow: 1)
+        while Date() < deadline, !firstPeripheral.calls.contains(firstContinuationWrite) {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        XCTAssertTrue(firstPeripheral.calls.contains(firstContinuationWrite))
         let preservedLastReadingDate = manager.state.lastReadingDate
         first.isScanning = false
         first.isConnected = false
-        manager.microTechSensorDidDisconnect(connectedSensor)
+        manager.microTechSensorDidDisconnect(firstSensor)
 
         XCTAssertEqual(scheduled.count, 2)
         scheduled[1].1()
+        XCTAssertNil(manager.pendingHistoryRequestForTesting)
         first.completeShutdown()
 
         XCTAssertEqual(manager.state.deviceName, state.deviceName)
@@ -4279,6 +4434,52 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertEqual(manager.state.lastReadingDate, preservedLastReadingDate)
         XCTAssertEqual(manager.emittedHistorySamplesForTesting, Set([60]))
         XCTAssertNil(manager.pendingHistoryRequestForTesting)
+
+        let secondSession = makeSession(remoteIdentifier: UUID())
+        let secondPeripheral = FakeMicroTechPeripheralSession(
+            deviceIdentifier: secondSession.remoteIdentifier,
+            deviceName: secondSession.deviceName,
+            f002Challenge: try encryptedChallenge(for: material)
+        )
+        let secondSensor = MicroTechSensor(
+            session: secondSession,
+            peripheralSession: secondPeripheral,
+            pairingKeyTimeout: 0
+        )
+        secondSensor.delegate = manager
+        try secondSensor.start()
+        manager.microTechSensor(
+            secondSensor,
+            didRead: makeReading(
+                sampleNumber: 71,
+                glucoseMgdl: 125,
+                receivedAt: Date(timeIntervalSince1970: 1_700_000_120)
+            )
+        )
+        let rebuiltHistoryWrite = FakeMicroTechPeripheralSession.Call.write(
+            try builder.cmd23(index: 61).microTechHexadecimalString,
+            MicroTechAidexProfile.f002UUID.uuidString
+        )
+        deadline = Date(timeIntervalSinceNow: 1)
+        while Date() < deadline, !secondPeripheral.calls.contains(rebuiltHistoryWrite) {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        XCTAssertTrue(secondPeripheral.calls.contains(rebuiltHistoryWrite))
+        XCTAssertEqual(manager.pendingHistoryRequestForTesting, 61)
+        manager.microTechSensor(
+            secondSensor,
+            didReadHistory: MicroTechAidexHistoryPacket(
+                rawBytes: Data([0x23]),
+                startTimeOffset: 60,
+                records: [MicroTechAidexHistoryRecord(timeOffset: 60, glucose: 120, rawValue: 120)]
+            )
+        )
+
+        wait(for: [delegate.readingResultsExpectation], timeout: 1)
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers, ["ABC123-70", "ABC123-60", "ABC123-71"])
+        XCTAssertEqual(delegate.newDataSampleSyncIdentifiers.filter { $0 == "ABC123-60" }.count, 1)
+        XCTAssertEqual(delegate.noDataCount, 1)
+        XCTAssertEqual(manager.emittedHistorySamplesForTesting, Set([60]))
     }
 
     func testUserRepeatedScanAndConnectionAttemptsDoNotExtendRecoveryDeadline() {
@@ -4330,14 +4531,22 @@ final class MicroTechCGMManagerTests: XCTestCase {
             reconnectRecoveryScheduler: { scheduled.append(($0, $1)) }
         )
         XCTAssertTrue(manager.scanForSensor())
-        guard let sensor = first.delegate as? MicroTechSensor else {
+        guard let oldSensor = first.delegate as? MicroTechSensor else {
             return XCTFail("Expected saved sensor delegate")
         }
-        manager.microTechSensorDidConnect(sensor, session: makeSession())
         scheduled[0].1()
+        XCTAssertEqual(first.shutdownCallCount, 1)
+        XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "shuttingDown")
 
-        XCTAssertEqual(first.shutdownCallCount, 0)
+        let newSensor = makeSensor(session: makeSession(remoteIdentifier: UUID()))
+        manager.microTechSensorDidConnect(newSensor, session: makeSession(remoteIdentifier: UUID()))
+        XCTAssertTrue(manager.state.hasConnectedSensorSession)
+        XCTAssertEqual(manager.reconnectRecoveryPhaseForTesting, "idle")
+        XCTAssertFalse((oldSensor as AnyObject) === (newSensor as AnyObject))
+        first.completeShutdown()
+
         XCTAssertEqual(factoryCalls, 1)
+        XCTAssertTrue(second.activatedRemoteIdentifiers.isEmpty)
     }
 
     func testDeleteBetweenReplacementCreationAndActivationTerminatesReplacement() {
@@ -4347,7 +4556,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
     }
 
     func testModeChangeBetweenReplacementCreationAndActivationTerminatesReplacement() {
-        assertReplacementActivationCancelled { manager in
+        assertReplacementActivationCancelled(activationBeforeAction: true) { manager in
             XCTAssertTrue(manager.configureConnectionMode(.broadcast))
         }
     }
@@ -4381,6 +4590,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
     }
 
     private func assertReplacementActivationCancelled(
+        activationBeforeAction: Bool = false,
         action: (MicroTechCGMManager) -> Void,
         file: StaticString = #filePath,
         line: UInt = #line
@@ -4398,9 +4608,18 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertTrue(manager.scanForSensor(), file: file, line: line)
         scheduled[0].1()
         first.completeShutdown()
-        action(manager)
-        second.runDeferredActivations()
+        if activationBeforeAction {
+            second.runDeferredActivations()
+            XCTAssertTrue(second.isScanning, file: file, line: line)
+            action(manager)
+        } else {
+            action(manager)
+            second.runDeferredActivations()
+        }
 
+        XCTAssertNil(first.delegate, file: file, line: line)
+        XCTAssertNil(first.logHandler, file: file, line: line)
+        XCTAssertFalse(first.isScanning, file: file, line: line)
         XCTAssertNil(second.delegate, file: file, line: line)
         XCTAssertNil(second.logHandler, file: file, line: line)
         XCTAssertFalse(second.isScanning, file: file, line: line)
