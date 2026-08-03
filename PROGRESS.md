@@ -26,8 +26,8 @@
   4. 明确旧蓝牙管理器关闭契约、旧管理器和旧传感器回调隔离、传感器配置与历史状态保留边界，以及可检索日志和测试标准。
 - **验证结果**：设计经过三轮独立审查后通过；未修改代码的 `MicroTechCGMTests` 基线 193 项通过、0 失败；完整 `LoopWorkspace` 基线构建在本机因缺少未纳入仓库的 `LibreTransmitter/LibreTransmitter/NotificationHelperOverride.swift` 被阻断，未写成通过；`git diff --check` 通过。
 - **决策结论**：从重连开始只计一个 60 秒周期，只有完成 LinX 握手才算成功；到期仍未成功时，先完成旧蓝牙管理器内部关闭，再创建新管理器按原传感器序列号继续扫描。
-- **commit hash**：`fec0581`。
-- **push 状态**：待推送到 `origin/main`。
+- **commit hash**：`dff1360`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-07-31 042 - 修改 LinX 添加流程固定直连
 
