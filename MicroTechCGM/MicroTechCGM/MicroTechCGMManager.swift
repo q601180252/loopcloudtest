@@ -270,7 +270,6 @@ public final class MicroTechCGMManager: CGMManager {
             if mode == .broadcast {
                 protectedState.sensorIdentity.retireActiveSensor()
                 protectedState.sensorIdentity.activeSensor = nil
-                protectedState.sensorIdentity.activeIdentifier = nil
                 protectedState.sensorIdentity.activeSensorConnectedAt = nil
                 protectedState.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
             }
@@ -313,14 +312,14 @@ public final class MicroTechCGMManager: CGMManager {
 
     @discardableResult
     public func scanForSensor() -> Bool {
-        scanForSensor(clearingConnectionError: true, expectedManager: nil, expectedSensorIdentifier: nil)
+        scanForSensor(clearingConnectionError: true, expectedManager: nil, expectedSensor: nil)
     }
 
     @discardableResult
     private func scanForSensor(
         clearingConnectionError: Bool,
         expectedManager: MicroTechBluetoothManaging? = nil,
-        expectedSensorIdentifier: ObjectIdentifier? = nil
+        expectedSensor: MicroTechSensor? = nil
     ) -> Bool {
         var generation: MicroTechBluetoothManagerGeneration?
         var scanDelegate: MicroTechBluetoothManagerDelegate?
@@ -335,8 +334,8 @@ public final class MicroTechCGMManager: CGMManager {
                 scanLogMessage = "MicroTech LinX scan ignored for retired Bluetooth manager"
                 return
             }
-            if let expectedSensorIdentifier,
-               protectedState.sensorIdentity.activeIdentifier != expectedSensorIdentifier
+            if let expectedSensor,
+               !isCurrentSensor(expectedSensor, in: protectedState.sensorIdentity)
             {
                 scanLogMessage = "MicroTech LinX scan ignored for retired sensor"
                 return
@@ -380,7 +379,6 @@ public final class MicroTechCGMManager: CGMManager {
                     sensor.delegate = self
                     scanDelegate = sensor
                     protectedState.sensorIdentity.activeSensor = sensor
-                    protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
                     scanLogMessage = "MicroTech LinX scan using saved sensor serial \(sensorSerial)"
                 } else {
                     scanDelegate = self
@@ -403,7 +401,7 @@ public final class MicroTechCGMManager: CGMManager {
         startReconnectRecoveryIfNeeded(
             reason: clearingConnectionError ? "user scan" : "scan",
             expectedManager: expectedManager,
-            expectedSensorIdentifier: expectedSensorIdentifier
+            expectedSensor: expectedSensor
         )
         guard isCurrentBluetoothManager(generation.manager, generationID: generation.id) else {
             return false
@@ -449,7 +447,6 @@ public final class MicroTechCGMManager: CGMManager {
             bluetoothManagerToDisconnect = protectedState.bluetoothManager?.manager
             protectedState.sensorIdentity.retireActiveSensor()
             protectedState.sensorIdentity.activeSensor = nil
-            protectedState.sensorIdentity.activeIdentifier = nil
             protectedState.sensorIdentity.isDeleted = true
             protectedState.bluetoothManager = nil
             protectedState.reconnectRecoveryState = .idle
@@ -619,7 +616,6 @@ public final class MicroTechCGMManager: CGMManager {
             )
 
             state.sensorIdentity.activeSensor = nil
-            state.sensorIdentity.activeIdentifier = nil
             state.sensorIdentity.activeSensorConnectedAt = nil
             state.sensorIdentity.consecutiveSensorErrorCount = 0
             state.sensorIdentity.savedIdentifierFailureCount = 0
@@ -790,7 +786,7 @@ public final class MicroTechCGMManager: CGMManager {
                 self?.scanForSensor(
                     clearingConnectionError: false,
                     expectedManager: expectedManager,
-                    expectedSensorIdentifier: expectedSensor.map(ObjectIdentifier.init)
+                    expectedSensor: expectedSensor
                 )
             }
         } else if shouldRetrySavedSensorScan {
@@ -799,7 +795,7 @@ public final class MicroTechCGMManager: CGMManager {
                 self?.scanForSensor(
                     clearingConnectionError: false,
                     expectedManager: expectedManager,
-                    expectedSensorIdentifier: expectedSensor.map(ObjectIdentifier.init)
+                    expectedSensor: expectedSensor
                 )
             }
         }
@@ -865,7 +861,7 @@ public final class MicroTechCGMManager: CGMManager {
     private func startReconnectRecoveryIfNeeded(
         reason: String,
         expectedManager: MicroTechBluetoothManaging? = nil,
-        expectedSensorIdentifier: ObjectIdentifier? = nil
+        expectedSensor: MicroTechSensor? = nil
     ) {
         var identifier: UUID?
         _ = mutateProtectedState { state in
@@ -874,8 +870,8 @@ public final class MicroTechCGMManager: CGMManager {
             {
                 return
             }
-            if let expectedSensorIdentifier,
-               state.sensorIdentity.activeIdentifier != expectedSensorIdentifier
+            if let expectedSensor,
+               !isCurrentSensor(expectedSensor, in: state.sensorIdentity)
             {
                 return
             }
@@ -996,7 +992,6 @@ public final class MicroTechCGMManager: CGMManager {
             state.reconnectRecoveryState = .timing(id: nextRecoveryIdentifier)
             state.sensorIdentity.restore(sensor)
             state.sensorIdentity.activeSensor = sensor
-            state.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
             replacement = generation
             replacementRecoveryIdentifier = nextRecoveryIdentifier
         }
@@ -1070,7 +1065,6 @@ public final class MicroTechCGMManager: CGMManager {
         let sensor = state.activeSensor
         state.retireActiveSensor()
         state.activeSensor = nil
-        state.activeIdentifier = nil
         state.activeSensorConnectedAt = nil
         state.staleConnectionWatchdogIdentifier = UUID()
         return sensor
@@ -1117,9 +1111,21 @@ public final class MicroTechCGMManager: CGMManager {
         readProtectedState { $0.sensorIdentity.historyBackfillRequestedFrom }
     }
 
+    func registerSensorForTesting(_ sensor: MicroTechSensor) {
+        _ = mutateProtectedState { state in
+            guard !state.sensorIdentity.isDeleted,
+                  state.sensorIdentity.activeSensor !== sensor
+            else {
+                return
+            }
+            state.sensorIdentity.retireActiveSensor()
+            state.sensorIdentity.restore(sensor)
+            state.sensorIdentity.activeSensor = sensor
+        }
+    }
+
     private func isCurrentSensor(_ sensor: MicroTechSensor, in state: MicroTechSensorIdentityState) -> Bool {
-        let identifier = ObjectIdentifier(sensor)
-        return !state.isDeleted && state.activeIdentifier == identifier && !state.isRetired(sensor)
+        !state.isDeleted && state.activeSensor === sensor && !state.isRetired(sensor)
     }
 
     private func acceptSensorConnection(
@@ -1127,15 +1133,11 @@ public final class MicroTechCGMManager: CGMManager {
         session: MicroTechAidexSession,
         in state: inout MicroTechCGMManagerProtectedState
     ) -> Bool {
-        let identifier = ObjectIdentifier(sensor)
         guard !state.sensorIdentity.isDeleted,
+              state.sensorIdentity.activeSensor === sensor,
               !state.sensorIdentity.isRetired(sensor)
         else {
             return false
-        }
-
-        if let activeIdentifier = state.sensorIdentity.activeIdentifier, activeIdentifier != identifier {
-            state.sensorIdentity.retireActiveSensor()
         }
 
         if let sensorSerial = state.state.sensorSerial, sensorSerial != session.sensorSerial {
@@ -1149,7 +1151,6 @@ public final class MicroTechCGMManager: CGMManager {
         }
 
         state.sensorIdentity.activeSensor = sensor
-        state.sensorIdentity.activeIdentifier = identifier
         state.sensorIdentity.activeSensorConnectedAt = dateProvider()
         state.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
         state.sensorIdentity.consecutiveSensorErrorCount = 0
@@ -1214,7 +1215,7 @@ public final class MicroTechCGMManager: CGMManager {
     private func resumeSavedSensorScanIfNeeded(
         reason: String,
         expectedManager: MicroTechBluetoothManaging? = nil,
-        expectedSensorIdentifier: ObjectIdentifier? = nil
+        expectedSensor: MicroTechSensor? = nil
     ) {
         let resumeContext = readProtectedState { state -> (accepted: Bool, generation: MicroTechBluetoothManagerGeneration?) in
             if let expectedManager,
@@ -1222,8 +1223,8 @@ public final class MicroTechCGMManager: CGMManager {
             {
                 return (false, nil)
             }
-            if let expectedSensorIdentifier,
-               state.sensorIdentity.activeIdentifier != expectedSensorIdentifier
+            if let expectedSensor,
+               !isCurrentSensor(expectedSensor, in: state.sensorIdentity)
             {
                 return (false, nil)
             }
@@ -1250,26 +1251,26 @@ public final class MicroTechCGMManager: CGMManager {
         startReconnectRecoveryIfNeeded(
             reason: reason,
             expectedManager: expectedManager,
-            expectedSensorIdentifier: expectedSensorIdentifier
+            expectedSensor: expectedSensor
         )
         logDeviceCommunication("MicroTech LinX resume scan after \(reason)", type: .connection)
         scanForSensor(
             clearingConnectionError: false,
             expectedManager: expectedManager,
-            expectedSensorIdentifier: expectedSensorIdentifier
+            expectedSensor: expectedSensor
         )
     }
 
     private func scheduleResumeSavedSensorScanIfNeeded(
         reason: String,
         expectedManager: MicroTechBluetoothManaging? = nil,
-        expectedSensorIdentifier: ObjectIdentifier? = nil
+        expectedSensor: MicroTechSensor? = nil
     ) {
         bluetoothRetryScheduler { [weak self] in
             self?.resumeSavedSensorScanIfNeeded(
                 reason: reason,
                 expectedManager: expectedManager,
-                expectedSensorIdentifier: expectedSensorIdentifier
+                expectedSensor: expectedSensor
             )
         }
     }
@@ -1735,7 +1736,6 @@ public final class MicroTechCGMManager: CGMManager {
             shouldStartSensor = true
             protectedState.sensorIdentity.restore(sensor)
             protectedState.sensorIdentity.activeSensor = sensor
-            protectedState.sensorIdentity.activeIdentifier = ObjectIdentifier(sensor)
             protectedState.sensorIdentity.activeSensorConnectedAt = nil
             protectedState.sensorIdentity.staleConnectionWatchdogIdentifier = UUID()
             protectedState.sensorIdentity.consecutiveSensorErrorCount = 0
@@ -1968,7 +1968,6 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         callbackProcessingBarrier()
         var shouldNotify = false
         var recoveryIdentifier: UUID?
-        let sensorIdentifier = ObjectIdentifier(sensor)
         lockedManagerState.mutate { state in
             shouldNotify = isCurrentSensor(sensor, in: state.sensorIdentity)
             guard shouldNotify else {
@@ -1992,7 +1991,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         }
         scheduleResumeSavedSensorScanIfNeeded(
             reason: "sensor disconnect",
-            expectedSensorIdentifier: sensorIdentifier
+            expectedSensor: sensor
         )
     }
 
@@ -2255,7 +2254,6 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
         var bluetoothManager: MicroTechBluetoothManaging?
         var consecutiveErrorCount = 0
         var recoveryIdentifier: UUID?
-        let sensorIdentifier = ObjectIdentifier(sensor)
         let stateChange = mutateProtectedState { state in
             guard isCurrentSensor(sensor, in: state.sensorIdentity) else {
                 return
@@ -2294,7 +2292,7 @@ extension MicroTechCGMManager: MicroTechSensorDelegate {
             bluetoothManager.disconnect()
             scheduleResumeSavedSensorScanIfNeeded(
                 reason: "\(consecutiveErrorCount) consecutive sensor errors",
-                expectedSensorIdentifier: sensorIdentifier
+                expectedSensor: sensor
             )
         }
         notifyDelegateOfReadingResult(.error(error))
@@ -2386,8 +2384,6 @@ private extension MicroTechReconnectRecoveryState {
 
 private struct MicroTechSensorIdentityState {
     var activeSensor: MicroTechSensor?
-    var activeIdentifier: ObjectIdentifier?
-    var retiredIdentifiers: Set<ObjectIdentifier> = []
     let retiredSensors = NSHashTable<MicroTechSensor>(options: [.weakMemory, .objectPointerPersonality])
     var emittedHistorySampleNumbers: Set<Int> = []
     var historyBackfillRequestedFrom: Int?
@@ -2400,26 +2396,23 @@ private struct MicroTechSensorIdentityState {
     var isDeleted = false
 
     func isRetired(_ sensor: MicroTechSensor) -> Bool {
-        retiredIdentifiers.contains(ObjectIdentifier(sensor)) && retiredSensors.contains(sensor)
+        retiredSensors.contains(sensor)
     }
 
     mutating func retireActiveSensor() {
         guard let activeSensor else {
             return
         }
-        retiredIdentifiers.insert(ObjectIdentifier(activeSensor))
         retiredSensors.add(activeSensor)
     }
 
     mutating func restore(_ sensor: MicroTechSensor) {
-        retiredIdentifiers.remove(ObjectIdentifier(sensor))
         retiredSensors.remove(sensor)
     }
 
     mutating func resetForSensorChange() {
         retireActiveSensor()
         activeSensor = nil
-        activeIdentifier = nil
         emittedHistorySampleNumbers.removeAll()
         clearPendingHistoryRequest()
         activeSensorConnectedAt = nil
