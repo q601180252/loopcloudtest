@@ -349,7 +349,8 @@ public final class MicroTechBluetoothManager: NSObject {
         initialConnectionMode: MicroTechCGMConnectionMode,
         centralManagerOptions: [String: Any]?,
         connectionTimeouts: MicroTechConnectionTimeoutControlling? = nil,
-        configurationTimeouts: MicroTechConnectionTimeoutControlling? = nil
+        configurationTimeouts: MicroTechConnectionTimeoutControlling? = nil,
+        observesCentralManagerState: Bool = true
     ) {
         let managerQueue = DispatchQueue(label: "com.loopkit.MicroTechCGM.bluetoothManager")
         self.managerQueue = managerQueue
@@ -367,7 +368,7 @@ public final class MicroTechBluetoothManager: NSObject {
         managerQueue.setSpecific(key: managerQueueSpecificKey, value: true)
         managerQueue.sync {
             centralManager = CBCentralManager(
-                delegate: self,
+                delegate: observesCentralManagerState ? self : nil,
                 queue: managerQueue,
                 options: centralManagerOptions
             )
@@ -390,6 +391,12 @@ public final class MicroTechBluetoothManager: NSObject {
 
     func flushLogsForTesting() {
         bluetoothLogQueue.flush()
+    }
+
+    func hasDelegateForTesting(_ expectedDelegate: MicroTechBluetoothManagerDelegate) -> Bool {
+        syncOnManagerQueue {
+            delegate === expectedDelegate
+        }
     }
 
     func whenCentralStateObservedForTesting(_ observer: @escaping () -> Void) {

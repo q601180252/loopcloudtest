@@ -3245,11 +3245,23 @@ final class MicroTechCGMManagerTests: XCTestCase {
         manager.cgmManagerDelegate = delegate
         let session = makeSession()
         let material = MicroTechAidexKeyMaterial.derive(serial: session.sensorSerial)
+        let builder = MicroTechAidexCommandBuilder(keyMaterial: material)
+        let firstHistoryCommand = try builder.cmd23(index: 60).microTechHexadecimalString
+        let nextHistoryCommand = try builder.cmd23(index: 63).microTechHexadecimalString
+        let continuationWrite = expectation(description: "history continuation write")
         let peripheralSession = FakeMicroTechPeripheralSession(
             deviceIdentifier: session.remoteIdentifier,
             deviceName: session.deviceName,
             f002Challenge: try encryptedChallenge(for: material)
         )
+        peripheralSession.onWrite = { value, characteristic in
+            guard characteristic == MicroTechAidexProfile.f002UUID,
+                  value.microTechHexadecimalString == nextHistoryCommand
+            else {
+                return
+            }
+            continuationWrite.fulfill()
+        }
         let sensor = MicroTechSensor(session: session, peripheralSession: peripheralSession, pairingKeyTimeout: 0)
         sensor.delegate = manager
         manager.registerSensorForTesting(sensor)
@@ -3276,10 +3288,7 @@ final class MicroTechCGMManagerTests: XCTestCase {
             )
         )
 
-        wait(for: [delegate.readingResultsExpectation], timeout: 1)
-        let builder = MicroTechAidexCommandBuilder(keyMaterial: material)
-        let firstHistoryCommand = try builder.cmd23(index: 60).microTechHexadecimalString
-        let nextHistoryCommand = try builder.cmd23(index: 63).microTechHexadecimalString
+        wait(for: [delegate.readingResultsExpectation, continuationWrite], timeout: 1)
         XCTAssertTrue(peripheralSession.calls.contains(.write(firstHistoryCommand, MicroTechAidexProfile.f002UUID.uuidString)))
         XCTAssertTrue(peripheralSession.calls.contains(.write(nextHistoryCommand, MicroTechAidexProfile.f002UUID.uuidString)))
         XCTAssertTrue(delegate.loggedEvents.contains { event in
@@ -4172,61 +4181,8 @@ final class MicroTechCGMManagerTests: XCTestCase {
     }
 
     func testRealBluetoothManagerRepeatedDirectActivationDoesNotReenterScanWhenConnectedOrScanning() {
-        for hasConnectedPeripheral in [false, true] {
-            let bluetoothManager = MicroTechBluetoothManager(
-                initialConnectionMode: .direct,
-                centralManagerOptions: nil
-            )
-            let firstDelegate = ShutdownBluetoothManagerDelegate()
-            let replacementDelegate = ShutdownBluetoothManagerDelegate()
-            var firstLogHandlerCalled = false
-            var replacementLogHandlerCalled = false
-            let centralStateObserved = expectation(description: "central state observed")
-            bluetoothManager.whenCentralStateObservedForTesting {
-                centralStateObserved.fulfill()
-            }
-            wait(for: [centralStateObserved], timeout: 1)
-            let peripheral = FakeManagedMicroTechPeripheralManager(
-                deviceIdentifier: UUID(),
-                deviceName: "LinX-ABC123",
-                isConnected: hasConnectedPeripheral
-            )
-            bluetoothManager.injectStateForTesting(
-                activePeripheralManager: hasConnectedPeripheral ? peripheral : nil,
-                managedPeripherals: hasConnectedPeripheral ? [peripheral] : [],
-                restoredPeripherals: [],
-                configuringPeripheralIDs: [],
-                hasScanTimeout: !hasConnectedPeripheral
-            )
-            let before = bluetoothManager.stateSnapshotForTesting()
-
-            bluetoothManager.activateDirectScan(
-                delegate: firstDelegate,
-                logHandler: { _, _ in firstLogHandlerCalled = true },
-                remoteIdentifier: UUID()
-            )
-            _ = bluetoothManager.stateSnapshotForTesting()
-            bluetoothManager.flushLogsForTesting()
-            firstLogHandlerCalled = false
-            bluetoothManager.activateDirectScan(
-                delegate: replacementDelegate,
-                logHandler: { _, _ in replacementLogHandlerCalled = true },
-                remoteIdentifier: UUID()
-            )
-            let after = bluetoothManager.stateSnapshotForTesting()
-            bluetoothManager.flushLogsForTesting()
-            bluetoothManager.logHandler?("binding check", .connection)
-
-            XCTAssertEqual(after.scanIfReadyCallCount, before.scanIfReadyCallCount)
-            XCTAssertTrue((bluetoothManager.delegate as AnyObject?) === replacementDelegate)
-            XCTAssertFalse(firstLogHandlerCalled)
-            XCTAssertTrue(replacementLogHandlerCalled)
-            XCTAssertEqual(after.hasScanTimeout, before.hasScanTimeout)
-
-            let shutdownCompleted = expectation(description: "real manager shutdown")
-            bluetoothManager.shutdown { shutdownCompleted.fulfill() }
-            wait(for: [shutdownCompleted], timeout: 1)
-        }
+        assertRealBluetoothManagerRepeatedDirectActivation(hasConnectedPeripheral: false)
+        assertRealBluetoothManagerRepeatedDirectActivation(hasConnectedPeripheral: true)
     }
 
     func testOrdinaryDirectScanCannotRebindCallbacksAfterShutdownStarts() {
@@ -5046,6 +5002,63 @@ final class MicroTechCGMManagerTests: XCTestCase {
         XCTAssertNil(second.logHandler, file: file, line: line)
         XCTAssertFalse(second.isScanning, file: file, line: line)
         XCTAssertEqual(second.shutdownCallCount, 1, file: file, line: line)
+    }
+
+    private func assertRealBluetoothManagerRepeatedDirectActivation(
+        hasConnectedPeripheral: Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let bluetoothManager = MicroTechBluetoothManager(
+            initialConnectionMode: .direct,
+            centralManagerOptions: nil,
+            observesCentralManagerState: false
+        )
+        let firstDelegate = ShutdownBluetoothManagerDelegate()
+        let replacementDelegate = ShutdownBluetoothManagerDelegate()
+        let firstLogHandler = ThreadSafeInvocationCount()
+        let replacementLogHandler = ThreadSafeInvocationCount()
+        let peripheral = FakeManagedMicroTechPeripheralManager(
+            deviceIdentifier: UUID(),
+            deviceName: "LinX-ABC123",
+            isConnected: hasConnectedPeripheral
+        )
+        bluetoothManager.injectStateForTesting(
+            activePeripheralManager: hasConnectedPeripheral ? peripheral : nil,
+            managedPeripherals: hasConnectedPeripheral ? [peripheral] : [],
+            restoredPeripherals: [],
+            configuringPeripheralIDs: [],
+            hasScanTimeout: !hasConnectedPeripheral
+        )
+        let before = bluetoothManager.stateSnapshotForTesting()
+
+        bluetoothManager.activateDirectScan(
+            delegate: firstDelegate,
+            logHandler: { _, _ in firstLogHandler.record() },
+            remoteIdentifier: UUID()
+        )
+        _ = bluetoothManager.stateSnapshotForTesting()
+        bluetoothManager.flushLogsForTesting()
+        let firstHandlerCountBeforeRebinding = firstLogHandler.value
+
+        bluetoothManager.activateDirectScan(
+            delegate: replacementDelegate,
+            logHandler: { _, _ in replacementLogHandler.record() },
+            remoteIdentifier: UUID()
+        )
+        let after = bluetoothManager.stateSnapshotForTesting()
+        bluetoothManager.flushLogsForTesting()
+        bluetoothManager.logHandler?("binding check", .connection)
+
+        XCTAssertEqual(after.scanIfReadyCallCount, before.scanIfReadyCallCount, file: file, line: line)
+        XCTAssertTrue(bluetoothManager.hasDelegateForTesting(replacementDelegate), file: file, line: line)
+        XCTAssertEqual(firstLogHandler.value, firstHandlerCountBeforeRebinding, file: file, line: line)
+        XCTAssertGreaterThan(replacementLogHandler.value, 0, file: file, line: line)
+        XCTAssertEqual(after.hasScanTimeout, before.hasScanTimeout, file: file, line: line)
+
+        let shutdownCompleted = expectation(description: "real manager shutdown")
+        bluetoothManager.shutdown { shutdownCompleted.fulfill() }
+        wait(for: [shutdownCompleted], timeout: 1)
     }
 
     private func assertQueuedDiscoveredSensorStartIsRejected(
@@ -5934,6 +5947,23 @@ private final class ThreadSafeMessages {
         lock.lock()
         defer { lock.unlock() }
         messages.append(message)
+    }
+}
+
+private final class ThreadSafeInvocationCount {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+
+    func record() {
+        lock.lock()
+        count += 1
+        lock.unlock()
     }
 }
 
