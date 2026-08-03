@@ -593,11 +593,11 @@ git commit -m "文档 记录 LinX 重连验证结果" -m "改动原因：同步 
 
 在用户允许且 iPhone 与 LinX 可用时，用完整 `LoopWorkspace` Debug 包安装并启动，确认正常握手后持续收到数据包的 5 分钟内不会误触发重建。若检查失败，先修复、重新执行目标测试、全量测试和完整 build，再进入最终审查。若硬件不可用，明确记录该项待验证；无法稳定制造 `peripheralDisconnecting` 卡死时，只把真实 60 秒重建标为待复验，不得声称真机卡死已验证。
 
-- [ ] **Step 8: 独立最终审查**
+- [x] **Step 8: 独立最终审查**
 
 使用 fresh reviewer 逐条对照设计文档的 26 项验证标准，先做 spec compliance review，再做 code quality review。任何问题由原实现任务修复并重新运行相关测试，直到两轮均批准。
 
-- [ ] **Step 9: 提交审查修复并重新完成回归**
+- [x] **Step 9: 提交审查修复并重新完成回归**
 
 每轮审查修复后必须：运行对应目标测试、重新运行 `MicroTechCGMTests` 全量、按 Step 2 重新运行完整 build、更新 `PROGRESS.md` 的实际结果，并用符合 AGENTS.md 的中文 commit 提交。两轮审查批准后执行：
 
