@@ -11,10 +11,23 @@
 - 当前 LinX 接入复验结果：`MicroTechCGM` 单元测试 193 个通过；首次添加、扫描、连接、恢复、GATT、握手、完整密钥和完整数据包已写入同一设备日志并可随 Loop Report 导出；最新完整 App 已安装到 iPhone XR 并启动，20 秒后进程仍存在；LinX 已从 `disconnecting -> timeout` 循环恢复，最终包安装后 11:20 到 11:26 连续写入当前血糖，状态文件显示最新 sample=888、84 mg/dL、时间 2026-06-18 11:27:44+08:00；最终包安装后连接超时为 0；0x04 状态包已降级为 receive 日志，不再作为错误。
 - 当前 MicroTech LinX 新添加流程固定使用直接连接；添加页不再显示 `直接连接 / 广播数据` 选择，点击搜索后只进入原有蓝牙直连流程。
 - LinX 底层广播解析、状态兼容、诊断日志和测试仍保留，用于历史排障，但新添加页已没有广播入口。
-- 当前已确认 LinX 重连采用单一 60 秒恢复周期：已完成过握手的直连 LinX 在 60 秒内未再次完成握手时，按顺序关闭旧蓝牙管理器、保留传感器配置、清除旧蓝牙标识并创建新管理器继续扫描；连接成功后连续 5 分钟没有收到任意 LinX 数据包时主动断开重连；设计已确认，代码实现待完成。
+- 当前已确认 LinX 重连采用单一 60 秒恢复周期：已完成过握手的直连 LinX 在 60 秒内未再次完成握手时，按顺序关闭旧蓝牙管理器、保留传感器配置、清除旧蓝牙标识并创建新管理器继续扫描；连接成功后连续 5 分钟没有收到任意 LinX 数据包时主动断开重连；设计和实施计划已通过审查，代码实现待完成。
 - 最新 TestFlight 上传包 `Loop 3.9.1 (66)` 已完成 App Store Connect 处理并分发给内部测试人员，Actions run `30621494193` 显示 `Successfully finished processing the build 3.9.1 - 66 for IOS`；发布源提交为 `7ee9b15`，IPA 内包含 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM`，签名与 watchOS `11.6` 兼容检查通过，`Loop.app` 最低 iOS 为 `15.1`。
 
 ## 进展日志
+
+### 2026-08-03 045 - 编写 LinX 数据包静默重连实施计划
+
+- **任务**：把已确认的 LinX 5 分钟数据包静默检查和 60 秒蓝牙重建整理为可直接执行的实施计划。
+- **核心交付**：
+  1. 新增 `docs/superpowers/plans/2026-08-03-linx-packet-silence-reconnect.md`，分为蓝牙管理器关闭与 60 秒恢复、原始通知与 5 分钟检查、完整回归与交付三个部分。
+  2. 明确旧蓝牙管理器永久关闭、manager generation、关闭完成后的原子激活、删除和模式切换竞态、旧 manager/sensor 回调隔离及无状态锁交叉等待要求。
+  3. 明确 F001、F002、F003 在解密和解析前上报活动；只有实时血糖更新 `lastReadingDate`，有效历史数据仍可输出但不能覆盖最后实时血糖时间。
+  4. 每项代码改动均要求先运行整组新增失败测试，再实现并运行同组通过测试；最终执行 LinX 全量测试、完整 workspace 构建、独立审查和推送前真机安全检查。
+- **验证结果**：实施前 `MicroTechCGMTests` 基线 193 项通过、0 失败；完整 `LoopWorkspace` 基线被仓库已忽略的本地 `LibreTransmitter/LibreTransmitter/NotificationHelperOverride.swift` 缺失阻断，计划已加入临时生成默认文件、确认不被 Git 跟踪并在构建后删除的步骤；计划经过三轮独立审查后通过；`git diff --check` 通过。
+- **决策结论**：5 分钟检查使用独立数据包时间；60 秒超时先永久关闭旧 manager，再创建带新代次的 manager；生产代码实现和真机验证待执行。
+- **commit hash**：`6909c9e`。
+- **push 状态**：已推送到 `origin/main`。
 
 ### 2026-08-03 044 - 补充 LinX 5 分钟数据包静默检查设计
 
