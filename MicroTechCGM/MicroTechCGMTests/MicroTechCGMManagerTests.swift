@@ -3470,6 +3470,94 @@ final class MicroTechCGMManagerTests: XCTestCase {
         wait(for: [fired, cancelled], timeout: 0.2)
     }
 
+    func testBluetoothManagerShutdownCompletionIsExplicit() {
+        let bluetoothManager = FakeMicroTechBluetoothManager()
+        var didComplete = false
+
+        bluetoothManager.shutdown {
+            didComplete = true
+        }
+
+        XCTAssertEqual(bluetoothManager.shutdownCallCount, 1)
+        XCTAssertFalse(didComplete)
+
+        bluetoothManager.completeShutdown()
+
+        XCTAssertTrue(didComplete)
+    }
+
+    func testRealBluetoothManagerShutdownClearsCallbacksBeforeCompletion() {
+        let bluetoothManager = MicroTechBluetoothManager(
+            initialConnectionMode: .direct,
+            centralManagerOptions: nil
+        )
+        let delegate = ShutdownBluetoothManagerDelegate()
+        let remoteIdentifier = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+        let shutdownCompleted = expectation(description: "Bluetooth manager shutdown completed")
+        bluetoothManager.delegate = delegate
+        bluetoothManager.logHandler = { _, _ in }
+        bluetoothManager.scan(remoteIdentifier: remoteIdentifier)
+
+        bluetoothManager.shutdown {
+            XCTAssertNil(bluetoothManager.delegate)
+            XCTAssertNil(bluetoothManager.logHandler)
+            XCTAssertNil(bluetoothManager.activeRemoteIdentifier)
+            XCTAssertFalse(bluetoothManager.isScanning)
+            XCTAssertFalse(bluetoothManager.isConnected)
+            shutdownCompleted.fulfill()
+        }
+
+        wait(for: [shutdownCompleted], timeout: 1)
+    }
+
+    func testConnectionTimeoutControllerCancelAllInvalidatesScheduledHandlers() {
+        let queue = DispatchQueue(label: "MicroTechCGMManagerTests.connectionTimeout.cancelAll")
+        let controller = MicroTechConnectionTimeoutController(timeout: 0.01, queue: queue)
+        let timeoutFired = expectation(description: "cancelled timeouts did not fire")
+        timeoutFired.isInverted = true
+
+        controller.schedule(identifier: UUID()) { _ in
+            timeoutFired.fulfill()
+        }
+        controller.schedule(identifier: UUID()) { _ in
+            timeoutFired.fulfill()
+        }
+
+        controller.cancelAll()
+
+        wait(for: [timeoutFired], timeout: 0.1)
+    }
+
+    func testShutdownManagerIgnoresLateCallbacksAndCannotRestartScanning() {
+        let bluetoothManager = MicroTechBluetoothManager(
+            initialConnectionMode: .direct,
+            centralManagerOptions: nil
+        )
+        let initialShutdownCompleted = expectation(description: "initial shutdown completed")
+        bluetoothManager.shutdown {
+            initialShutdownCompleted.fulfill()
+        }
+        wait(for: [initialShutdownCompleted], timeout: 1)
+
+        let lateCentralManager = CBCentralManager(delegate: nil, queue: nil)
+        bluetoothManager.centralManagerDidUpdateState(lateCentralManager)
+        bluetoothManager.centralManager(lateCentralManager, willRestoreState: [:])
+        bluetoothManager.configureConnectionMode(.broadcast)
+        bluetoothManager.scan(remoteIdentifier: UUID())
+        bluetoothManager.scanForBroadcast(remoteIdentifier: UUID())
+        bluetoothManager.refreshConnectedPeripheral()
+
+        let repeatedShutdownCompleted = expectation(description: "repeated shutdown completed")
+        bluetoothManager.shutdown {
+            XCTAssertNil(bluetoothManager.activeRemoteIdentifier)
+            XCTAssertFalse(bluetoothManager.isScanning)
+            XCTAssertFalse(bluetoothManager.isConnected)
+            repeatedShutdownCompleted.fulfill()
+        }
+
+        wait(for: [repeatedShutdownCompleted], timeout: 1)
+    }
+
     func testPeripheralConnectionTimeoutIsOnlyScheduledForConnectableStates() {
         XCTAssertFalse(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .connected))
         XCTAssertTrue(MicroTechBluetoothManager.shouldScheduleConnectionTimeout(for: .disconnected))
@@ -3926,6 +4014,8 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     private(set) var refreshConnectedPeripheralCallCount = 0
     private(set) var disconnectCallCount = 0
     private(set) var forgetPeripheralCallCount = 0
+    private(set) var shutdownCallCount = 0
+    private var shutdownCompletions: [() -> Void] = []
 
     func scan(remoteIdentifier: UUID?) {
         isScanning = true
@@ -3948,6 +4038,15 @@ private final class FakeMicroTechBluetoothManager: MicroTechBluetoothManaging {
     func forgetPeripheral() {
         forgetPeripheralCallCount += 1
     }
+
+    func shutdown(completion: @escaping () -> Void) {
+        shutdownCallCount += 1
+        shutdownCompletions.append(completion)
+    }
+
+    func completeShutdown(at index: Int = 0) {
+        shutdownCompletions.remove(at: index)()
+    }
 }
 
 private final class ReentrantLogHandlerMicroTechBluetoothManager: MicroTechBluetoothManaging {
@@ -3960,6 +4059,8 @@ private final class ReentrantLogHandlerMicroTechBluetoothManager: MicroTechBluet
     }
     var isScanning = false
     var isConnected = false
+    private(set) var shutdownCallCount = 0
+    private var shutdownCompletions: [() -> Void] = []
 
     func scan(remoteIdentifier: UUID?) {
         isScanning = true
@@ -3968,6 +4069,49 @@ private final class ReentrantLogHandlerMicroTechBluetoothManager: MicroTechBluet
     func refreshConnectedPeripheral() {}
     func disconnect() {}
     func forgetPeripheral() {}
+
+    func shutdown(completion: @escaping () -> Void) {
+        shutdownCallCount += 1
+        shutdownCompletions.append(completion)
+    }
+
+    func completeShutdown(at index: Int = 0) {
+        shutdownCompletions.remove(at: index)()
+    }
+}
+
+private final class ShutdownBluetoothManagerDelegate: MicroTechBluetoothManagerDelegate {
+    func microTechBluetoothManager(
+        _ manager: MicroTechBluetoothManager,
+        shouldConnectToDeviceName deviceName: String,
+        identifier: UUID
+    ) -> Bool {
+        true
+    }
+
+    func microTechBluetoothManager(
+        _ manager: MicroTechBluetoothManager,
+        didReady peripheralSession: MicroTechPeripheralSession
+    ) {}
+
+    func microTechBluetoothManager(
+        _ manager: MicroTechBluetoothManager,
+        didReceive value: Data,
+        for characteristic: CBUUID,
+        session: MicroTechPeripheralSession
+    ) {}
+
+    func microTechBluetoothManager(
+        _ manager: MicroTechBluetoothManager,
+        didDisconnect session: MicroTechPeripheralSession
+    ) {}
+
+    func microTechBluetoothManager(
+        _ manager: MicroTechBluetoothManager,
+        didDiscoverBroadcast advertisement: MicroTechBroadcastAdvertisement
+    ) {}
+
+    func microTechBluetoothManager(_ manager: MicroTechBluetoothManager, didFailWith error: Error) {}
 }
 
 private final class ThreadSafeMessages {

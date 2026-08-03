@@ -242,6 +242,8 @@ private final class BroadcastFakeMicroTechBluetoothManager: MicroTechBluetoothMa
     private(set) var refreshConnectedPeripheralCallCount = 0
     private(set) var disconnectCallCount = 0
     private(set) var forgetPeripheralCallCount = 0
+    private(set) var shutdownCallCount = 0
+    private var shutdownCompletions: [() -> Void] = []
 
     func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {
         configuredModes.append(mode)
@@ -269,5 +271,14 @@ private final class BroadcastFakeMicroTechBluetoothManager: MicroTechBluetoothMa
 
     func forgetPeripheral() {
         forgetPeripheralCallCount += 1
+    }
+
+    func shutdown(completion: @escaping () -> Void) {
+        shutdownCallCount += 1
+        shutdownCompletions.append(completion)
+    }
+
+    func completeShutdown(at index: Int = 0) {
+        shutdownCompletions.remove(at: index)()
     }
 }

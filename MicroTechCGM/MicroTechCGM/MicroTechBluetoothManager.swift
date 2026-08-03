@@ -65,6 +65,12 @@ final class MicroTechConnectionTimeoutController {
     func cancel(identifier: UUID) {
         workItems.removeValue(forKey: identifier)?.cancel()
     }
+
+    func cancelAll() {
+        let scheduledWorkItems = Array(workItems.values)
+        workItems.removeAll()
+        scheduledWorkItems.forEach { $0.cancel() }
+    }
 }
 
 enum MicroTechDisconnectCallbackResult: Equatable {
@@ -153,6 +159,7 @@ protocol MicroTechBluetoothManaging: AnyObject {
     func refreshConnectedPeripheral()
     func disconnect()
     func forgetPeripheral()
+    func shutdown(completion: @escaping () -> Void)
 }
 
 extension MicroTechBluetoothManaging {
@@ -244,6 +251,7 @@ public final class MicroTechBluetoothManager: NSObject {
     private var managedPeripherals: [UUID: MicroTechPeripheralManager] = [:]
     private var restoredPeripherals: [UUID: CBPeripheral] = [:]
     private var configuringPeripheralIDs: Set<UUID> = []
+    private var isShutdown = false
     private var connectionMode: MicroTechCGMConnectionMode
     private var broadcastScanPhase: MicroTechBroadcastScanPhase = .filtered
     private var activePeripheralManager: MicroTechPeripheralManager? {
@@ -252,7 +260,17 @@ public final class MicroTechBluetoothManager: NSObject {
         }
     }
 
-    public init(initialConnectionMode: MicroTechCGMConnectionMode = .direct) {
+    public convenience init(initialConnectionMode: MicroTechCGMConnectionMode = .direct) {
+        self.init(
+            initialConnectionMode: initialConnectionMode,
+            centralManagerOptions: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier]
+        )
+    }
+
+    init(
+        initialConnectionMode: MicroTechCGMConnectionMode,
+        centralManagerOptions: [String: Any]?
+    ) {
         connectionMode = initialConnectionMode
         super.init()
 
@@ -261,31 +279,37 @@ public final class MicroTechBluetoothManager: NSObject {
             centralManager = CBCentralManager(
                 delegate: self,
                 queue: managerQueue,
-                options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier]
+                options: centralManagerOptions
             )
         }
     }
 
     public var isScanning: Bool {
         syncOnManagerQueue {
-            centralManager.isScanning
+            !isShutdown && centralManager.isScanning
         }
     }
 
     public var isConnected: Bool {
         syncOnManagerQueue {
-            activePeripheralManager?.isConnected == true
+            !isShutdown && activePeripheralManager?.isConnected == true
         }
     }
 
     public func configureConnectionMode(_ mode: MicroTechCGMConnectionMode) {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             self.connectionMode = mode
         }
     }
 
     public func scan(remoteIdentifier: UUID? = nil) {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             self.connectionMode = .direct
             self.activeRemoteIdentifier = remoteIdentifier
             self.logBluetooth("scan requested, activeRemoteIdentifier \(String(describing: self.activeRemoteIdentifier))")
@@ -295,6 +319,9 @@ public final class MicroTechBluetoothManager: NSObject {
 
     public func scanForBroadcast(remoteIdentifier: UUID? = nil) {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             self.connectionMode = .broadcast
             self.activeRemoteIdentifier = remoteIdentifier
             self.broadcastScanPhase = .filtered
@@ -305,6 +332,9 @@ public final class MicroTechBluetoothManager: NSObject {
 
     public func refreshConnectedPeripheral() {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             guard let manager = self.activePeripheralManager, manager.isConnected else {
                 self.scanIfReady()
                 return
@@ -317,12 +347,18 @@ public final class MicroTechBluetoothManager: NSObject {
 
     public func stopScanning() {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             self.stopScanningOnQueue()
         }
     }
 
     public func disconnect() {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             self.stopScanningOnQueue(reason: "disconnect")
             if let manager = self.activePeripheralManager {
                 self.removeManager(manager, cancelConnection: true)
@@ -332,12 +368,43 @@ public final class MicroTechBluetoothManager: NSObject {
 
     public func forgetPeripheral() {
         managerQueue.async {
+            guard !self.isShutdown else {
+                return
+            }
             self.activePeripheralManager = nil
             self.restoredPeripherals.removeAll()
         }
     }
 
+    public func shutdown(completion: @escaping () -> Void) {
+        managerQueue.async {
+            guard !self.isShutdown else {
+                completion()
+                return
+            }
+
+            self.isShutdown = true
+            self.stopScanningOnQueue(reason: "shutdown")
+            self.cancelScanTimeout()
+            self.connectionTimeouts.cancelAll()
+            self.configurationTimeouts.cancelAll()
+
+            let managers = Array(self.managedPeripherals.values)
+            managers.forEach { self.removeManager($0, cancelConnection: true) }
+            self.activePeripheralManager = nil
+            self.managedPeripherals.removeAll()
+            self.restoredPeripherals.removeAll()
+            self.configuringPeripheralIDs.removeAll()
+            self.delegate = nil
+            self.logHandler = nil
+            completion()
+        }
+    }
+
     private func scanIfReady() {
+        guard !isShutdown else {
+            return
+        }
         switch centralManager.state {
         case .poweredOn:
             break
@@ -401,6 +468,9 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func scanForBroadcastIfReady() {
+        guard !isShutdown else {
+            return
+        }
         guard activePeripheralManager == nil else {
             return
         }
@@ -412,6 +482,9 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func startBroadcastScanOnQueue(phase: MicroTechBroadcastScanPhase) {
+        guard !isShutdown else {
+            return
+        }
         guard activePeripheralManager == nil else {
             return
         }
@@ -457,6 +530,9 @@ public final class MicroTechBluetoothManager: NSObject {
 
     @discardableResult
     private func connectIfNeeded(_ peripheral: CBPeripheral, advertisedName: String?) -> Bool {
+        guard !isShutdown else {
+            return false
+        }
         let deviceName = advertisedName ?? peripheral.name ?? ""
         let shouldConnectByIdentifier = activeRemoteIdentifier == peripheral.identifier
 
@@ -529,6 +605,9 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func configureAndNotifyReady(_ manager: MicroTechPeripheralManager) {
+        guard !isShutdown else {
+            return
+        }
         let identifier = manager.deviceIdentifier
         cancelConnectionTimeout(for: identifier)
         guard configuringPeripheralIDs.insert(identifier).inserted else {
@@ -541,6 +620,9 @@ public final class MicroTechBluetoothManager: NSObject {
             do {
                 try manager.configure()
                 self.managerQueue.async {
+                    guard !self.isShutdown else {
+                        return
+                    }
                     self.configuringPeripheralIDs.remove(identifier)
                     self.cancelConfigurationTimeout(for: identifier)
                     guard self.managedPeripherals[identifier] === manager else {
@@ -552,6 +634,9 @@ public final class MicroTechBluetoothManager: NSObject {
                 }
             } catch {
                 self.managerQueue.async {
+                    guard !self.isShutdown else {
+                        return
+                    }
                     self.configuringPeripheralIDs.remove(identifier)
                     self.cancelConfigurationTimeout(for: identifier)
                     guard self.managedPeripherals[identifier] === manager else {
@@ -587,6 +672,9 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func scheduleConnectionTimeout(for manager: MicroTechPeripheralManager) {
+        guard !isShutdown else {
+            return
+        }
         let identifier = manager.deviceIdentifier
         connectionTimeouts.schedule(identifier: identifier) { [weak self] identifier in
             self?.handleConnectionTimeout(identifier: identifier)
@@ -813,6 +901,9 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func scheduleConfigurationTimeout(for manager: MicroTechPeripheralManager) {
+        guard !isShutdown else {
+            return
+        }
         let identifier = manager.deviceIdentifier
         configurationTimeouts.schedule(identifier: identifier) { [weak self] identifier in
             self?.handleConfigurationTimeout(identifier: identifier)
@@ -824,7 +915,8 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func handleConfigurationTimeout(identifier: UUID) {
-        guard configuringPeripheralIDs.contains(identifier),
+        guard !isShutdown,
+              configuringPeripheralIDs.contains(identifier),
               let manager = managedPeripherals[identifier],
               activePeripheralManager === manager
         else {
@@ -839,7 +931,8 @@ public final class MicroTechBluetoothManager: NSObject {
     }
 
     private func handleConnectionTimeout(identifier: UUID) {
-        guard let manager = managedPeripherals[identifier],
+        guard !isShutdown,
+              let manager = managedPeripherals[identifier],
               activePeripheralManager === manager,
               !manager.isConnected else
         {
@@ -856,7 +949,7 @@ public final class MicroTechBluetoothManager: NSObject {
 
     private func scheduleScanTimeout(remoteIdentifier: UUID?) {
         cancelScanTimeout()
-        guard Self.defaultScanTimeout > 0 else {
+        guard !isShutdown, Self.defaultScanTimeout > 0 else {
             return
         }
 
@@ -874,7 +967,9 @@ public final class MicroTechBluetoothManager: NSObject {
 
     private func handleScanTimeout(remoteIdentifier: UUID?) {
         scanTimeoutWorkItem = nil
-        guard centralManager.isScanning, activePeripheralManager == nil else {
+        guard !isShutdown,
+              centralManager.isScanning,
+              activePeripheralManager == nil else {
             return
         }
 
@@ -901,6 +996,9 @@ extension MicroTechBluetoothManager: MicroTechBluetoothManaging {
 
 extension MicroTechBluetoothManager: CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        guard !isShutdown else {
+            return
+        }
         let stoppedOperation: String?
         if central.state != .poweredOn {
             if central.isScanning || scanTimeoutWorkItem != nil {
@@ -932,6 +1030,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard !isShutdown else {
+            return
+        }
         guard let peripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] else {
             logBluetooth("willRestoreState without restored peripherals")
             return
@@ -957,6 +1058,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
+        guard !isShutdown else {
+            return
+        }
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         if connectionMode == .broadcast,
            !Self.isMicroTechBroadcastAdvertisement(advertisementData)
@@ -991,6 +1095,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        guard !isShutdown else {
+            return
+        }
         guard let manager = managedPeripherals[peripheral.identifier] else {
             logBluetooth(Self.missingPeripheralManagerLogMessage(
                 callback: "didConnect",
@@ -1006,6 +1113,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        guard !isShutdown else {
+            return
+        }
         let manager = managedPeripherals[peripheral.identifier]
         let result = disconnectCallbackState.handleConnectionEnd(
             callback: "didFailToConnect",
@@ -1041,6 +1151,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        guard !isShutdown else {
+            return
+        }
         let manager = managedPeripherals[peripheral.identifier]
         let result = disconnectCallbackState.handleConnectionEnd(
             callback: "didDisconnectPeripheral",
@@ -1070,6 +1183,9 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, connectionEventDidOccur event: CBConnectionEvent, for peripheral: CBPeripheral) {
+        guard !isShutdown else {
+            return
+        }
         logBluetooth("connection event \(Self.name(for: event)) peripheral \(peripheral.identifier), name \(String(describing: peripheral.name))")
         guard connectionMode == .direct else {
             logBluetooth("connection event ignored in broadcast mode peripheral \(peripheral.identifier)")
@@ -1101,10 +1217,16 @@ extension MicroTechBluetoothManager: CBCentralManagerDelegate {
 
 extension MicroTechBluetoothManager: MicroTechPeripheralManagerDelegate {
     public func microTechPeripheralManager(_ manager: MicroTechPeripheralManager, didUpdateValue value: Data, for characteristic: CBUUID) {
+        guard !isShutdown else {
+            return
+        }
         delegate?.microTechBluetoothManager(self, didReceive: value, for: characteristic, session: manager)
     }
 
     public func microTechPeripheralManager(_ manager: MicroTechPeripheralManager, didDisconnectWith error: Error?) {
+        guard !isShutdown else {
+            return
+        }
         delegate?.microTechBluetoothManager(self, didDisconnect: manager)
         if let error {
             logBluetooth("peripheral manager disconnected with error \(String(describing: error))", type: .error)
