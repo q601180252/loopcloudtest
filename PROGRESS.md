@@ -12,9 +12,18 @@
 - 当前 MicroTech LinX 新添加流程固定使用直接连接；添加页不再显示 `直接连接 / 广播数据` 选择，点击搜索后只进入原有蓝牙直连流程。
 - LinX 底层广播解析、状态兼容、诊断日志和测试仍保留，用于历史排障，但新添加页已没有广播入口。
 - 当前 LinX 重连已实现单一 60 秒恢复周期：已完成过握手的直连 LinX 在 60 秒内未再次完成握手时，按顺序关闭旧蓝牙管理器、保留传感器配置、清除旧蓝牙标识并创建新管理器继续扫描；连接成功后连续 5 分钟没有收到任意 F001、F002 或 F003 数据包时主动断开重连。自动化测试和完整工程构建已通过，真实 LinX 正常通信及 `peripheralDisconnecting` 卡死恢复待真机复验。
-- 最新 TestFlight 上传包 `Loop 3.9.1 (66)` 已完成 App Store Connect 处理并分发给内部测试人员，Actions run `30621494193` 显示 `Successfully finished processing the build 3.9.1 - 66 for IOS`；发布源提交为 `7ee9b15`，IPA 内包含 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM`，签名与 watchOS `11.6` 兼容检查通过，`Loop.app` 最低 iOS 为 `15.1`。
+- 最新 TestFlight 上传包 `Loop 3.9.1 (67)` 已完成 App Store Connect 处理，Actions run `30868288677` 显示 `Successfully finished processing the build 3.9.1 - 67 for IOS`；发布源提交为 `a4a0193`，IPA 内包含 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM`，完整签名与 watchOS `11.6` 兼容检查通过，SHA256 为 `d31f01c76893d0780ffbb7d53723ea94c88c568cce02319aa6f97bfd2f7467a6`。
 
 ## 进展日志
+
+### 2026-08-04 047 - 发布 LinX 重连 TestFlight
+
+- **任务**：把 LinX 5 分钟无数据包检查和单一 60 秒蓝牙重建版本上传到 TestFlight。
+- **核心交付**：GitHub Actions run `30868288677` 从 `origin/main` 的 `a4a0193` 构建并上传 `Loop 3.9.1 (67)`；App Store Connect 已完成处理。
+- **验证结果**：Actions 全流程成功，并显示 `Successfully uploaded the new binary to App Store Connect` 和 `Successfully finished processing the build 3.9.1 - 67 for IOS`；下载的 IPA 版本为 `3.9.1 (67)`，Bundle ID 为 `com.libre.loopkit3.Loop`；包内存在 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM`；完整签名与 watchOS `11.6` 兼容检查通过；IPA SHA256 为 `d31f01c76893d0780ffbb7d53723ea94c88c568cce02319aa6f97bfd2f7467a6`。
+- **决策结论**：TestFlight 上传和 Apple 处理已完成；内部测试组是否自动可见取决于 App Store Connect 现有分组设置。真实 LinX 正常通信及卡死恢复仍待真机复验。
+- **commit hash**：`a4a0193`（发布源提交）。
+- **push 状态**：发布源已推送到 `origin/main`；本条发布记录随本次提交同步。
 
 ### 2026-08-03 046 - 实现 LinX 五分钟检查与六十秒重建
 
