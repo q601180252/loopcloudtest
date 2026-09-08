@@ -12,9 +12,19 @@
 - 当前 MicroTech LinX 新添加流程固定使用直接连接；添加页不再显示 `直接连接 / 广播数据` 选择，点击搜索后只进入原有蓝牙直连流程。
 - LinX 底层广播解析、状态兼容、诊断日志和测试仍保留，用于历史排障，但新添加页已没有广播入口。
 - 当前 LinX 重连已实现单一 60 秒恢复周期：已完成过握手的直连 LinX 在 60 秒内未再次完成握手时，按顺序关闭旧蓝牙管理器、保留传感器配置、清除旧蓝牙标识并创建新管理器继续扫描；连接成功后连续 5 分钟没有收到任意 F001、F002 或 F003 数据包时主动断开重连。自动化测试和完整工程构建已通过，真实 LinX 正常通信及 `peripheralDisconnecting` 卡死恢复待真机复验。
-- 最新 TestFlight 上传包 `Loop 3.9.1 (67)` 已完成 App Store Connect 处理，Actions run `30868288677` 显示 `Successfully finished processing the build 3.9.1 - 67 for IOS`；发布源提交为 `a4a0193`，IPA 内包含 `MicroTechCGMPlugin`、`NightscoutRemoteCGMPlugin` 和 `NightscoutRemoteCGM`，完整签名与 watchOS `11.6` 兼容检查通过，SHA256 为 `d31f01c76893d0780ffbb7d53723ea94c88c568cce02319aa6f97bfd2f7467a6`。
+- 最新 TestFlight 上传包 `Loop 3.9.1 (68)` 已完成 App Store Connect 处理并由 fastlane 报告分发给内部测试者；Actions run `34204765950` 全流程成功，发布源提交为 `beacab1`，目标 App ID 为 `1668929455`。本次沿用现有功能，重新打包发布；完整签名与 watchOS `11.6` 兼容检查在 Actions 中通过。
 
 ## 进展日志
+
+### 2026-09-08 048 - 更新 Loop TestFlight
+
+- **任务**：使用此前的 GitHub Actions 将当前 Loop 重新打包并更新到指定 TestFlight App。
+- **核心交付**：从 `origin/main` 的 `beacab19067fb0702147830e93f9fff715787e6c` 手动运行 `4. Build Loop`，Actions run [34204765950](https://github.com/q601180252/loopcloudtest/actions/runs/34204765950) 成功发布 `Loop 3.9.1 (68)` 至 App ID `1668929455`，Bundle ID 为 `com.libre.loopkit3.Loop`。
+- **验证结果**：本次完整 `LoopWorkspace` 正式打包成功；Actions 中完整签名及 watchOS `11.6` 兼容检查通过。北京时间 16:52 上传成功，17:12 Apple 完成处理；日志明确包含 `Successfully finished processing the build 3.9.1 - 68 for IOS` 和 `Successfully distributed build to Internal testers`。
+- **关键发现**：最近定时任务在上游合并和 `alive` 分支步骤失败，未执行到打包；本次手动路径不执行这些操作。定时任务问题本次未修改。
+- **决策结论**：TestFlight 上传、Apple 处理和内部测试分发已完成；本次未修改 App 功能，未进行手机或传感器实测，既有真机验证边界保留。
+- **commit hash**：`beacab1`（发布源提交）。
+- **push 状态**：发布源已在 `origin/main`；本条发布记录随本次文档提交同步。
 
 ### 2026-08-04 047 - 发布 LinX 重连 TestFlight
 
